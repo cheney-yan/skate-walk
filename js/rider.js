@@ -58,7 +58,14 @@ export function buildLongboard() {
     hanger.position.y = WHEEL_R - (DECK_Y - 0.014);
     g.add(t); trucks.push({ t, hanger, wheels });
   }
-  g.userData = { trucks };
+  // split: deck parts roll on the bushings, hangers+wheels stay flat on the road
+  const deckG = new THREE.Group(); const chassis = new THREE.Group();
+  for (const c of [...g.children]) { if (trucks.some((tk) => tk.t === c)) chassis.add(c); else deckG.add(c); }
+  for (const tk of trucks) { // baseplate rides with the deck; hanger stays with the chassis
+    const base = tk.t.children[0]; tk.t.remove(base); const bp = new THREE.Group(); bp.position.copy(tk.t.position); bp.add(base); deckG.add(bp);
+  }
+  g.add(chassis, deckG);
+  g.userData = { trucks, deck: deckG, chassis };
   return g;
 }
 
@@ -71,7 +78,8 @@ export class Rider {
     this.vrm = vrm;
     this.board = buildLongboard(); scene.add(this.board);
     this.board.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-    this.body = new THREE.Group(); this.board.add(this.body);   // rider frame (counter-pitch)
+    this.deck = this.board.userData.deck;
+    this.body = new THREE.Group(); this.deck.add(this.body);   // rider stands on the (rolled) deck
     this.body.add(vrm.scene);
     this.flip = vrm.userData?.vrm0 ? -1 : 1;   // VRM0: model space is mirrored in x/z
     this.yaw0 = this.flip < 0 ? Math.PI : 0;
@@ -123,10 +131,10 @@ export class Rider {
       if (d > 0 && d < lead + this.v * 0.12 && !this.push) { this.ollie = { t: 0, h }; this.ev.push(['ollie', this.s]); break; }
     }
     // lean from turning physics
-    const leanT = clamp(Math.atan((this.v * this.v * kappa) / g) * 1.25, -30 * D, 30 * D);
+    const leanT = clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6, -30 * D, 30 * D);
     this.lean = damp(this.lean, leanT, 6, dt);
-    this.tilt = this.lean * 0.75;                   // deck rolls less than the rider (bushings)
-    this.steer = damp(this.steer, clamp(Math.atan(kappa * HALF_WB) * 1.0 + this.tilt * 0.25, -0.25, 0.25), 10, dt);
+    this.tilt = clamp(this.lean * 0.8, -19 * D, 19 * D);   // deck rolls on the bushings, less than the rider leans
+    this.steer = damp(this.steer, clamp(Math.atan(kappa * HALF_WB) + this.tilt * 0.35, -0.32, 0.32), 10, dt); // RKP: lean -> hanger yaw
     // ollie ballistics (board + rider leave the ground)
     let popPitch = 0;
     if (this.ollie) {
@@ -138,11 +146,13 @@ export class Rider {
       }
       // pitch: tail snaps down (nose up) at pop, front foot levels it at apex
       const tp = o.t - 0.38;
-      if (tp > -0.04 && tp < 0.06) popPitch = sstep(-0.04, 0.03, tp) * 16 * D;
-      else if (tp >= 0.06 && tp < 0.2) popPitch = (1 - sstep(0.06, 0.18, tp)) * 16 * D;
+      if (tp > -0.05 && tp <= 0.05) popPitch = sstep(-0.05, 0.04, tp) * 28 * D;         // tail snaps down, nose shoots up
+      else if (tp > 0.05 && tp <= 0.13) popPitch = 28 * D;                                // rising nose-up
+      else if (tp > 0.13 && tp <= 0.32) popPitch = (1 - sstep(0.13, 0.3, tp)) * 28 * D;  // front foot drags it level by the peak
+      else if (o.popped && !o.landT && tp > 0.32) popPitch = -2 * D + Math.min(0, this.airV) * -0.012; // level, tail a touch low on the way down
       if (o.landT && o.t - o.landT > 0.6) this.ollie = null;
     }
-    this.boardPitch = damp(this.boardPitch, popPitch, 30, dt);
+    this.boardPitch = damp(this.boardPitch, popPitch, 40, dt);
     // place board
     const up = new V(0, 1, 0);
     this.pos.copy(tr.p).addScaledVector(up, this.air);
@@ -153,11 +163,16 @@ export class Rider {
     const qP = new Q().setFromAxisAngle(new V(1, 0, 0), -this.pitch - this.boardPitch);
     const qR = new Q().setFromAxisAngle(new V(0, 0, 1), -this.tilt);
     this.board.position.copy(this.pos);
-    // pop pivots around the tail wheels: lift the centre accordingly
-    this.board.position.y += Math.sin(this.boardPitch) * HALF_WB;
-    this.board.quaternion.copy(qY).multiply(qP).multiply(qR);
+    // pop: the tail drops until its tip strikes the road, then the board pivots on the tail (centre rises);
+    // board height = max(ballistic air, tail-on-ground pivot lift) so the tail never goes through the ground
+    const th = this.boardPitch, tailLift = Math.max(0, 0.49 * Math.sin(th) - 0.105 * (1 - Math.cos(th)) - 0.095);
+    this.board.position.y = tr.p.y + Math.max(this.air, tailLift);
+    this.board.quaternion.copy(qY).multiply(qP);
+    const PIV = new V(0, DECK_Y - 0.05, 0);
+    this.deck.quaternion.copy(qR);
+    this.deck.position.copy(PIV).sub(PIV.clone().applyQuaternion(qR));
     // rider frame: stay ~upright against slope pitch, lean with the turn beyond deck tilt
-    this.body.quaternion.setFromEuler(new THREE.Euler(this.pitch + this.boardPitch, 0, -(this.lean - this.tilt), 'XYZ'));
+    this.body.quaternion.setFromEuler(new THREE.Euler(this.pitch + this.boardPitch * 0.85, 0, -(this.lean - this.tilt), 'XYZ'));
     // wheels + trucks
     for (const [k, tk] of this.board.userData.trucks.entries()) {
       tk.hanger.rotation.y = (k === 0 ? 1 : -1) * this.steer;
@@ -348,7 +363,7 @@ export class Rider {
   // ---------------- IK ----------------
   solveLegs(dt) {
     const B = this.b, bw = (o) => o.getWorldPosition(new V());
-    const deck = (x, z, y = DECK_Y + 0.093) => this.board.localToWorld(new V(x, y, z));
+    const deck = (x, z, y = DECK_Y + 0.093) => this.deck.localToWorld(new V(x, y, z));
     // feet stance on deck (board frame: z forward): front (left) foot over front bolts, back (right) over tail
     const P = this.push ? this.push.t / this.push.T : 0;
     const pr = this.push ? sstep(0.0, 0.25, P) * (1 - sstep(0.78, 1.0, P)) : 0;
@@ -385,7 +400,7 @@ export class Rider {
       const along = target.clone().sub(hip); pole.addScaledVector(along.setY(0).normalize(), 0.25);
       twoBoneIK(up, lo, ft, target, pole);
       // foot flat on deck, toes angled
-      const qb = this.board.getWorldQuaternion(new Q());
+      const qb = this.deck.getWorldQuaternion(new Q());
       const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch * this.flip, yaw + this.yaw0, 0, 'YXZ')));
       setWorldQuat(ft, qf);
       const toes = B[side + 'Toes']; if (toes) toes.quaternion.identity();
