@@ -14,6 +14,8 @@ export async function loadGirl(url) {
   const vrm = gltf.userData.vrm;
   VRMUtils.removeUnnecessaryVertices(gltf.scene);
   VRMUtils.combineSkeletons(gltf.scene);
+  vrm.userData = { vrm0: vrm.meta?.metaVersion === '0' };
+  if (vrm.userData.vrm0) VRMUtils.rotateVRM0(vrm);
   vrm.scene.traverse((o) => { o.frustumCulled = false; });
   restyle(vrm);
   return vrm;
@@ -87,9 +89,10 @@ function restyle(vrm) {
       m.needsUpdate = true;
     }
   }
-  for (const key of ['Bottoms', 'Shoes']) for (const m of matsByName(vrm, key)) {
+  for (const key of ['Bottoms', 'Shoes', 'Tops']) for (const m of matsByName(vrm, key)) {
     const tint = key === 'Shoes' ? [1, 0.97, 0.93] : [1, 1, 1];
-    if (m.map) m.map = lighten(m.map, key === 'Shoes' ? 185 : 215, 0.25, tint);
+    if (key === 'Tops' && m.color) m.color.set('#ffffff');
+    if (m.map) m.map = lighten(m.map, key === 'Shoes' ? 185 : 222, 0.2, tint);
     if (m.shadeMultiplyTexture) m.shadeMultiplyTexture = lighten(m.shadeMultiplyTexture, 175, 0.2, tint);
     m.needsUpdate = true;
   }
@@ -133,10 +136,11 @@ export class Skirt {
     vrm.scene.traverse((o) => {
       if (!o.isMesh) return; const n = (Array.isArray(o.material) ? o.material : [o.material]).map((m) => m.name).join();
       if (!/Body|Tops|Bottoms/.test(n)) return;
-      const p = o.geometry.attributes.position;
-      for (let i = 0; i < p.count; i += 1) { const y = p.getY(i); if (y > 0.3 && y < 1.08) verts.push(p.getX(i), y, p.getZ(i)); }
+      const p = o.geometry.attributes.position, v3 = new THREE.Vector3();
+      for (let i = 0; i < p.count; i += 1) { v3.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); if (v3.y > 0.3 && v3.y < 1.08) verts.push(v3.x, v3.y, v3.z); }
     });
-    const cx = 0, cz = hipRest.z + 0.0;
+    const cx = hipRest.x, cz = hipRest.z;
+    const invHips = this.hips.matrixWorld.clone().invert();
     const C = this.C, R = this.R;
     const y0 = opt.top ?? 1.0, y1 = opt.hem ?? 0.40;
     const radAt = (yA, yB) => {
@@ -162,7 +166,7 @@ export class Skirt {
         let rad = rTop[c] + 0.014;
         if (y < 0.97) rad = Math.max(rad, rHip[c] + 0.025);
         rad += Math.max(0, (y0 - y) - 0.05) * (opt.flare ?? 0.42);
-        this.local.push(new THREE.Vector3(cx + Math.cos(a) * rad, y, cz + Math.sin(a) * rad).sub(hipRest));
+        this.local.push(new THREE.Vector3(cx + Math.cos(a) * rad, y, cz + Math.sin(a) * rad).applyMatrix4(invHips));
       }
     }
     // constraints
@@ -298,7 +302,7 @@ export class Skirt {
 export class Hat {
   constructor(vrm, scene) {
     this.vrm = vrm;
-    const head = vrm.humanoid.getRawBoneNode('head');
+    const head = vrm.humanoid.getNormalizedBoneNode('head');
     this.head = head;
     vrm.scene.updateMatrixWorld(true);
     const hp = head.getWorldPosition(new THREE.Vector3());
@@ -308,8 +312,8 @@ export class Hat {
     vrm.scene.traverse((o) => {
       if (!o.isMesh) return; const n = (Array.isArray(o.material) ? o.material : [o.material]).map((m) => m.name).join();
       if (!/Hair/.test(n) || /Back/.test(n)) return;
-      const p = o.geometry.attributes.position;
-      for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y > hp.y + 0.02) pts.push([p.getX(i), y, p.getZ(i)]); }
+      const p = o.geometry.attributes.position, v3 = new THREE.Vector3();
+      for (let i = 0; i < p.count; i++) { v3.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); if (v3.y > hp.y + 0.02) pts.push([v3.x, v3.y, v3.z]); }
     });
     if (pts.length) {
       top = Math.max(...pts.map((q) => q[1]));
@@ -341,10 +345,14 @@ export class Hat {
     this.root.add(crown, brim, band);
     this.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     // place relative to head bone: crown base sits ~4.5 cm below hair top, tilted slightly back
-    const baseWorld = new THREE.Vector3(hp.x, top - 0.045, cz - 0.005);
-    head.add(this.root);
-    this.root.position.copy(head.worldToLocal(baseWorld.clone()));
-    this.root.rotation.x = -0.14;
+    // place in world (model faces +z here), brim level and tipped slightly back, then attach to the head
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(vrm.scene.getWorldQuaternion(new THREE.Quaternion()));
+    const yaw = Math.atan2(fwd.x, fwd.z);
+    scene.add(this.root);
+    this.root.position.set(hp.x, top - 0.05, cz).addScaledVector(fwd, -0.006);
+    this.root.rotation.set(0, yaw, 0); this.root.rotateX(-0.12);
+    this.root.updateMatrixWorld(true);
+    head.attach(this.root);
     // ribbon tails (two verlet strips, pinned at the back of the band)
     this.tails = [];
     for (const side of [-1, 1]) {
@@ -388,11 +396,23 @@ export class Hat {
         const A = tl.pts[i - 1], B = tl.pts[i], d = B.distanceTo(A) || 1e-6;
         B.sub(A).multiplyScalar(tl.seg / d).add(A);
       }
-      // ribbon width perpendicular to strip direction and to the air/camera-ish axis
+      // bending stiffness: each node pulled toward the straight continuation of the previous segment
+      for (let i = 2; i < tl.N; i++) {
+        const A = tl.pts[i - 2], B = tl.pts[i - 1], Cp = tl.pts[i];
+        const want = B.clone().multiplyScalar(2).sub(A);
+        Cp.lerp(want, 0.18);
+      }
+      for (let i = 1; i < tl.N; i++) { const A = tl.pts[i - 1], B = tl.pts[i], d = B.distanceTo(A) || 1e-6; B.sub(A).multiplyScalar(tl.seg / d).add(A); }
+      // ribbon width: a smoothly twisting frame, starting along the head's left-right axis
+      const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.getWorldQuaternion(new THREE.Quaternion()));
+      let prevSide = headRight.clone();
       for (let i = 0; i < tl.N; i++) {
         const P = tl.pts[i], dir = (i < tl.N - 1 ? tl.pts[i + 1].clone().sub(P) : P.clone().sub(tl.pts[i - 1])).normalize();
-        const side = new THREE.Vector3().crossVectors(dir, air.lengthSq() > 0.01 ? air.clone().normalize() : new THREE.Vector3(1, 0, 0));
-        if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize().multiplyScalar(tl.w * 0.5 * (1 - 0.3 * i / tl.N));
+        const side = prevSide.clone().addScaledVector(dir, -prevSide.dot(dir));
+        if (side.lengthSq() < 1e-5) side.copy(headRight); side.normalize();
+        side.applyAxisAngle(dir, Math.sin(t * 5 + i * 0.6 + tl.side) * 0.12 * (i / tl.N) * (1 + wind * 0.2));
+        prevSide.copy(side);
+        side.multiplyScalar(tl.w * 0.5 * (1 - 0.3 * i / tl.N));
         tl.pos.set([P.x + side.x, P.y + side.y, P.z + side.z, P.x - side.x, P.y - side.y, P.z - side.z], i * 6);
       }
       tl.g.attributes.position.needsUpdate = true; tl.g.computeVertexNormals();

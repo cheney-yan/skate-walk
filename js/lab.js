@@ -142,7 +142,8 @@ scene.add(petals);
 let vrm, rider, skirt, hair, hat;
 const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: 999, camera };
 async function init() {
-  vrm = await loadGirl('./models/girl.vrm');
+  const M = { shino: './models/shino.vrm', sample: './models/girl.vrm' };
+  vrm = await loadGirl(M[Q.get('m') || 'shino'] || M.shino);
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
   skirt = new Skirt(vrm, scene, { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
@@ -185,6 +186,7 @@ function caption() {
 let camMode = Q.get('cam') || 'chase', camInit = false;
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 function updateCamera(dt) {
+  if (camMode === 'none') return;
   const p = track.at(rider.s), left = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
   const base = rider.board.position.clone(); base.y -= rider.air * 0.6;
   let want, look;

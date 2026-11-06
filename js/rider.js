@@ -73,7 +73,9 @@ export class Rider {
     this.board.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.body = new THREE.Group(); this.board.add(this.body);   // rider frame (counter-pitch)
     this.body.add(vrm.scene);
-    vrm.scene.rotation.y = -Math.PI / 2;     // regular stance: left shoulder leads, chest faces board's right side
+    this.flip = vrm.userData?.vrm0 ? -1 : 1;   // VRM0: model space is mirrored in x/z
+    this.yaw0 = this.flip < 0 ? Math.PI : 0;
+    vrm.scene.rotation.y = -Math.PI / 2 + this.yaw0;     // regular stance: left shoulder leads, chest faces board's right side
     vrm.scene.position.y = DECK_Y;
     vrm.scene.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     const H = vrm.humanoid; this.b = {};
@@ -224,7 +226,7 @@ export class Rider {
     w.hair = hh;
   }
 
-  rot(name, x, y, z) { const b = this.b[name]; if (b) b.quaternion.setFromEuler(new THREE.Euler(x, y, z, 'YXZ')); }
+  rot(name, x, y, z) { const b = this.b[name]; if (!b) return; b.quaternion.setFromEuler(new THREE.Euler(x, y, z, 'YXZ')); if (this.flip < 0) { b.quaternion.x *= -1; b.quaternion.z *= -1; } }
 
   pose(dt, ctx) {
     const w = this.w, t = this.t, b = this.b;
@@ -245,7 +247,7 @@ export class Rider {
     const hipX = 0.0 + reach * 0.1 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
     const hipDrop = 0.06 + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3;
     const hipZ = 0.015 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
-    b.hips.position.set(this.hipRest.x + hipX, this.hipRest.y - hipDrop, this.hipRest.z + hipZ + sway);
+    b.hips.position.set(this.hipRest.x + hipX * this.flip, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ + sway) * this.flip);
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
     const open = 30 * D + reach * 34 * D + w.tuck * 6 * D;
     const lb = w.look;
@@ -293,6 +295,7 @@ export class Rider {
       const k = f.f === 'Thumb' ? 0.15 : f.seg === 'Proximal' ? 0.25 + (f.f === 'Little' ? 0.15 : 0) : f.seg === 'Metacarpal' ? 0 : 0.3;
       if (f.f === 'Thumb') f.n.quaternion.setFromEuler(new THREE.Euler(0, sgn * -0.25, 0));
       else f.n.quaternion.setFromEuler(new THREE.Euler(0, 0, sgn * k));
+      if (this.flip < 0) { f.n.quaternion.x *= -1; f.n.quaternion.z *= -1; }
     }
     // legs get a pre-bend so IK picks the right knee plane
     for (const s of ['left', 'right']) { this.rot(s + 'UpperLeg', -0.25, 0, 0); this.rot(s + 'LowerLeg', 0.5, 0, 0); }
@@ -347,7 +350,7 @@ export class Rider {
         rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u * Math.PI) * 0.11; rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
       }
     }
-    const fwdModel = new V(0, 0, 1).applyQuaternion(this.vrm.scene.getWorldQuaternion(new Q()));
+    const fwdModel = new V(0, 0, this.flip).applyQuaternion(this.vrm.scene.getWorldQuaternion(new Q()));
     for (const [side, target, yaw, pitch] of [['left', lf, lYaw, 0], ['right', rf, rYaw, rPitch]]) {
       const up = B[side + 'UpperLeg'], lo = B[side + 'LowerLeg'], ft = B[side + 'Foot'];
       const hip = bw(up);
@@ -357,7 +360,7 @@ export class Rider {
       twoBoneIK(up, lo, ft, target, pole);
       // foot flat on deck, toes angled
       const qb = this.board.getWorldQuaternion(new Q());
-      const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ')));
+      const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch * this.flip, yaw + this.yaw0, 0, 'YXZ')));
       setWorldQuat(ft, qf);
       const toes = B[side + 'Toes']; if (toes) toes.quaternion.identity();
       ft.updateMatrixWorld(true);
