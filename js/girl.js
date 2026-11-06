@@ -204,6 +204,8 @@ export class Skirt {
     this.inited = false;
     this.caps = [];
     this.windT = 0;
+    this.cosMax = Math.cos((opt.maxSwing ?? 50) * Math.PI / 180);
+    this.airGain = opt.airGain ?? 0.6;
   }
   pinWorld(i, out) { return out.copy(this.local[i]).applyMatrix4(this.hips.matrixWorld); }
   reset() {
@@ -224,7 +226,8 @@ export class Skirt {
     ];
   }
   // air(world vec3): wind velocity in world; groundY(x,z) for floor collision
-  step(dt, air, t, groundY) {
+  step(dt, air0, t, groundY) {
+    const air = this.airv || (this.airv = new THREE.Vector3()); air.copy(air0).multiplyScalar(this.airGain);
     this.hips.updateWorldMatrix(true, false);
     if (!this.inited) this.reset();
     const R = this.R, C = this.C, N = R * C, p = this.p, q = this.q, v = this.tmp;
@@ -259,6 +262,12 @@ export class Skirt {
         for (let i = C; i < N; i++) {
           const k = i * 3, kt = (i % C) * 3, dx = p[k] - p[kt], dy = p[k + 1] - p[kt + 1], dz = p[k + 2] - p[kt + 2], d = Math.hypot(dx, dy, dz), m = this.maxDist[i];
           if (d > m) { const f = m / d; p[k] = p[kt] + dx * f; p[k + 1] = p[kt + 1] + dy * f; p[k + 2] = p[kt + 2] + dz * f; }
+        }
+        // modest skirt: a panel may swing out but never flips above ~50° from hanging (hem stays below the knee line)
+        for (let i = C; i < N; i++) {
+          const k = i * 3, kt = (i % C) * 3, dx = p[k] - p[kt], dy = p[k + 1] - p[kt + 1], dz = p[k + 2] - p[kt + 2];
+          const d = Math.hypot(dx, dy, dz) || 1e-6, minDrop = d * this.cosMax;
+          if (-dy < minDrop) { const hz = Math.hypot(dx, dz) || 1e-6, want = Math.sqrt(Math.max(0, d * d - minDrop * minDrop)); p[k] = p[kt] + dx / hz * want; p[k + 2] = p[kt + 2] + dz / hz * want; p[k + 1] = p[kt + 1] - minDrop; }
         }
         // body capsules
         for (const [A, B, rad] of caps) {
