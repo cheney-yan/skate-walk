@@ -1,0 +1,10 @@
+# 滑板散步 (skate-walk) — prototype
+
+Casual "skate stroll" along the real Bondi → Bronte coastal walk. The girl rides by herself; swipe up = push, swipe down = slow.
+She stops at OSM crossings / Notts Ave, carries the board on OSM `steps`, slows on real uphill (AWS terrain).
+Calm riding fills 🪶; tricks only unlock in open, non-crowded, flat stretches. Fast downhill = soft sit-down, no penalty.
+Real collectibles: Wikipedia geosearch articles + Wikimedia Commons geotagged photos (★ = pre-1960 photos). Postcard share = canvas JPEG + Web Share + `?card=<id>&from=` link.
+
+- Build data: `python3 tools/build_route.py && python3 tools/curate.py && python3 tools/terrain.py` (then the card-cleanup snippets were applied by hand; data/route.json is the source of truth)
+- Serve: `python3 server.py` (127.0.0.1:8797) + `tailscale serve --bg --https=13443 http://127.0.0.1:8797`
+- Sources/licences: © OpenStreetMap contributors (ODbL); AWS Terrain Tiles (Mapzen/tilezen attribution); Wikipedia CC BY-SA; Commons per-file licence on each card.
