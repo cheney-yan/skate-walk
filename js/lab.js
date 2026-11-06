@@ -54,21 +54,24 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadow
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog('#d6ebf5', 40, 260);
 const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 1500);
-scene.add(new THREE.HemisphereLight('#eef6ff', '#d8c49a', 1.4));
+const hemi = new THREE.HemisphereLight('#eef6ff', '#d8c49a', 1.4); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe9c8', 2.5);
+let TOD = Q.get('tod') || 'golden';
+const rimLight = new THREE.DirectionalLight('#ffb978', 0); scene.add(rimLight, rimLight.target);
 sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 30 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
 // sky
 {
-  const m = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false,
+  const m = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uWarm: { value: 0 }, uSun: { value: new THREE.Vector3(0, 0.2, 1) } },
     vertexShader: 'varying vec3 p;void main(){p=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: `varying vec3 p;float h(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5);}
+    fragmentShader: `uniform float uWarm; uniform vec3 uSun; varying vec3 p;float h(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5);}
     float n(vec2 q){vec2 i=floor(q),f=fract(q);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
     float fbm(vec2 q){float s=0.,a=.5;for(int k=0;k<5;k++){s+=a*n(q);q*=2.03;a*=.5;}return s;}
     void main(){float y=max(p.y,0.);vec3 c=mix(vec3(.85,.93,.97),vec3(.33,.6,.88),pow(y,.5));
-    vec2 q=p.xz/(p.y+.15)*1.3;float cl=smoothstep(.5,.78,fbm(q+2.));c=mix(c,vec3(1.),cl*smoothstep(.03,.2,p.y)*.95);gl_FragColor=vec4(c,1.);}` });
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), m));
+    vec3 warmHor=vec3(1.,.78,.55),warmTop=vec3(.45,.62,.86);vec3 cw=mix(warmHor,warmTop,pow(y,.6));float sd=max(dot(normalize(p),normalize(uSun)),0.);cw+=vec3(1.,.75,.45)*pow(sd,24.)*.9+vec3(1.,.6,.3)*pow(sd,4.)*.25;c=mix(c,cw,uWarm);
+    vec2 q=p.xz/(p.y+.15)*1.3;float cl=smoothstep(.5,.78,fbm(q+2.));vec3 cc=mix(vec3(1.),vec3(1.,.86,.72),uWarm);c=mix(c,cc,cl*smoothstep(.03,.2,p.y)*.95);gl_FragColor=vec4(c,1.);}` });
+  window.__sky = m; scene.add(new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), m));
 }
 // road + verge ribbons
 function ribbon(w0, w1, yOff, color, rough = 0.9) {
@@ -197,7 +200,18 @@ function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 4.5);
   camPos.lerp(want, k); camLook.lerp(look, 1 - Math.exp(-dt * 8));
   camera.position.copy(camPos); camera.lookAt(camLook);
-  sun.position.copy(base).add(new THREE.Vector3(-6, 12, -4)); sun.target.position.copy(base);
+  if (TOD === 'golden') {
+    const ahead = track.at(rider.s + 30).dir; const sdir = new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
+    sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
+    sun.color.set('#ffc98a'); sun.intensity = 2.9; hemi.color.set('#ffe2c4'); hemi.groundColor.set('#b89a72'); hemi.intensity = 1.25;
+    scene.fog.color.set('#f4d9bd'); renderer.toneMappingExposure = 1.05; window.__sky.uniforms.uWarm.value = 1; window.__sky.uniforms.uSun.value.copy(sdir).setY(0.06);
+    if (skirt) skirt.rimU.value.set(0.75, 0.52, 0.3);
+    rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2;
+  } else {
+    sun.position.copy(base).add(new THREE.Vector3(-6, 12, -4)); sun.target.position.copy(base);
+    sun.color.set('#ffe9c8'); sun.intensity = 2.5; hemi.color.set('#eef6ff'); hemi.groundColor.set('#d8c49a'); hemi.intensity = 1.4;
+    scene.fog.color.set('#d6ebf5'); renderer.toneMappingExposure = 1.12; window.__sky.uniforms.uWarm.value = 0; if (skirt) skirt.rimU.value.set(0, 0, 0); rimLight.intensity = 0;
+  }
 }
 
 // ---------------- loop ----------------
@@ -253,6 +267,7 @@ requestAnimationFrame(frame);
 
 document.querySelectorAll('[data-cam]').forEach((b) => b.onclick = () => { camMode = b.dataset.cam; camInit = false; document.querySelectorAll('[data-cam]').forEach((x) => x.classList.toggle('on', x === b)); });
 $('restart').onclick = restart;
+$('tod').onclick = () => { TOD = TOD === 'golden' ? 'noon' : 'golden'; $('tod').textContent = TOD === 'golden' ? '☀️ 正午' : '🌅 夕阳'; };
 $('slow').onclick = () => { slow = slow === 1 ? 0.35 : 1; $('slow').classList.toggle('on', slow !== 1); };
 let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; clearTimeout(hideT); hideT = setTimeout(() => $('ui').style.opacity = 0.25, 6000); });
 
@@ -260,6 +275,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 window.LAB = {
   rider: () => rider, track, skirt: () => skirt, vrm: () => vrm, camera,
   setCam(m) { camMode = m; camInit = false; },
+  setTod(x) { TOD = x; },
   restart, jumpTo(s) { restart(); for (let i = 0; i < 4000 && rider.s < s; i++) step(1 / 30); },
   // advance n frames at fps then render; returns state
   adv(n = 1, fps = 30) { const t0 = performance.now(); for (let i = 0; i < n; i++) step(1 / fps); return { s: rider.s, v: rider.v, cap: $('cap').innerText, ms: (performance.now() - t0) / n }; },

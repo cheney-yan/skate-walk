@@ -196,11 +196,12 @@ export class Skirt {
     const grad = new THREE.DataTexture(new Uint8Array([150, 160, 205, 255, 214, 216, 236, 255, 252, 252, 255, 255, 255, 255, 255, 255]), 4, 1);
     grad.minFilter = grad.magFilter = THREE.LinearFilter; grad.needsUpdate = true;
     // hem shading: slightly translucent-looking lower edge via uv-based tint
+    this.rimU = { value: new THREE.Color(0, 0, 0) };
     const mat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: grad, side: THREE.DoubleSide, transparent: true });
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <uv_pars_vertex>', '#include <uv_pars_vertex>\nvarying vec2 vSk;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvSk = uv;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>\nvarying vec2 vSk;')
-        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n float hem = smoothstep(0.78, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, min(vec3(1.), gl_FragColor.rgb*vec3(1.02,1.02,1.05)+0.04), hem); gl_FragColor.a = mix(0.97, 0.72, hem);');
+      sh.uniforms.uRim = this.rimU; sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>\nvarying vec2 vSk;\nuniform vec3 uRim;')
+        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n float hem = smoothstep(0.78, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, min(vec3(1.), gl_FragColor.rgb*vec3(1.02,1.02,1.05)+0.04), hem); gl_FragColor.a = mix(0.97, 0.72, hem); vec3 vd = normalize(vViewPosition); float fr = pow(1.0 - abs(dot(normalize(vNormal), vd)), 2.5); gl_FragColor.rgb += uRim * (fr * 0.9 + hem * 0.35);');
     };
     this.mesh = new THREE.Mesh(geo, mat); this.mesh.frustumCulled = false;
     scene.add(this.mesh);
@@ -346,7 +347,10 @@ export class Hat {
     this.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     // place relative to head bone: crown base sits ~4.5 cm below hair top, tilted slightly back
     // place in world (model faces +z here), brim level and tipped slightly back, then attach to the head
-    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(vrm.scene.getWorldQuaternion(new THREE.Quaternion()));
+    // facing from anatomy (robust to VRM0's 180° root): (leftLeg - rightLeg) x up
+    const lL = vrm.humanoid.getNormalizedBoneNode('leftUpperLeg').getWorldPosition(new THREE.Vector3());
+    const rL = vrm.humanoid.getNormalizedBoneNode('rightUpperLeg').getWorldPosition(new THREE.Vector3());
+    const fwd = new THREE.Vector3().crossVectors(lL.sub(rL), new THREE.Vector3(0, 1, 0)).normalize();
     const yaw = Math.atan2(fwd.x, fwd.z);
     scene.add(this.root);
     this.root.position.set(hp.x, top - 0.05, cz).addScaledVector(fwd, -0.006);
@@ -356,7 +360,7 @@ export class Hat {
     // ribbon tails (two verlet strips, pinned at the back of the band)
     this.tails = [];
     for (const side of [-1, 1]) {
-      const N = 11, seg = 0.05, w = 0.05;
+      const N = 18, seg = 0.028, w = 0.05;
       const pts = [], prev = [];
       const g = new THREE.BufferGeometry(); const pos = new Float32Array(N * 2 * 3), idx = [];
       for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
@@ -378,42 +382,42 @@ export class Hat {
       a.setY(i, y + Math.sin(Math.atan2(z, x) * 3 - t * (6 + wind)) * amp * e * e);
     }
     a.needsUpdate = true;
-    const up = new THREE.Vector3(0, 1, 0);
+    // Ribbon tails: procedural, not free verlet (free strips at this scale tangle into polygons).
+    // Base direction lags toward a blend of gravity and downwind; a travelling wave rides along the length.
+    const down = new THREE.Vector3(0, -1, 0);
+    const wdir = wind > 0.05 ? air.clone().divideScalar(wind) : new THREE.Vector3();
+    const k = Math.min(0.92, wind / 6.5);
+    const want = down.clone().multiplyScalar(1 - k).addScaledVector(wdir, k * 1.15).normalize();
+    const headQ = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(headQ);
     for (const tl of this.tails) {
       const anchor = this.root.localToWorld(tl.anchorLocal.clone());
-      if (!tl.inited) { tl.pts.forEach((p, i) => { p.copy(anchor).addScaledVector(up, -i * tl.seg); tl.prev[i].copy(p); }); tl.inited = true; }
-      for (let i = 1; i < tl.N; i++) {
-        const p = tl.pts[i], q = tl.prev[i];
-        const vel = this.tmp.copy(p).sub(q).divideScalar(h);
-        const flutter = Math.sin(t * 9 + i * 0.9 + tl.side) * 0.8 * (i / tl.N);
-        const ax = 1.6 * (air.x * (1 + 0.3 * flutter) - vel.x) + Math.cos(t * 7 + i) * wind * 0.25;
-        const ay = -9.8 + 1.6 * (air.y - vel.y) + flutter * wind * 0.6;
-        const az = 1.6 * (air.z * (1 + 0.3 * flutter) - vel.z) + Math.sin(t * 8 + i) * wind * 0.25;
-        q.copy(p); p.x += vel.x * h * 0.99 + ax * h * h; p.y += vel.y * h * 0.99 + ay * h * h; p.z += vel.z * h * 0.99 + az * h * h;
-      }
-      tl.pts[0].copy(anchor);
-      for (let it = 0; it < 4; it++) for (let i = 1; i < tl.N; i++) {
-        const A = tl.pts[i - 1], B = tl.pts[i], d = B.distanceTo(A) || 1e-6;
-        B.sub(A).multiplyScalar(tl.seg / d).add(A);
-      }
-      // bending stiffness: each node pulled toward the straight continuation of the previous segment
-      for (let i = 2; i < tl.N; i++) {
-        const A = tl.pts[i - 2], B = tl.pts[i - 1], Cp = tl.pts[i];
-        const want = B.clone().multiplyScalar(2).sub(A);
-        Cp.lerp(want, 0.18);
-      }
-      for (let i = 1; i < tl.N; i++) { const A = tl.pts[i - 1], B = tl.pts[i], d = B.distanceTo(A) || 1e-6; B.sub(A).multiplyScalar(tl.seg / d).add(A); }
-      // ribbon width: a smoothly twisting frame, starting along the head's left-right axis
-      const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.getWorldQuaternion(new THREE.Quaternion()));
-      let prevSide = headRight.clone();
+      tl.base = tl.base || want.clone();
+      tl.base.lerp(want, 1 - Math.exp(-h * 3.5)).normalize();
+      // wave plane: perpendicular to base, mostly along the head's left-right axis (ribbons flutter sideways)
+      const perp = headRight.clone().addScaledVector(tl.base, -headRight.dot(tl.base)); if (perp.lengthSq() < 1e-4) perp.set(0, 0, 1); perp.normalize();
+      const perp2 = new THREE.Vector3().crossVectors(tl.base, perp).normalize();
+      const amp = 0.25 + Math.min(0.55, wind * 0.07);
+      const f = 6 + wind * 1.2;
+      const P = anchor.clone();
       for (let i = 0; i < tl.N; i++) {
-        const P = tl.pts[i], dir = (i < tl.N - 1 ? tl.pts[i + 1].clone().sub(P) : P.clone().sub(tl.pts[i - 1])).normalize();
-        const side = prevSide.clone().addScaledVector(dir, -prevSide.dot(dir));
-        if (side.lengthSq() < 1e-5) side.copy(headRight); side.normalize();
-        side.applyAxisAngle(dir, Math.sin(t * 5 + i * 0.6 + tl.side) * 0.12 * (i / tl.N) * (1 + wind * 0.2));
-        prevSide.copy(side);
-        side.multiplyScalar(tl.w * 0.5 * (1 - 0.3 * i / tl.N));
-        tl.pos.set([P.x + side.x, P.y + side.y, P.z + side.z, P.x - side.x, P.y - side.y, P.z - side.z], i * 6);
+        tl.pts[i].copy(P);
+        const u = i / (tl.N - 1);
+        const ph = t * f - i * 0.75 + tl.side * 1.3;
+        const d = tl.base.clone()
+          .addScaledVector(perp, Math.sin(ph) * amp * u + tl.side * 0.12)
+          .addScaledVector(perp2, Math.cos(ph * 0.8) * amp * 0.45 * u).normalize();
+        P.addScaledVector(d, tl.seg);
+      }
+      // width frame: twist slowly along the ribbon, starting flat against the head's side
+      for (let i = 0; i < tl.N; i++) {
+        const Pi = tl.pts[i], dir = (i < tl.N - 1 ? tl.pts[i + 1].clone().sub(Pi) : Pi.clone().sub(tl.pts[i - 1])).normalize();
+        const side = perp2.clone().addScaledVector(dir, -perp2.dot(dir)); if (side.lengthSq() < 1e-5) side.copy(perp); side.normalize();
+        side.applyAxisAngle(dir, Math.sin(t * 4 + i * 0.5 + tl.side) * 0.5 * (i / tl.N));
+        const wv = tl.w * 0.5 * (1 - 0.35 * i / tl.N);
+        const notch = i === tl.N - 1 ? 0.012 : 0; // swallow-tail cut at the end
+        tl.pos.set([Pi.x + side.x * wv + dir.x * notch, Pi.y + side.y * wv + dir.y * notch, Pi.z + side.z * wv + dir.z * notch,
+                    Pi.x - side.x * wv + dir.x * notch, Pi.y - side.y * wv + dir.y * notch, Pi.z - side.z * wv + dir.z * notch], i * 6);
       }
       tl.g.attributes.position.needsUpdate = true; tl.g.computeVertexNormals();
     }
