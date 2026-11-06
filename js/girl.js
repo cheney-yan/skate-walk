@@ -348,7 +348,7 @@ export class Hat {
     this.brimGeo = new THREE.LatheGeometry(brimPts, 64);
     this.brimBase = this.brimGeo.attributes.position.array.slice();
     const brim = new THREE.Mesh(this.brimGeo, mat);
-    const ribbonMat = new THREE.MeshStandardMaterial({ color: '#5aa6d8', roughness: 0.6, side: THREE.DoubleSide });
+    const ribbonMat = new THREE.MeshLambertMaterial({ color: '#6fb3e0', emissive: '#2c5f86', emissiveIntensity: 0.55, side: THREE.DoubleSide });
     const band = new THREE.Mesh(new THREE.CylinderGeometry(cr * 0.995, cr * 1.0, 0.024, 40, 1, true), ribbonMat); band.position.y = 0.014;
     this.root.add(crown, brim, band);
     this.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
@@ -367,7 +367,7 @@ export class Hat {
     // ribbon tails (two verlet strips, pinned at the back of the band)
     this.tails = [];
     for (const side of [-1, 1]) {
-      const N = 18, seg = 0.028, w = 0.05;
+      const N = 26, seg = 0.019, w = 0.05;
       const pts = [], prev = [];
       const g = new THREE.BufferGeometry(); const pos = new Float32Array(N * 2 * 3), idx = [];
       for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
@@ -393,7 +393,7 @@ export class Hat {
     // Base direction lags toward a blend of gravity and downwind; a travelling wave rides along the length.
     const down = new THREE.Vector3(0, -1, 0);
     const wdir = wind > 0.05 ? air.clone().divideScalar(wind) : new THREE.Vector3();
-    const k = Math.min(0.92, wind / 6.5);
+    const k = Math.min(0.7, wind / 8);
     const want = down.clone().multiplyScalar(1 - k).addScaledVector(wdir, k * 1.15).normalize();
     const headQ = this.root.getWorldQuaternion(new THREE.Quaternion());
     const headRight = new THREE.Vector3(1, 0, 0).applyQuaternion(headQ);
@@ -404,22 +404,24 @@ export class Hat {
       // wave plane: perpendicular to base, mostly along the head's left-right axis (ribbons flutter sideways)
       const perp = headRight.clone().addScaledVector(tl.base, -headRight.dot(tl.base)); if (perp.lengthSq() < 1e-4) perp.set(0, 0, 1); perp.normalize();
       const perp2 = new THREE.Vector3().crossVectors(tl.base, perp).normalize();
-      const amp = 0.25 + Math.min(0.55, wind * 0.07);
+      const amp = 0.35 + Math.min(0.5, wind * 0.06);
       const f = 6 + wind * 1.2;
       const P = anchor.clone();
       for (let i = 0; i < tl.N; i++) {
         tl.pts[i].copy(P);
         const u = i / (tl.N - 1);
-        const ph = t * f - i * 0.75 + tl.side * 1.3;
+        const ph = t * f - i * 0.32 + tl.side * 1.3;
         const d = tl.base.clone()
           .addScaledVector(perp, Math.sin(ph) * amp * u + tl.side * 0.12)
           .addScaledVector(perp2, Math.cos(ph * 0.8) * amp * 0.45 * u).normalize();
         P.addScaledVector(d, tl.seg);
       }
+      for (let pass = 0; pass < 2; pass++) for (let i = 1; i < tl.N - 1; i++) tl.pts[i].lerp(tl.pts[i - 1].clone().add(tl.pts[i + 1]).multiplyScalar(0.5), 0.5);
       // width frame: twist slowly along the ribbon, starting flat against the head's side
       for (let i = 0; i < tl.N; i++) {
         const Pi = tl.pts[i], dir = (i < tl.N - 1 ? tl.pts[i + 1].clone().sub(Pi) : Pi.clone().sub(tl.pts[i - 1])).normalize();
-        const side = perp2.clone().addScaledVector(dir, -perp2.dot(dir)); if (side.lengthSq() < 1e-5) side.copy(perp); side.normalize();
+        const refv = Math.abs(dir.y) < 0.6 ? new THREE.Vector3(0, 1, 0).cross(dir) : perp2.clone();
+        const side = refv.addScaledVector(dir, -refv.dot(dir)); if (side.lengthSq() < 1e-5) side.copy(perp); side.normalize();
         side.applyAxisAngle(dir, Math.sin(t * 4 + i * 0.5 + tl.side) * 0.5 * (i / tl.N));
         const wv = tl.w * 0.5 * (1 - 0.35 * i / tl.N);
         const notch = i === tl.N - 1 ? 0.012 : 0; // swallow-tail cut at the end
