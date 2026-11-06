@@ -101,23 +101,28 @@ function restyle(vrm) {
 // ---------- hair wind ----------
 export function setupHair(vrm) {
   const joints = [...(vrm.springBoneManager?.joints || [])];
-  const hair = joints.filter((j) => /Hair/.test(j.bone.name));
-  const cloth = joints.filter((j) => /Tops/.test(j.bone.name));
-  for (const j of hair) { j.settings.stiffness *= 0.4; j.settings.dragForce = 0.28; }
-  const base = hair.map((j) => ({ j, gp: j.settings.gravityPower, st: j.settings.stiffness }));
-  const tmp = new THREE.Vector3();
+  const hair = joints.filter((j) => /Hair/i.test(j.bone.name));
+  const cloth = joints.filter((j) => /Tops|Skirt|Bust/i.test(j.bone.name) && !/Bust/i.test(j.bone.name));
+  // softer, lighter strands: low stiffness near the tips, a little drag so they swing instead of snapping
+  hair.forEach((j, i) => { j.settings.stiffness = Math.min(j.settings.stiffness, 0.35) * 0.6; j.settings.dragForce = 0.22; j._ph = i * 2.399; j._k = 0.8 + ((i * 37) % 10) / 25; });
+  const tmp = new THREE.Vector3(), side = new THREE.Vector3();
   return {
-    // air: world-space relative air velocity (wind - body velocity), t: time
+    // air = relative air velocity (wind - body velocity), world space
     update(air, t) {
-      for (let i = 0; i < base.length; i++) {
-        const { j } = base[i];
-        const flick = Math.sin(t * 5.3 + i * 1.7) * 0.5 + Math.sin(t * 8.1 + i * 2.9) * 0.3;
-        tmp.set(0, -1.0, 0).multiplyScalar(0.55).addScaledVector(air, 0.34 * (1 + 0.25 * flick));
+      const sp = air.length();
+      side.set(-air.z, 0, air.x).normalize();
+      for (const j of hair) {
+        // each strand sees its own turbulent eddy: speed flicker + sideways and vertical lift
+        const a = t * (3.1 + j._k * 2.3) + j._ph, b = t * (7.7 + j._k * 3.1) + j._ph * 1.7;
+        const flick = 1 + 0.35 * Math.sin(a) + 0.2 * Math.sin(b);
+        const lift = (0.25 * Math.sin(a * 0.7 + 1) + 0.15 * Math.sin(b * 1.3)) * Math.min(1, sp / 4);
+        tmp.set(0, -0.6, 0).addScaledVector(air, 0.32 * j._k * flick).addScaledVector(side, Math.sin(a * 1.3) * 0.18 * sp * 0.25);
+        tmp.y += lift * sp * 0.25;
         const mag = tmp.length();
         j.settings.gravityDir.copy(tmp).divideScalar(mag || 1);
-        j.settings.gravityPower = mag * 0.75;
+        j.settings.gravityPower = mag * 0.8;
       }
-      for (const j of cloth) { tmp.set(0, -1, 0).addScaledVector(air, 0.08); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * 0.15; }
+      for (const j of cloth) { tmp.set(0, -1, 0).addScaledVector(air, 0.1); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * 0.2; }
     },
   };
 }
@@ -243,11 +248,13 @@ export class Skirt {
         const k = i * 3, r = Math.floor(i / C), c = i % C;
         const vx = (p[k] - q[k]) / h, vy = (p[k + 1] - q[k + 1]) / h, vz = (p[k + 2] - q[k + 2]) / h;
         const tt = t + s * h;
-        const turb = 0.35 + 0.65 * (r / R);
-        const gx = air.x * (1 + 0.35 * Math.sin(tt * 6.1 + c * 0.9 + r * 0.5) * turb) + Math.sin(tt * 3.7 + c * 1.3) * 0.5 * turb;
-        const gy = air.y + Math.sin(tt * 4.9 + c * 0.7 + r) * 0.45 * turb;
-        const gz = air.z * (1 + 0.35 * Math.sin(tt * 5.3 + c * 1.1 - r * 0.4) * turb) + Math.cos(tt * 4.1 + c) * 0.5 * turb;
-        const ax = drag * (gx - vx), ay = g + drag * (gy - vy), az = drag * (gz - vz);
+        const rr = r / (R - 1), turb = 0.25 + 0.75 * rr, hemF = rr * rr * rr; // flutter concentrates at the hem
+        const gx = air.x * (1 + 0.45 * Math.sin(tt * 6.1 + c * 0.9 + r * 0.5) * turb) + Math.sin(tt * 3.7 + c * 1.3) * 0.5 * turb + Math.sin(tt * 11 + c * 2.3) * (0.3 + Math.abs(air.z) * 0.25) * hemF;
+        const sp = Math.hypot(air.x, air.z);
+        const gy = air.y + Math.sin(tt * 4.9 + c * 0.7 + r) * 0.45 * turb + Math.sin(tt * 13 + c * 1.9 - r * 0.8) * (0.4 + sp * 0.35) * hemF;
+        const gz = air.z * (1 + 0.45 * Math.sin(tt * 5.3 + c * 1.1 - r * 0.4) * turb) + Math.cos(tt * 4.1 + c) * 0.5 * turb + Math.cos(tt * 12 + c * 2.1) * (0.3 + Math.abs(air.x) * 0.25) * hemF;
+        const dg = drag * (0.8 + 0.5 * rr);
+        const ax = dg * (gx - vx), ay = g * (1 - 0.25 * rr) + dg * (gy - vy), az = dg * (gz - vz);
         const nx = p[k] + (p[k] - q[k]) * 0.995 + ax * h * h, ny = p[k + 1] + (p[k + 1] - q[k + 1]) * 0.995 + ay * h * h, nz = p[k + 2] + (p[k + 2] - q[k + 2]) * 0.995 + az * h * h;
         q[k] = p[k]; q[k + 1] = p[k + 1]; q[k + 2] = p[k + 2];
         p[k] = nx; p[k + 1] = ny; p[k + 2] = nz;

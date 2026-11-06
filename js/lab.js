@@ -157,7 +157,7 @@ async function init() {
   restart();
   $('load').style.display = 'none';
 }
-let windNow = new THREE.Vector3(), lookIdx = 0, simT = 0;
+let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = 1e9; rider.ev.length = 0;
   lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false;
@@ -221,10 +221,15 @@ function step(dt) {
   // events by position
   if (lookIdx < LOOKS.length && rider.s > LOOKS[lookIdx]) { rider.nextLook = 0; lookIdx++; }
   windNow.lerp(windTarget(rider.s), 1 - Math.exp(-dt * 1.2));
-  ctx.wind = windNow;
+  // gusts: slow swell + occasional puffs, so cloth/hair never settle into a frozen pose
+  const gust = 0.5 + 0.5 * Math.sin(simT * 0.37) * Math.sin(simT * 0.83 + 1.1);
+  const puff = Math.pow(Math.max(0, Math.sin(simT * 0.21 + 0.4)), 12);
+  windGust.copy(windNow).multiplyScalar(0.75 + 0.45 * gust + 0.8 * puff);
+  rider.gust = puff;
+  ctx.wind = windGust;
   rider.update(dt, (s) => track.at(s), ctx);
   hair.update(rider.airRel, simT);
-  skirt.step(dt, windNow, simT);
+  skirt.step(dt, windGust, simT);
   hat.step(dt, rider.airRel, simT);
   if (rider.s > track.total - 2) restart();
   // petals

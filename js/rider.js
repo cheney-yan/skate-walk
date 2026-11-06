@@ -110,7 +110,7 @@ export class Rider {
     // autopilot: cruise target, pushes when slow; speed-check (carve/foot drag) when too fast downhill
     const cruise = ctx.cruise ?? 3.0;
     const holeSoon = (ctx.holes || []).some((h) => h - this.s > 0 && h - this.s < this.v * 0.42 + 0.35 + this.v * 1.3 + 0.5);
-    const wantPush = !holeSoon && !this.ollie && this.air <= 0 && (this.v < cruise - 0.85 || (grade > 0.025 && this.v < cruise - 0.3));
+    const wantPush = !holeSoon && !this.ollie && this.air <= 0 && (this.v < cruise - 1.3 || (grade > 0.025 && this.v < cruise - 0.4));
     if (!this.push && wantPush && this.pushCool <= 0) this.startPush(grade);
     if (this.push) a += this.pushAccel();
     if (this.v > (ctx.vmax ?? 5.2)) a -= 1.6 * (this.v - (ctx.vmax ?? 5.2)) + 0.8;
@@ -267,20 +267,35 @@ export class Rider {
     // ---- arms: relaxed, swinging; balance out on tuck/landing; right hand to hair in wind
     const bal = clamp(w.tuck * 0.9 + crouchO * 0.5 + tuckAir * 1.2 + landAbs * 0.8 + Math.abs(this.lean) * 1.2, 0, 1);
     const swing = this.push ? Math.sin(P * Math.PI * 2) * 0.45 * w.push : Math.sin(t * 1.1) * 0.03;
-    // arms: open, soft "port de bras" — lead arm forward-low, trail arm back-low, elbows soft, wrists drop;
-    // targets are damped so hands lag the body (secondary motion), never mirrored
+    // ARMS — two poses + an envelope.
+    //  rest: hang relaxed by the sides (soft elbows, tiny swing from the body), like someone just riding along;
+    //  active: open for balance (lead arm forward-low, trail arm back-low, port-de-bras).
+    //  need = how much balance the moment demands; arms rise fast (~0.25 s), then settle down slowly (~1.5 s).
     const hh = w.hair;
-    const brz = Math.sin(t * 0.73) * 0.06, brz2 = Math.sin(t * 0.57 + 1.3) * 0.07;
+    const need = clamp(Math.max(bal, w.push * (0.35 + 0.4 * w.effort), w.effort * 0.6, Math.abs(carve) * 0.95, crouchO * 1.1, tuckAir * 1.2, landAbs, w.tuck * 0.9, (this.gust || 0) * 0.5), 0, 1);
+    this.armUp = this.armUp ?? 0;
+    if (need > this.armUp) this.armUp = damp(this.armUp, need, 9, dt);           // quick rise
+    else { this.armHold = (this.armHold ?? 0) + dt; if (this.armHold > 0.6) this.armUp = damp(this.armUp, need, 1.3, dt); } // linger, then lower
+    if (need > this.armUp - 0.02) this.armHold = 0;
+    const up = this.armUp;
+    const brz = Math.sin(t * 0.73) * 0.05, brz2 = Math.sin(t * 0.57 + 1.3) * 0.06;
+    const bodySw = Math.sin(t * 1.6) * 0.04 + this.lean * 0.4;   // passive pendulum with the body
     const A = this.armT || (this.armT = {});
-    const tgt = {
+    const rest = { lx: 0.06, ly: -0.12 + bodySw, lz: -72 * D, le: -0.32, lw: -0.12 + brz2 * 0.5,
+                   rx: 0.06, ry: 0.12 + bodySw, rz: 72 * D, re: 0.32, rw: 0.12 - brz * 0.5 };
+    const act = {
       lx: 0.12 + brz * 0.5, ly: -0.55 - bal * 0.25 + swing * 0.3 - heel * 0.5 + toe * 0.3 - w.tuck * 0.2,
-      lz: -36 * D + bal * 16 * D + heel * 12 * D + w.effort * 10 * D + brz,
-      le: -0.85 - bal * 0.2 - w.effort * 0.5 - heel * 0.2, lw: -0.28 + brz2,
-      rx: lerp(0.1, -0.2, hh), ry: lerp(0.55 + bal * 0.2 - swing * 0.6 + heel * 0.5 - toe * 0.3 + w.tuck * 0.2, 1.25, hh),
-      rz: lerp(38 * D - bal * 16 * D - heel * 12 * D - w.effort * 10 * D + brz2, 20 * D, hh),
-      re: lerp(0.85 + bal * 0.2 + w.effort * 0.5 + heel * 0.2 + Math.max(0, -swing) * 0.4, 2.3, hh), rw: lerp(0.28 - brz, -0.2, hh),
+      lz: -22 * D + bal * 12 * D + heel * 10 * D + w.effort * 8 * D + brz,
+      le: -0.75 - bal * 0.2 - w.effort * 0.5 - heel * 0.2, lw: -0.3 + brz2,
+      rx: 0.1, ry: 0.55 + bal * 0.2 - swing * 0.6 + heel * 0.5 - toe * 0.3 + w.tuck * 0.2,
+      rz: 24 * D - bal * 12 * D - heel * 10 * D - w.effort * 8 * D + brz2,
+      re: 0.85 + bal * 0.2 + w.effort * 0.5 + heel * 0.2 + Math.max(0, -swing) * 0.4, rw: 0.28 - brz,
     };
-    for (const k in tgt) A[k] = A[k] === undefined ? tgt[k] : damp(A[k], tgt[k], k.endsWith('w') ? 3.2 : k.endsWith('e') ? 4.5 : 6, dt);
+    const hair = { rx: -0.2, ry: 1.25, rz: 20 * D, re: 2.3, rw: -0.2 };
+    const tgt = {};
+    for (const k in rest) { tgt[k] = lerp(rest[k], act[k], up); if (k[0] === 'r' && hair[k] !== undefined) tgt[k] = lerp(tgt[k], hair[k], hh); }
+    // follow-through: elbows/wrists lag the upper arm, so the hand trails when the arm rises or falls
+    for (const k in tgt) A[k] = A[k] === undefined ? tgt[k] : damp(A[k], tgt[k], k.endsWith('w') ? 2.6 : k.endsWith('e') ? 3.8 : 5.5, dt);
     this.rot('leftShoulder', 0, 0, -0.04 * bal);
     this.rot('leftUpperArm', A.lx, A.ly, A.lz);
     this.rot('leftLowerArm', 0, A.le, 0);
