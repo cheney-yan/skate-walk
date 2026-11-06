@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>女孩 · 长板动作实验室</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#bfe0f2;font-family:-apple-system,"PingFang SC",sans-serif;color:#1d2a33;touch-action:none}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #ui{position:fixed;left:0;right:0;bottom:0;padding:10px 10px calc(env(safe-area-inset-bottom) + 10px);display:flex;flex-wrap:wrap;gap:8px;justify-content:center;pointer-events:none;transition:opacity .4s}
+  #ui button{pointer-events:auto;min-height:44px;padding:0 14px;border-radius:22px;border:0;background:rgba(255,250,240,.88);font-size:14px;font-weight:600;color:#1d2a33;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  #ui button.on{background:#ff8a5c;color:#fff}
+  #cap{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 14px);transform:translateX(-50%);background:rgba(255,250,240,.86);padding:8px 14px;border-radius:16px;font-size:15px;font-weight:600;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+  #cap small{display:block;font-weight:400;font-size:12px;opacity:.6;text-align:center}
+  body.rec #ui{display:none}
+  #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:15px;opacity:.7}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">加载中…<small></small></div>
+<div id="ui">
+  <button data-cam="chase" class="on">身后</button>
+  <button data-cam="side">侧面</button>
+  <button data-cam="front">正面</button>
+  <button id="restart">从头再看</button>
+  <button id="slow">慢放</button>
+</div>
+<div id="load">加载女孩模型（10MB）…</div>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+<script type="module" src="./js/lab.js"></script>
+</body>
+</html>
