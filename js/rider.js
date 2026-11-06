@@ -243,7 +243,7 @@ export class Rider {
     // ---- hips placement (vrm model frame: +z facing, +x = board forward)
     const sway = Math.sin(t * 0.9) * 0.008;
     const hipX = 0.0 + reach * 0.1 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
-    const hipDrop = 0.105 + w.effort * 0.04 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3;
+    const hipDrop = 0.06 + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3;
     const hipZ = 0.015 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     b.hips.position.set(this.hipRest.x + hipX, this.hipRest.y - hipDrop, this.hipRest.z + hipZ + sway);
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
@@ -251,7 +251,7 @@ export class Rider {
     const lb = w.look;
     const leanIn = -this.windSideLean() ;
     this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 - lb * 12 * D, leanIn * 0.3);
-    const fwd = 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.25 + landAbs * 0.2;
+    const fwd = -0.02 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.25 + landAbs * 0.2;
     this.rot('spine', fwd * 0.45 + breathe, open * 0.2 - lb * 18 * D, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
     this.rot('chest', fwd * 0.35 - breathe * 0.5, open * 0.2 - lb * 28 * D, leanIn * 0.3);
     this.rot('upperChest', fwd * 0.2 - breathe, -lb * 14 * D, 0);
@@ -259,24 +259,34 @@ export class Rider {
     const totalYaw = open * 1.0 + 0;
     const headYawFwd = 84 * D - totalYaw;
     const headYaw = lerp(headYawFwd, -72 * D, lb);
-    const headPitch = -fwd * 0.55 + 0.05 + w.effort * 0.1 - lb * 0.05 + (this.windLocal.z < -2 ? 0.06 : 0);
+    const headPitch = -fwd * 0.55 - 0.06 + w.effort * 0.12 - lb * 0.05 + (this.windLocal.z < -2 ? 0.06 : 0);
     this.rot('neck', headPitch * 0.4, headYaw * 0.45, lb * 9 * D);
     this.rot('head', headPitch * 0.6 + lb * 0.08, headYaw * 0.55, lb * 12 * D + Math.sin(t * 0.6) * 0.02);
     // ---- arms: relaxed, swinging; balance out on tuck/landing; right hand to hair in wind
     const bal = clamp(w.tuck * 0.9 + crouchO * 0.5 + tuckAir * 1.2 + landAbs * 0.8 + Math.abs(this.lean) * 1.2, 0, 1);
     const swing = this.push ? Math.sin(P * Math.PI * 2) * 0.45 * w.push : Math.sin(t * 1.1) * 0.03;
-    // left arm (leading)
-    this.rot('leftShoulder', 0, 0, -0.04 * bal);
-    this.rot('leftUpperArm', 0.1 + Math.sin(t * 0.8) * 0.03, -0.25 - bal * 0.35 + swing * 0.3 - heel * 0.55 + toe * 0.3 - w.tuck * 0.3, -58 * D + bal * 26 * D + heel * 14 * D + w.effort * 6 * D);
-    this.rot('leftLowerArm', 0, -0.45 - bal * 0.25 - w.effort * 0.4 - heel * 0.3, 0);
-    this.rot('leftHand', 0, 0, -0.15 + bal * 0.15);
-    // right arm (trailing) — swings with the push, rises to hair when hh
+    // arms: open, soft "port de bras" — lead arm forward-low, trail arm back-low, elbows soft, wrists drop;
+    // targets are damped so hands lag the body (secondary motion), never mirrored
     const hh = w.hair;
-    const ruaZ = lerp(61 * D - bal * 26 * D - w.effort * 6 * D, 20 * D, hh);
+    const brz = Math.sin(t * 0.73) * 0.06, brz2 = Math.sin(t * 0.57 + 1.3) * 0.07;
+    const A = this.armT || (this.armT = {});
+    const tgt = {
+      lx: 0.12 + brz * 0.5, ly: -0.55 - bal * 0.25 + swing * 0.3 - heel * 0.5 + toe * 0.3 - w.tuck * 0.2,
+      lz: -36 * D + bal * 16 * D + heel * 12 * D + w.effort * 10 * D + brz,
+      le: -0.85 - bal * 0.2 - w.effort * 0.5 - heel * 0.2, lw: -0.28 + brz2,
+      rx: lerp(0.1, -0.2, hh), ry: lerp(0.55 + bal * 0.2 - swing * 0.6 + heel * 0.5 - toe * 0.3 + w.tuck * 0.2, 1.25, hh),
+      rz: lerp(38 * D - bal * 16 * D - heel * 12 * D - w.effort * 10 * D + brz2, 20 * D, hh),
+      re: lerp(0.85 + bal * 0.2 + w.effort * 0.5 + heel * 0.2 + Math.max(0, -swing) * 0.4, 2.3, hh), rw: lerp(0.28 - brz, -0.2, hh),
+    };
+    for (const k in tgt) A[k] = A[k] === undefined ? tgt[k] : damp(A[k], tgt[k], k.endsWith('w') ? 3.2 : k.endsWith('e') ? 4.5 : 6, dt);
+    this.rot('leftShoulder', 0, 0, -0.04 * bal);
+    this.rot('leftUpperArm', A.lx, A.ly, A.lz);
+    this.rot('leftLowerArm', 0, A.le, 0);
+    this.rot('leftHand', 0.25, -0.1, A.lw - 0.15);
     this.rot('rightShoulder', 0, 0, 0.05 * hh);
-    this.rot('rightUpperArm', lerp(0.1, -0.2, hh), lerp(0.3 + bal * 0.25 - swing * 0.6 + heel * 0.55 - toe * 0.3 + w.tuck * 0.3, 1.25, hh), ruaZ - heel * 14 * D * (1 - hh));
-    this.rot('rightLowerArm', 0, lerp(0.45 + heel * 0.3 + bal * 0.2 + w.effort * 0.4 + Math.max(0, -swing) * 0.4, 2.3, hh), 0);
-    this.rot('rightHand', 0, lerp(0, 0.5, hh), lerp(0.15 - bal * 0.15, -0.2, hh));
+    this.rot('rightUpperArm', A.rx, A.ry, A.rz);
+    this.rot('rightLowerArm', 0, A.re, 0);
+    this.rot('rightHand', 0.25 * (1 - hh), lerp(0.1, 0.5, hh), A.rw + 0.15 * (1 - hh));
     // fingers softly curled (graceful hands)
     for (const f of this.fing) {
       const sgn = f.side === 'left' ? -1 : 1;

@@ -192,11 +192,11 @@ export class Skirt {
     const grad = new THREE.DataTexture(new Uint8Array([150, 160, 205, 255, 214, 216, 236, 255, 252, 252, 255, 255, 255, 255, 255, 255]), 4, 1);
     grad.minFilter = grad.magFilter = THREE.LinearFilter; grad.needsUpdate = true;
     // hem shading: slightly translucent-looking lower edge via uv-based tint
-    const mat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: grad, side: THREE.DoubleSide });
+    const mat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: grad, side: THREE.DoubleSide, transparent: true });
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <uv_pars_vertex>', '#include <uv_pars_vertex>\nvarying vec2 vSk;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvSk = uv;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>\nvarying vec2 vSk;')
-        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n float hem = smoothstep(0.93, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb*vec3(0.93,0.94,0.99), hem*0.6);');
+        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n float hem = smoothstep(0.78, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, min(vec3(1.), gl_FragColor.rgb*vec3(1.02,1.02,1.05)+0.04), hem); gl_FragColor.a = mix(0.97, 0.72, hem);');
     };
     this.mesh = new THREE.Mesh(geo, mat); this.mesh.frustumCulled = false;
     scene.add(this.mesh);
@@ -289,5 +289,113 @@ export class Skirt {
     for (let r = 0; r < R; r++) for (let c = 0; c <= C; c++) { const s = (r * C + (c % C)) * 3, d = (r * vC + c) * 3; vp[d] = p[s]; vp[d + 1] = p[s + 1]; vp[d + 2] = p[s + 2]; }
     this.geo.attributes.position.needsUpdate = true;
     this.geo.computeVertexNormals();
+  }
+}
+
+
+// ---------- straw sun hat with ribbon tails ----------
+// Sized from the hair mesh at runtime so the crown sits on the hair, not inside it.
+export class Hat {
+  constructor(vrm, scene) {
+    this.vrm = vrm;
+    const head = vrm.humanoid.getRawBoneNode('head');
+    this.head = head;
+    vrm.scene.updateMatrixWorld(true);
+    const hp = head.getWorldPosition(new THREE.Vector3());
+    // measure hair extent around the head (bind pose, model space == world here)
+    let top = hp.y + 0.15, rad = 0.11, cz = hp.z;
+    const pts = [];
+    vrm.scene.traverse((o) => {
+      if (!o.isMesh) return; const n = (Array.isArray(o.material) ? o.material : [o.material]).map((m) => m.name).join();
+      if (!/Hair/.test(n) || /Back/.test(n)) return;
+      const p = o.geometry.attributes.position;
+      for (let i = 0; i < p.count; i++) { const y = p.getY(i); if (y > hp.y + 0.02) pts.push([p.getX(i), y, p.getZ(i)]); }
+    });
+    if (pts.length) {
+      top = Math.max(...pts.map((q) => q[1]));
+      const band = pts.filter((q) => q[1] > top - 0.09 && q[1] < top - 0.05);
+      cz = band.reduce((a, q) => a + q[2], 0) / (band.length || 1);
+      rad = Math.max(...band.map((q) => Math.hypot(q[0] - hp.x, q[2] - cz)), 0.1);
+    }
+    const straw = (() => {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 256; const g = c.getContext('2d');
+      g.fillStyle = '#efdcae'; g.fillRect(0, 0, 256, 256);
+      for (let y = 0; y < 256; y += 4) { g.fillStyle = `rgba(150,115,60,${0.10 + Math.random() * 0.08})`; g.fillRect(0, y, 256, 1.4); }
+      for (let x = 0; x < 256; x += 6) { g.fillStyle = 'rgba(255,248,225,0.18)'; g.fillRect(x, 0, 2, 256); }
+      const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(6, 2); tx.colorSpace = THREE.SRGBColorSpace; return tx;
+    })();
+    const mat = new THREE.MeshStandardMaterial({ color: '#f0dfb4', map: straw, roughness: 1, metalness: 0, side: THREE.DoubleSide, emissive: '#6b5a36', emissiveIntensity: 0.35 });
+    this.root = new THREE.Group();
+    // crown: soft dome, brim: wide, gently drooping at the edge
+    const cr = rad + 0.012, ch = 0.085;
+    const crownPts = []; for (let i = 0; i <= 12; i++) { const a = i / 12; crownPts.push(new THREE.Vector2(cr * (1 - 0.12 * a * a) * Math.cos(a * a * 1.2), ch * Math.sin(a * Math.PI / 2))); }
+    crownPts.push(new THREE.Vector2(0.0001, ch));
+    const crown = new THREE.Mesh(new THREE.LatheGeometry(crownPts, 40), mat);
+    const brimPts = []; const R0 = cr - 0.004, R1 = 0.205;
+    for (let i = 0; i <= 10; i++) { const a = i / 10; brimPts.push(new THREE.Vector2(R0 + (R1 - R0) * a, -0.028 * a * a)); }
+    this.brimGeo = new THREE.LatheGeometry(brimPts, 64);
+    this.brimBase = this.brimGeo.attributes.position.array.slice();
+    const brim = new THREE.Mesh(this.brimGeo, mat);
+    const ribbonMat = new THREE.MeshStandardMaterial({ color: '#5aa6d8', roughness: 0.6, side: THREE.DoubleSide });
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(cr * 0.995, cr * 1.0, 0.024, 40, 1, true), ribbonMat); band.position.y = 0.014;
+    this.root.add(crown, brim, band);
+    this.root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    // place relative to head bone: crown base sits ~4.5 cm below hair top, tilted slightly back
+    const baseWorld = new THREE.Vector3(hp.x, top - 0.045, cz - 0.005);
+    head.add(this.root);
+    this.root.position.copy(head.worldToLocal(baseWorld.clone()));
+    this.root.rotation.x = -0.14;
+    // ribbon tails (two verlet strips, pinned at the back of the band)
+    this.tails = [];
+    for (const side of [-1, 1]) {
+      const N = 11, seg = 0.05, w = 0.05;
+      const pts = [], prev = [];
+      const g = new THREE.BufferGeometry(); const pos = new Float32Array(N * 2 * 3), idx = [];
+      for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx);
+      const m = new THREE.Mesh(g, ribbonMat); m.frustumCulled = false; m.castShadow = true; scene.add(m);
+      for (let i = 0; i < N; i++) { pts.push(new THREE.Vector3()); prev.push(new THREE.Vector3()); }
+      this.tails.push({ side, N, seg, w, pts, prev, g, pos, anchorLocal: new THREE.Vector3(side * 0.025, 0.0, -cr * 1.02), inited: false });
+    }
+    this.tmp = new THREE.Vector3();
+  }
+  step(dt, air, t) {
+    this.root.updateMatrixWorld(true);
+    const h = Math.min(dt, 1 / 30), wind = air.length();
+    // brim flutter: travelling wave around the rim, stronger with relative air speed
+    const a = this.brimGeo.attributes.position, b = this.brimBase;
+    const amp = Math.min(0.018, 0.002 + wind * 0.0016);
+    for (let i = 0; i < a.count; i++) {
+      const x = b[i * 3], y = b[i * 3 + 1], z = b[i * 3 + 2], r = Math.hypot(x, z), e = Math.max(0, (r - 0.14) / 0.065);
+      a.setY(i, y + Math.sin(Math.atan2(z, x) * 3 - t * (6 + wind)) * amp * e * e);
+    }
+    a.needsUpdate = true;
+    const up = new THREE.Vector3(0, 1, 0);
+    for (const tl of this.tails) {
+      const anchor = this.root.localToWorld(tl.anchorLocal.clone());
+      if (!tl.inited) { tl.pts.forEach((p, i) => { p.copy(anchor).addScaledVector(up, -i * tl.seg); tl.prev[i].copy(p); }); tl.inited = true; }
+      for (let i = 1; i < tl.N; i++) {
+        const p = tl.pts[i], q = tl.prev[i];
+        const vel = this.tmp.copy(p).sub(q).divideScalar(h);
+        const flutter = Math.sin(t * 9 + i * 0.9 + tl.side) * 0.8 * (i / tl.N);
+        const ax = 1.6 * (air.x * (1 + 0.3 * flutter) - vel.x) + Math.cos(t * 7 + i) * wind * 0.25;
+        const ay = -9.8 + 1.6 * (air.y - vel.y) + flutter * wind * 0.6;
+        const az = 1.6 * (air.z * (1 + 0.3 * flutter) - vel.z) + Math.sin(t * 8 + i) * wind * 0.25;
+        q.copy(p); p.x += vel.x * h * 0.99 + ax * h * h; p.y += vel.y * h * 0.99 + ay * h * h; p.z += vel.z * h * 0.99 + az * h * h;
+      }
+      tl.pts[0].copy(anchor);
+      for (let it = 0; it < 4; it++) for (let i = 1; i < tl.N; i++) {
+        const A = tl.pts[i - 1], B = tl.pts[i], d = B.distanceTo(A) || 1e-6;
+        B.sub(A).multiplyScalar(tl.seg / d).add(A);
+      }
+      // ribbon width perpendicular to strip direction and to the air/camera-ish axis
+      for (let i = 0; i < tl.N; i++) {
+        const P = tl.pts[i], dir = (i < tl.N - 1 ? tl.pts[i + 1].clone().sub(P) : P.clone().sub(tl.pts[i - 1])).normalize();
+        const side = new THREE.Vector3().crossVectors(dir, air.lengthSq() > 0.01 ? air.clone().normalize() : new THREE.Vector3(1, 0, 0));
+        if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize().multiplyScalar(tl.w * 0.5 * (1 - 0.3 * i / tl.N));
+        tl.pos.set([P.x + side.x, P.y + side.y, P.z + side.z, P.x - side.x, P.y - side.y, P.z - side.z], i * 6);
+      }
+      tl.g.attributes.position.needsUpdate = true; tl.g.computeVertexNormals();
+    }
   }
 }

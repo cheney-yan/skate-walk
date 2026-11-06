@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadGirl, setupHair, Skirt } from './girl.js';
+import { loadGirl, setupHair, Skirt, Hat } from './girl.js';
 import { Rider } from './rider.js';
 
 const Q = new URLSearchParams(location.search);
@@ -49,13 +49,13 @@ function groundY(x, z) {
 const renderer = new THREE.WebGLRenderer({ canvas: $('c'), antialias: true, preserveDrawingBuffer: REC });
 renderer.setPixelRatio(REC ? 1 : Math.min(2, devicePixelRatio));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog('#d6ebf5', 40, 260);
 const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 1500);
-scene.add(new THREE.HemisphereLight('#e4f3ff', '#c9b892', 1.35));
-const sun = new THREE.DirectionalLight('#fff3dc', 2.4);
+scene.add(new THREE.HemisphereLight('#eef6ff', '#d8c49a', 1.4));
+const sun = new THREE.DirectionalLight('#ffe9c8', 2.5);
 sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 30 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
@@ -139,13 +139,14 @@ const pdata = []; for (let i = 0; i < PN; i++) pdata.push({ p: new THREE.Vector3
 scene.add(petals);
 
 // ---------------- girl ----------------
-let vrm, rider, skirt, hair;
+let vrm, rider, skirt, hair, hat;
 const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: 999, camera };
 async function init() {
   vrm = await loadGirl('./models/girl.vrm');
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
-  skirt = new Skirt(vrm, scene, { top: 0.985, hem: 0.47, rows: 14, cols: 32, flare: 0.62 });
+  skirt = new Skirt(vrm, scene, { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
+  hat = new Hat(vrm, scene);
   rider = new Rider(vrm, scene);
   rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS); let best = 1e9, y = 0; for (let i = Math.max(0, c - 30); i < Math.min(track.pts.length, c + 30); i++) { const p = track.pts[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < best) { best = d; y = p.y; } } return y; };
   hair = setupHair(vrm);
@@ -189,7 +190,7 @@ function updateCamera(dt) {
   let want, look;
   if (camMode === 'side') { want = base.clone().addScaledVector(left, 3.6).add(new THREE.Vector3(0, 1.1, 0)).addScaledVector(p.dir, 0.3); look = base.clone().add(new THREE.Vector3(0, 0.85, 0)); }
   else if (camMode === 'front') { want = base.clone().addScaledVector(p.dir, 4.2).addScaledVector(left, 0.9).add(new THREE.Vector3(0, 1.3, 0)); look = base.clone().add(new THREE.Vector3(0, 0.9, 0)); }
-  else { const ahead = track.at(rider.s + 2.5).p; const side = -0.55 - 0.7 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.3 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.45 - rider.w.look * 0.15, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
+  else { const ahead = track.at(rider.s + 2.5).p; const side = -0.55 - 0.7 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.1 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.08 - rider.w.look * 0.1, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
   if (!camInit) { camPos.copy(want); camLook.copy(look); camInit = true; }
   const k = 1 - Math.exp(-dt * 4.5);
   camPos.lerp(want, k); camLook.lerp(look, 1 - Math.exp(-dt * 8));
@@ -208,6 +209,7 @@ function step(dt) {
   rider.update(dt, (s) => track.at(s), ctx);
   hair.update(rider.airRel, simT);
   skirt.step(dt, windNow, simT);
+  hat.step(dt, rider.airRel, simT);
   if (rider.s > track.total - 2) restart();
   // petals
   const cam = camera.position, m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), e = new THREE.Euler();
