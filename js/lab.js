@@ -188,10 +188,20 @@ function caption() {
 // ---------------- camera ----------------
 let camMode = Q.get('cam') || 'chase', camInit = false;
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+const orbit = { yaw: Math.PI, pitch: 0.18, dist: 3.2, drag: null, pinch: null };
 function updateCamera(dt) {
   if (camMode === 'none') return;
+  if (camMode === 'orbit') {
+    const c = rider.board.position.clone().add(new THREE.Vector3(0, 0.95 - rider.air * 0.3, 0));
+    const p = track.at(rider.s), base = Math.atan2(p.dir.x, p.dir.z) + orbit.yaw;
+    const want = c.clone().add(new THREE.Vector3(Math.sin(base) * Math.cos(orbit.pitch), Math.sin(orbit.pitch), Math.cos(base) * Math.cos(orbit.pitch)).multiplyScalar(orbit.dist));
+    if (!camInit) { camPos.copy(want); camInit = true; }
+    camPos.lerp(want, 1 - Math.exp(-dt * 10)); camera.position.copy(camPos); camera.lookAt(c);
+    const b = rider.board.position; sunFollow(b);
+    return;
+  }
   const p = track.at(rider.s), left = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
-  const base = rider.board.position.clone(); base.y -= rider.air * 0.6;
+  const base = rider.board.position.clone(); base.y -= rider.air * 0.95;   // camera stays level during jumps so the height reads
   let want, look;
   if (camMode === 'side') { want = base.clone().addScaledVector(left, 3.6).add(new THREE.Vector3(0, 1.1, 0)).addScaledVector(p.dir, 0.3); look = base.clone().add(new THREE.Vector3(0, 0.85, 0)); }
   else if (camMode === 'front') { want = base.clone().addScaledVector(p.dir, 4.2).addScaledVector(left, 0.9).add(new THREE.Vector3(0, 1.3, 0)); look = base.clone().add(new THREE.Vector3(0, 0.9, 0)); }
@@ -200,6 +210,9 @@ function updateCamera(dt) {
   const k = 1 - Math.exp(-dt * 4.5);
   camPos.lerp(want, k); camLook.lerp(look, 1 - Math.exp(-dt * 8));
   camera.position.copy(camPos); camera.lookAt(camLook);
+  sunFollow(base);
+}
+function sunFollow(base) {
   if (TOD === 'golden') {
     const ahead = track.at(rider.s + 30).dir; const sdir = new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
     sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
@@ -274,12 +287,25 @@ document.querySelectorAll('[data-cam]').forEach((b) => b.onclick = () => { camMo
 $('restart').onclick = restart;
 $('tod').onclick = () => { TOD = TOD === 'golden' ? 'noon' : 'golden'; $('tod').textContent = TOD === 'golden' ? '☀️ 正午' : '🌅 夕阳'; };
 $('slow').onclick = () => { slow = slow === 1 ? 0.35 : 1; $('slow').classList.toggle('on', slow !== 1); };
+// 360° orbit: drag to spin around her (any angle), pinch / wheel to zoom; double-tap to go back behind her
+const ptrs = new Map();
+$('c').addEventListener('pointerdown', (e) => { ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (camMode !== 'orbit') { camMode = 'orbit'; camInit = false; document.querySelectorAll('[data-cam]').forEach((x) => x.classList.toggle('on', x.dataset.cam === 'orbit')); } });
+addEventListener('pointermove', (e) => {
+  const p = ptrs.get(e.pointerId); if (!p) return;
+  if (ptrs.size === 1) { orbit.yaw -= (e.clientX - p.x) * 0.008; orbit.pitch = Math.max(-0.15, Math.min(1.2, orbit.pitch + (e.clientY - p.y) * 0.006)); }
+  else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; const d0 = Math.hypot(a.x - b.x, a.y - b.y); p.x = e.clientX; p.y = e.clientY; const [c, d] = [...ptrs.values()]; const d1 = Math.hypot(c.x - d.x, c.y - d.y); orbit.dist = Math.max(1.2, Math.min(9, orbit.dist * d0 / (d1 || d0))); return; }
+  p.x = e.clientX; p.y = e.clientY;
+});
+const endPtr = (e) => ptrs.delete(e.pointerId); addEventListener('pointerup', endPtr); addEventListener('pointercancel', endPtr);
+addEventListener('wheel', (e) => { if (camMode === 'orbit') orbit.dist = Math.max(1.2, Math.min(9, orbit.dist * Math.exp(e.deltaY * 0.001))); }, { passive: true });
+let lastTap = 0; $('c').addEventListener('pointerup', () => { const n = performance.now(); if (n - lastTap < 300) { orbit.yaw = Math.PI; orbit.pitch = 0.18; orbit.dist = 3.2; } lastTap = n; });
 let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; clearTimeout(hideT); hideT = setTimeout(() => $('ui').style.opacity = 0.25, 6000); });
 
 // deterministic recording hooks
 window.LAB = {
   rider: () => rider, track, skirt: () => skirt, vrm: () => vrm, camera,
   setCam(m) { camMode = m; camInit = false; },
+  orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
   restart, jumpTo(s) { restart(); for (let i = 0; i < 4000 && rider.s < s; i++) step(1 / 30); },
   // advance n frames at fps then render; returns state

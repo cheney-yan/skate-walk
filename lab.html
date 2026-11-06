@@ -19,10 +19,12 @@
 <body>
 <canvas id="c"></canvas>
 <div id="cap">加载中…<small></small></div>
+<div id="tip" style="position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 64px);font-size:12px;opacity:.6;background:rgba(255,250,240,.7);padding:4px 10px;border-radius:10px">单指拖动 360° 转着看 · 双指缩放 · 双击回到身后</div>
 <div id="ui">
   <button data-cam="chase" class="on">身后</button>
   <button data-cam="side">侧面</button>
   <button data-cam="front">正面</button>
+  <button data-cam="orbit">🔄 360°</button>
   <button id="restart">从头再看</button>
   <button id="slow">慢放</button>
   <button id="tod">☀️ 正午</button>

@@ -120,7 +120,7 @@ export class Rider {
     // ollie trigger: obstacle ahead
     if (!this.ollie && ctx.holes) for (const h of ctx.holes) {
       const d = h - this.s, lead = this.v * 0.42 + 0.35;
-      if (d > 0 && d < lead && !this.push) { this.ollie = { t: 0, h }; this.ev.push(['ollie', this.s]); break; }
+      if (d > 0 && d < lead + this.v * 0.12 && !this.push) { this.ollie = { t: 0, h }; this.ev.push(['ollie', this.s]); break; }
     }
     // lean from turning physics
     const leanT = clamp(Math.atan((this.v * this.v * kappa) / g) * 1.25, -30 * D, 30 * D);
@@ -131,16 +131,16 @@ export class Rider {
     let popPitch = 0;
     if (this.ollie) {
       const o = this.ollie; o.t += dt;
-      if (o.t >= 0.26 && !o.popped) { o.popped = true; this.airV = 2.45; }
+      if (o.t >= 0.38 && !o.popped) { o.popped = true; this.airV = 2.75; }
       if (o.popped) {
         this.air += this.airV * dt; this.airV -= g * dt;
         if (this.air <= 0 && this.airV < 0) { this.air = 0; this.airV = 0; o.landT = o.landT ?? o.t; }
       }
       // pitch: tail snaps down (nose up) at pop, front foot levels it at apex
-      const tp = o.t - 0.26;
+      const tp = o.t - 0.38;
       if (tp > -0.04 && tp < 0.06) popPitch = sstep(-0.04, 0.03, tp) * 16 * D;
       else if (tp >= 0.06 && tp < 0.2) popPitch = (1 - sstep(0.06, 0.18, tp)) * 16 * D;
-      if (o.landT && o.t - o.landT > 0.4) this.ollie = null;
+      if (o.landT && o.t - o.landT > 0.6) this.ollie = null;
     }
     this.boardPitch = damp(this.boardPitch, popPitch, 30, dt);
     // place board
@@ -234,18 +234,24 @@ export class Rider {
     // push sub-phase envelope: down (0..0.3 reach), contact, recover
     const reach = this.push ? sstep(0.05, 0.32, P) * (1 - sstep(0.7, 0.98, P)) : 0;
     const ol = this.ollie ? this.ollie.t : -1;
-    const crouchO = ol >= 0 ? (ol < 0.26 ? sstep(0, 0.22, ol) : ol < 0.34 ? 1 - sstep(0.26, 0.34, ol) * 1.2 : 0) : 0;
-    const tuckAir = ol >= 0.26 && this.air > 0 ? sstep(0.28, 0.38, ol) * 0.85 * Math.min(1, this.air / 0.12 + 0.3) : 0;
-    const landAbs = this.ollie && this.ollie.landT ? (1 - sstep(0, 1, (ol - this.ollie.landT) / 0.4)) * 0.85 : 0;
+    // ollie body phases (from longboard-ollie reference: deep ~90° knee wind-up, explosive extension with arms
+    // sweeping up, knees pulled toward chest in the air, then reach down and absorb on landing)
+    const OP = 0.38;
+    const crouchO = ol >= 0 ? (ol < OP ? sstep(0, OP * 0.9, ol) : 0) : 0;                 // wind-up
+    const extend = ol >= OP && ol < OP + 0.12 ? Math.sin(((ol - OP) / 0.12) * Math.PI) : 0; // explosive extension
+    const tuckAir = ol >= OP + 0.08 && this.air > 0 ? sstep(OP + 0.08, OP + 0.2, ol) * (1 - sstep(0.75, 1, -this.airV / 2.75)) : 0;
+    const landAbs = this.ollie && this.ollie.landT ? Math.sin(Math.min(1, (ol - this.ollie.landT) / 0.18) * Math.PI / 2) * (1 - sstep(0.18, 0.6, ol - this.ollie.landT)) : 0;
     const carve = clamp(this.lean / 0.16, -1, 1), heel = Math.max(0, carve), toe = Math.max(0, -carve);
     this.carve = carve;
-    const crouchT = clamp(heel * 0.38 + toe * 0.3 + w.tuck * 1.05 + crouchO * 1.0 + tuckAir + landAbs + w.effort * 0.25 + reach * 0.15, -0.2, 1.2);
+    const crouchT = clamp(heel * 0.38 + toe * 0.3 + w.tuck * 1.05 + crouchO * 1.55 - extend * 0.2 + tuckAir * 1.15 + landAbs * 1.1 + w.effort * 0.25 + reach * 0.15, -0.35, 1.6);
     this.crouch = damp(this.crouch ?? crouchT, crouchT, this.ollie ? 18 : 9, dt);
     const breathe = Math.sin(t * (w.effort > 0.3 ? 4.2 : 1.6)) * (0.012 + w.effort * 0.03);
     // ---- hips placement (vrm model frame: +z facing, +x = board forward)
     const sway = Math.sin(t * 0.9) * 0.008;
     const hipX = 0.0 + reach * 0.1 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
-    const hipDrop = 0.06 + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3;
+    this.oTuck = tuckAir;
+    this.oDrop = damp(this.oDrop ?? 0, crouchO * 0.16 + tuckAir * 0.27 + landAbs * 0.12, 22, dt);
+    const hipDrop = 0.06 + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3;
     const hipZ = 0.015 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     b.hips.position.set(this.hipRest.x + hipX * this.flip, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ + sway) * this.flip);
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
@@ -253,7 +259,7 @@ export class Rider {
     const lb = w.look;
     const leanIn = -this.windSideLean() ;
     this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 - lb * 12 * D, leanIn * 0.3);
-    const fwd = -0.02 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.25 + landAbs * 0.2;
+    const fwd = -0.02 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     this.rot('spine', fwd * 0.45 + breathe, open * 0.2 - lb * 18 * D, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
     this.rot('chest', fwd * 0.35 - breathe * 0.5, open * 0.2 - lb * 28 * D, leanIn * 0.3);
     this.rot('upperChest', fwd * 0.2 - breathe, -lb * 14 * D, 0);
@@ -291,6 +297,11 @@ export class Rider {
       rz: 24 * D - bal * 12 * D - heel * 10 * D - w.effort * 8 * D + brz2,
       re: 0.85 + bal * 0.2 + w.effort * 0.5 + heel * 0.2 + Math.max(0, -swing) * 0.4, rw: 0.28 - brz,
     };
+    // ollie: arms drop low/back in the wind-up, sweep up through the pop, spread wide at shoulder height in the air
+    const sweep = clamp(extend + tuckAir, 0, 1), load = crouchO * (1 - sweep);
+    act.lz += (-8 * D) * load + (34 * D) * sweep; act.rz += (8 * D) * load - (34 * D) * sweep;
+    act.ly += 0.25 * load - 0.15 * sweep; act.ry += -0.25 * load + 0.15 * sweep;
+    act.le *= 1 - 0.45 * sweep; act.re *= 1 - 0.45 * sweep;
     const hair = { rx: -0.2, ry: 1.25, rz: 20 * D, re: 2.3, rw: -0.2 };
     const tgt = {};
     for (const k in rest) { tgt[k] = lerp(rest[k], act[k], up); if (k[0] === 'r' && hair[k] !== undefined) tgt[k] = lerp(tgt[k], hair[k], hh); }
@@ -345,7 +356,7 @@ export class Rider {
     let rYaw = -78 * D, lYaw = lerp(-50 * D, -12 * D, pr);
     let rPitch = 0;
     if (this.ollie) { // back foot to the tail during the crouch, front foot slides toward the nose after the pop
-      const o = this.ollie.t; const tail = sstep(0.0, 0.2, o) * (1 - sstep(0.45, 0.7, o)), slide = sstep(0.24, 0.42, o) * (1 - sstep(0.55, 0.85, o));
+      const o = this.ollie.t; const tail = sstep(0.0, 0.3, o) * (1 - sstep(0.6, 0.9, o)), slide = sstep(0.36, 0.55, o) * (1 - sstep(0.75, 1.05, o));
       rf = deck(-0.01, -0.21 - tail * 0.13); lf = deck(0.015, 0.2 + slide * 0.17, DECK_Y + 0.093 + slide * 0.008); rYaw = -80 * D; lYaw = -65 * D;
     }
     if (this.push && !this.ollie) {
@@ -369,7 +380,7 @@ export class Rider {
     for (const [side, target, yaw, pitch] of [['left', lf, lYaw, 0], ['right', rf, rYaw, rPitch]]) {
       const up = B[side + 'UpperLeg'], lo = B[side + 'LowerLeg'], ft = B[side + 'Foot'];
       const hip = bw(up);
-      const pole = hip.clone().addScaledVector(fwdModel, 1.0).add(new V(0, -0.4, 0));
+      const pole = hip.clone().addScaledVector(fwdModel, 1.0).add(new V(0, -0.4 + (this.oTuck || 0) * 0.5, 0));
       // splay knees slightly outward over their feet
       const along = target.clone().sub(hip); pole.addScaledVector(along.setY(0).normalize(), 0.25);
       twoBoneIK(up, lo, ft, target, pole);
