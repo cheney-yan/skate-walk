@@ -121,9 +121,9 @@ export class Rider {
       if (d > 0 && d < lead && !this.push) { this.ollie = { t: 0, h }; this.ev.push(['ollie', this.s]); break; }
     }
     // lean from turning physics
-    const leanT = clamp(Math.atan((this.v * this.v * kappa) / g), -28 * D, 28 * D);
+    const leanT = clamp(Math.atan((this.v * this.v * kappa) / g) * 1.25, -30 * D, 30 * D);
     this.lean = damp(this.lean, leanT, 6, dt);
-    this.tilt = this.lean * 0.55;                   // deck rolls less than the rider (bushings)
+    this.tilt = this.lean * 0.75;                   // deck rolls less than the rider (bushings)
     this.steer = damp(this.steer, clamp(Math.atan(kappa * HALF_WB) * 1.0 + this.tilt * 0.25, -0.25, 0.25), 10, dt);
     // ollie ballistics (board + rider leave the ground)
     let popPitch = 0;
@@ -136,8 +136,8 @@ export class Rider {
       }
       // pitch: tail snaps down (nose up) at pop, front foot levels it at apex
       const tp = o.t - 0.26;
-      if (tp > -0.05 && tp < 0.12) popPitch = sstep(-0.05, 0.05, tp) * 17 * D;
-      else if (tp >= 0.12 && tp < 0.32) popPitch = (1 - sstep(0.12, 0.3, tp)) * 17 * D;
+      if (tp > -0.04 && tp < 0.06) popPitch = sstep(-0.04, 0.03, tp) * 16 * D;
+      else if (tp >= 0.06 && tp < 0.2) popPitch = (1 - sstep(0.06, 0.18, tp)) * 16 * D;
       if (o.landT && o.t - o.landT > 0.4) this.ollie = null;
     }
     this.boardPitch = damp(this.boardPitch, popPitch, 30, dt);
@@ -233,16 +233,17 @@ export class Rider {
     const reach = this.push ? sstep(0.05, 0.32, P) * (1 - sstep(0.7, 0.98, P)) : 0;
     const ol = this.ollie ? this.ollie.t : -1;
     const crouchO = ol >= 0 ? (ol < 0.26 ? sstep(0, 0.22, ol) : ol < 0.34 ? 1 - sstep(0.26, 0.34, ol) * 1.2 : 0) : 0;
-    const tuckAir = ol >= 0.26 && this.air > 0 ? sstep(0.3, 0.45, ol) * 0.55 : 0;
-    const landAbs = this.ollie && this.ollie.landT ? Math.sin(clamp((ol - this.ollie.landT) / 0.4, 0, 1) * Math.PI) * 0.8 : 0;
-    const carve = clamp(this.lean / 0.2, -1, 1), heel = Math.max(0, carve), toe = Math.max(0, -carve);
+    const tuckAir = ol >= 0.26 && this.air > 0 ? sstep(0.28, 0.38, ol) * 0.85 * Math.min(1, this.air / 0.12 + 0.3) : 0;
+    const landAbs = this.ollie && this.ollie.landT ? (1 - sstep(0, 1, (ol - this.ollie.landT) / 0.4)) * 0.85 : 0;
+    const carve = clamp(this.lean / 0.16, -1, 1), heel = Math.max(0, carve), toe = Math.max(0, -carve);
     this.carve = carve;
-    this.crouch = clamp(heel * 0.38 + toe * 0.3 + w.tuck * 1.05 + crouchO * 1.0 + tuckAir + landAbs + w.effort * 0.25 + reach * 0.15, -0.2, 1.2);
+    const crouchT = clamp(heel * 0.38 + toe * 0.3 + w.tuck * 1.05 + crouchO * 1.0 + tuckAir + landAbs + w.effort * 0.25 + reach * 0.15, -0.2, 1.2);
+    this.crouch = damp(this.crouch ?? crouchT, crouchT, this.ollie ? 18 : 9, dt);
     const breathe = Math.sin(t * (w.effort > 0.3 ? 4.2 : 1.6)) * (0.012 + w.effort * 0.03);
     // ---- hips placement (vrm model frame: +z facing, +x = board forward)
     const sway = Math.sin(t * 0.9) * 0.008;
-    const hipX = 0.0 + reach * 0.07 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
-    const hipDrop = 0.105 + w.effort * 0.04 + this.crouch * 0.17 + reach * 0.13 + breathe * 0.3;
+    const hipX = 0.0 + reach * 0.1 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
+    const hipDrop = 0.105 + w.effort * 0.04 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3;
     const hipZ = 0.015 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     b.hips.position.set(this.hipRest.x + hipX, this.hipRest.y - hipDrop, this.hipRest.z + hipZ + sway);
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
@@ -317,7 +318,7 @@ export class Rider {
     let rPitch = 0;
     if (this.ollie) { // back foot to the tail during the crouch, front foot slides toward the nose after the pop
       const o = this.ollie.t; const tail = sstep(0.0, 0.2, o) * (1 - sstep(0.45, 0.7, o)), slide = sstep(0.24, 0.42, o) * (1 - sstep(0.55, 0.85, o));
-      rf = deck(-0.01, -0.21 - tail * 0.13); lf = deck(0.015, 0.2 + slide * 0.1, DECK_Y + 0.093 + slide * 0.02); rYaw = -80 * D; lYaw = -65 * D;
+      rf = deck(-0.01, -0.21 - tail * 0.13); lf = deck(0.015, 0.2 + slide * 0.17, DECK_Y + 0.093 + slide * 0.008); rYaw = -80 * D; lYaw = -65 * D;
     }
     if (this.push && !this.ollie) {
       const p = this.push; const c0 = p.c0 ?? 0.3 * p.T, c1 = p.c1 ?? c0 + 0.3; const tt = p.t;

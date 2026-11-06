@@ -12,7 +12,7 @@ const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t 
 // ---------------- test track ----------------
 // [length, kappa, grade, label, wind: null | 'left' | 'right' | 'front']
 const SEG = [
-  [18, 0, 0, '站直滑行'], [9, 0.2, 0, '压弯转向'], [9, -0.2, 0, '压弯转向'], [9, 0.2, 0, '压弯转向'], [6, 0, 0, ''],
+  [18, 0, 0, '站直滑行'], [9, 0.26, 0, '压弯转向'], [9, -0.26, 0, '压弯转向'], [9, 0.26, 0, '压弯转向'], [6, 0, 0, ''],
   [20, 0, 0, '前面有坑'], [40, 0.015, -0.07, '下坡'], [12, 0, 0, ''], [32, 0, 0.06, '上坡'],
   [24, 0, 0, '左边来风', 'left'], [24, 0, 0, '右边来风', 'right'], [24, 0, 0, '迎面来风', 'front'], [33, -0.02, 0, '回头看你一眼'],
 ];
@@ -74,8 +74,12 @@ scene.add(sun, sun.target);
 function ribbon(w0, w1, yOff, color, rough = 0.9) {
   const v = [], uv = [], idx = [];
   track.pts.forEach((p, k) => {
+    // never wider than the local turn radius on the inside (avoids folded ground on tight curves)
+    let kmax = 0; for (let j = Math.max(0, k - 120); j < Math.min(track.pts.length, k + 120); j++) kmax = Math.max(kmax, Math.abs(track.pts[j].kap));
+    const lim = kmax > 1e-3 ? 0.85 / kmax : 1e9; const cw = (w) => Math.sign(w) * Math.min(Math.abs(w), Math.max(1.7, lim));
+    const W0 = cw(w0), W1 = cw(w1);
     const lx = Math.cos(p.yaw), lz = -Math.sin(p.yaw);  // left = (cos, -sin)?? (dir=(sin,cos)) left=(cos,0,-sin)
-    v.push(p.x + lx * w0, p.y + yOff, p.z + lz * w0, p.x + lx * w1, p.y + yOff, p.z + lz * w1);
+    v.push(p.x + lx * W0, p.y + yOff, p.z + lz * W0, p.x + lx * W1, p.y + yOff, p.z + lz * W1);
     uv.push(0, p.s / 2, 1, p.s / 2);
     if (k) { const a = 2 * k - 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
   });
@@ -92,8 +96,8 @@ const pathTex = (() => {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
 })();
 { const r = ribbon(-1.6, 1.6, 0.0, '#ffffff', 0.85); r.material.map = pathTex; r.material.needsUpdate = true; }
-ribbon(1.6, 60, -0.03, '#93bd6c');
-ribbon(-1.6, -9, -0.03, '#e8d6a6');      // sand on the right
+ribbon(1.6, 40, -0.03, '#93bd6c');
+ribbon(-1.6, -12, -0.03, '#e8d6a6');      // sand on the right
 { // sea
   const m = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ color: '#3f9fc2', roughness: 0.25, metalness: 0.1 }));
   m.rotation.x = -Math.PI / 2; m.position.y = -6; scene.add(m);
@@ -185,7 +189,7 @@ function updateCamera(dt) {
   let want, look;
   if (camMode === 'side') { want = base.clone().addScaledVector(left, 3.6).add(new THREE.Vector3(0, 1.1, 0)).addScaledVector(p.dir, 0.3); look = base.clone().add(new THREE.Vector3(0, 0.85, 0)); }
   else if (camMode === 'front') { want = base.clone().addScaledVector(p.dir, 4.2).addScaledVector(left, 0.9).add(new THREE.Vector3(0, 1.3, 0)); look = base.clone().add(new THREE.Vector3(0, 0.9, 0)); }
-  else { const ahead = track.at(rider.s + 2.5).p; const side = 0.75 - 1.9 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.3 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.45 - rider.w.look * 0.15, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
+  else { const ahead = track.at(rider.s + 2.5).p; const side = -0.55 - 0.7 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.3 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.45 - rider.w.look * 0.15, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
   if (!camInit) { camPos.copy(want); camLook.copy(look); camInit = true; }
   const k = 1 - Math.exp(-dt * 4.5);
   camPos.lerp(want, k); camLook.lerp(look, 1 - Math.exp(-dt * 8));
