@@ -273,18 +273,15 @@ export class Rider {
     const open = 30 * D + reach * 34 * D + w.tuck * 6 * D;
     const lb = w.look;
     const leanIn = -this.windSideLean() ;
-    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 - lb * 12 * D, leanIn * 0.3);
+    const tw = this.gazeTwist || 0;   // extra torso twist the head could not reach last frame (look-back toward camera)
+    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15, leanIn * 0.3);
     const fwd = -0.02 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
-    this.rot('spine', fwd * 0.45 + breathe, open * 0.2 - lb * 18 * D, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
-    this.rot('chest', fwd * 0.35 - breathe * 0.5, open * 0.2 - lb * 28 * D, leanIn * 0.3);
-    this.rot('upperChest', fwd * 0.2 - breathe, -lb * 14 * D, 0);
-    // head: keep gaze on the travel line (yaw toward +x), look back over right shoulder
-    const totalYaw = open * 1.0 + 0;
-    const headYawFwd = 84 * D - totalYaw;
-    const headYaw = lerp(headYawFwd, -72 * D, lb);
-    const headPitch = -fwd * 0.55 - 0.06 + w.effort * 0.12 - lb * 0.05 + (this.windLocal.z < -2 ? 0.06 : 0);
-    this.rot('neck', headPitch * 0.4, headYaw * 0.45, lb * 9 * D);
-    this.rot('head', headPitch * 0.6 + lb * 0.08, headYaw * 0.55, lb * 12 * D + Math.sin(t * 0.6) * 0.02);
+    this.rot('spine', fwd * 0.45 + breathe, open * 0.2 + tw * 0.25, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
+    this.rot('chest', fwd * 0.35 - breathe * 0.5, open * 0.2 + tw * 0.35, leanIn * 0.3);
+    this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25, 0);
+    // head: GAZE solver. Riding = eyes on the road a few metres ahead (follows the curve).
+    // Look-back = she turns to look into the lens (the player), wherever the camera is.
+    this.solveGaze(dt, ctx, lb, fwd, w);
     // ---- arms: relaxed, swinging; balance out on tuck/landing; right hand to hair in wind
     const bal = clamp(w.tuck * 0.9 + crouchO * 0.5 + tuckAir * 1.2 + landAbs * 0.8 + Math.abs(this.lean) * 1.2, 0, 1);
     const swing = this.push ? Math.sin(P * Math.PI * 2) * 0.45 * w.push : Math.sin(t * 1.1) * 0.03;
@@ -353,7 +350,46 @@ export class Rider {
       E.setValue('ih', lb * 0.12);
       E.setValue('aa', w.effort * (0.1 + 0.1 * Math.max(0, Math.sin(t * 4.2))));
     }
-    if (this.vrm.lookAt) this.vrm.lookAt.target = lb > 0.4 && ctx.camera ? ctx.camera : null;
+    if (this.vrm.lookAt) { this.gazeObj.position.copy(this.gazePt); this.gazeObj.updateMatrixWorld(); this.vrm.lookAt.target = this.gazeObj; }
+  }
+  solveGaze(dt, ctx, lb, fwd, w) {
+    const V = THREE.Vector3, b = this.b;
+    if (!this.gazeObj) { this.gazeObj = new THREE.Object3D(); this.gazePt = new V(); this.gazeTwist = 0; this.gazeSide = 1; }
+    // targets: road point ~7 m ahead on the path (eye height ~0), and the camera
+    const road = this.track ? this.track.at(this.s + 7).p.clone() : this.board.position.clone().addScaledVector(this.dir, 7);
+    road.y += 0.2;
+    const cam = ctx.camera ? ctx.camera.getWorldPosition(new V()) : road;
+    const chest = b.upperChest || b.chest; chest.updateWorldMatrix(true, false);
+    const headP = b.head.getWorldPosition(new V());
+    // blend target DIRECTIONS (not points) so the eyes sweep smoothly from road to lens
+    const dR = road.clone().sub(headP).normalize(), dC = cam.clone().sub(headP).normalize();
+    const dir = dR.clone().lerp(dC, lb).normalize();
+    this.gazePt.copy(headP).addScaledVector(dir, lb > 0.5 ? cam.distanceTo(headP) : 7);
+    const inv = new THREE.Quaternion(); chest.getWorldQuaternion(inv).invert();
+    // VRM0 models are rotated 180° at load: the face points along the bone's -Z, not +Z
+    const F = this.vrm.userData?.vrm0 ? -1 : 1;
+    const L = dir.clone().applyQuaternion(inv);
+    let yaw = Math.atan2(F * L.x, F * L.z), pitch = -F * Math.atan2(L.y, Math.hypot(L.x, L.z));
+    // look-back over one shoulder: keep the chosen side (hysteresis) when the camera is almost straight behind
+    if (lb > 0.05 && Math.abs(yaw) > 150 * D && Math.sign(yaw) !== this.gazeSide) yaw += this.gazeSide * 2 * Math.PI;
+    if (lb < 0.05) this.gazeSide = Math.sign(yaw) || 1;
+    this.gazeDbg = { yaw: +(yaw / D).toFixed(0), side: this.gazeSide };
+    const NECK = 90 * D;                                   // neck+head comfortable range; the torso takes the rest
+    const over = Math.sign(yaw) * Math.max(0, Math.abs(yaw) - NECK);
+    const twWant = lb > 0.05 ? clamp(this.gazeTwist + over, -100 * D, 100 * D) : 0;
+    this.gazeTwist = damp(this.gazeTwist, twWant * Math.min(1, lb * 1.4), 6, dt);
+    yaw = clamp(yaw, -NECK, NECK); pitch = clamp(pitch, -35 * D, 40 * D);
+    const tilt = -yaw * 0.12 * lb;                         // slight head tilt into the glance (cute, not robotic)
+    const q = (x, y, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, 'YXZ'));
+    b.neck.quaternion.copy(q(pitch * 0.4, yaw * 0.45, tilt * 0.4));
+    b.head.quaternion.copy(q(pitch * 0.6, yaw * 0.55, tilt * 0.6 + Math.sin(this.t * 0.6) * 0.02));
+    // one refinement pass so the face really points at the target
+    b.head.updateWorldMatrix(true, false);
+    const hq = b.head.getWorldQuaternion(new THREE.Quaternion());
+    const L2 = dir.clone().applyQuaternion(hq.clone().invert());
+    const ey = clamp(Math.atan2(F * L2.x, F * L2.z), -20 * D, 20 * D), ep = clamp(-F * Math.atan2(L2.y, Math.hypot(L2.x, L2.z)), -15 * D, 15 * D);
+    b.head.quaternion.multiply(q(ep, ey, 0));
+    this.gazeErr = (() => { b.head.updateWorldMatrix(true, false); const f = new V(0, 0, F).applyQuaternion(b.head.getWorldQuaternion(new THREE.Quaternion())); return Math.acos(clamp(f.dot(dir), -1, 1)) / D; })();
   }
   windSideLean() {
     // lean (model roll) into a crosswind; board frame +x = left

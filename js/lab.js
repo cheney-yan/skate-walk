@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadGirl, setupHair, Skirt, Hat } from './girl.js';
+import { loadGirl, setupHair, Skirt, Hat, OUTFIT } from './girl.js';
 import { Rider } from './rider.js';
 
 const Q = new URLSearchParams(location.search);
@@ -149,8 +149,9 @@ async function init() {
   vrm = await loadGirl(M[Q.get('m') || 'shino'] || M.shino);
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
-  skirt = new Skirt(vrm, scene, { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
-  hat = new Hat(vrm, scene);
+  const SD = OUTFIT === 'sundress';   // reference look: knee-length floral sundress, no hat, hair fully free
+  skirt = new Skirt(vrm, scene, SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
+  hat = SD ? { step() {} } : new Hat(vrm, scene);
   rider = new Rider(vrm, scene);
   rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS); let best = 1e9, y = 0; for (let i = Math.max(0, c - 30); i < Math.min(track.pts.length, c + 30); i++) { const p = track.pts[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < best) { best = d; y = p.y; } } return y; };
   hair = setupHair(vrm);

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '../vendor/three-vrm.module.min.js';
 
+export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'sundress';
 export async function loadGirl(url) {
   const loader = new GLTFLoader();
   loader.register((p) => new VRMLoaderPlugin(p));
@@ -57,6 +58,29 @@ function paintTris(tex, geom, pick, fill) {
   return canvasTex(c, tex);
 }
 
+// white cotton with pink roses + mint leaves (the reference sundress)
+export function floralCanvas(W = 1024, H = 1024, scale = 1, seed = 7) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  let s = seed; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = '#fbf8f3'; g.fillRect(0, 0, W, H);
+  const N = Math.round(150 * scale * scale);
+  const rose = (x, y, r) => {
+    const cols = [['#f4a7b4', '#e77f93', '#c95d74'], ['#f7c1c9', '#ef9aaa', '#d77489'], ['#f2b38f', '#e8907a', '#cf6c62']][Math.floor(rnd() * 3)];
+    for (let k = 0; k < 3; k++) { // leaves
+      const a = rnd() * 6.28; g.fillStyle = rnd() < 0.5 ? '#8fcfbf' : '#6fb7a6';
+      g.beginPath(); g.ellipse(x + Math.cos(a) * r * 1.15, y + Math.sin(a) * r * 1.15, r * 0.75, r * 0.32, a, 0, 6.28); g.fill();
+    }
+    for (let ring = 0; ring < 3; ring++) { const rr = r * (1 - ring * 0.3); g.fillStyle = cols[ring];
+      for (let k = 0; k < 6; k++) { const a = k * 1.047 + ring * 0.5 + rnd() * 0.3; g.beginPath(); g.arc(x + Math.cos(a) * rr * 0.45, y + Math.sin(a) * rr * 0.45, rr * 0.55, 0, 6.28); g.fill(); } }
+    g.fillStyle = cols[2]; g.beginPath(); g.arc(x, y, r * 0.18, 0, 6.28); g.fill();
+  };
+  for (let i = 0; i < N; i++) {
+    const x = rnd() * W, y = rnd() * H, r = (W / 46) * (0.6 + rnd() * 0.8) / scale;
+    if (rnd() < 0.28) { g.fillStyle = rnd() < 0.5 ? '#a9ddd2' : '#f6d0d6'; g.beginPath(); g.arc(x, y, r * 0.3, 0, 6.28); g.fill(); continue; } // tiny buds
+    for (const dx of [-W, 0, W]) for (const dy of [-H, 0, H]) if (Math.abs(dx) + Math.abs(dy) === 0 || x + dx > -r * 2 && x + dx < W + r * 2 && y + dy > -r * 2 && y + dy < H + r * 2) rose(x + dx, y + dy, r);
+  }
+  return c;
+}
 function meshesByMat(vrm, key) {
   const out = [];
   vrm.scene.traverse((o) => {
@@ -74,6 +98,7 @@ function matsByName(vrm, key) {
 
 export const STOCKING_TOP = 0.80; // metres in bind pose (thigh-high)
 function restyle(vrm) {
+  if (OUTFIT === 'sundress') return restyleSundress(vrm);
   // white stockings: every body triangle fully below the stocking top
   const body = meshesByMat(vrm, 'Body')[0];
   if (body) {
@@ -94,6 +119,28 @@ function restyle(vrm) {
     if (key === 'Tops' && m.color) m.color.set('#ffffff');
     if (m.map) m.map = lighten(m.map, key === 'Shoes' ? 185 : 222, 0.2, tint);
     if (m.shadeMultiplyTexture) m.shadeMultiplyTexture = lighten(m.shadeMultiplyTexture, 175, 0.2, tint);
+    m.needsUpdate = true;
+  }
+}
+
+function restyleSundress(vrm) {
+  // bare legs; floral bodice; tan strappy sandals
+  const fl = floralCanvas(1024, 1024, 1.6, 11);
+  for (const m of matsByName(vrm, 'Tops')) {
+    if (m.color) m.color.set('#ffffff');
+    for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {
+      const c = texToCanvas(m[k]), g = c.getContext('2d'); const d = g.getImageData(0, 0, c.width, c.height);
+      const f = document.createElement('canvas'); f.width = c.width; f.height = c.height; const fg = f.getContext('2d'); fg.drawImage(fl, 0, 0, c.width, c.height);
+      const fd = fg.getImageData(0, 0, c.width, c.height).data, p = d.data;
+      for (let i = 0; i < p.length; i += 4) { const lum = (p[i] + p[i + 1] + p[i + 2]) / 765; const sh = k === 'map' ? 0.55 + 0.45 * Math.min(1, lum * 1.6) : 0.82; for (let j = 0; j < 3; j++) p[i + j] = fd[i + j] * sh; }
+      g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]);
+    }
+    m.needsUpdate = true;
+  }
+  for (const m of matsByName(vrm, 'Bottoms')) { if (m.map) m.map = lighten(m.map, 222, 0.2); m.needsUpdate = true; }
+  for (const m of matsByName(vrm, 'Shoes')) {
+    if (m.map) m.map = lighten(m.map, 120, 0.25, [1.25, 0.92, 0.66]);
+    if (m.shadeMultiplyTexture) m.shadeMultiplyTexture = lighten(m.shadeMultiplyTexture, 95, 0.25, [1.2, 0.88, 0.62]);
     m.needsUpdate = true;
   }
 }
@@ -203,10 +250,14 @@ export class Skirt {
     // hem shading: slightly translucent-looking lower edge via uv-based tint
     this.rimU = { value: new THREE.Color(0, 0, 0) };
     const mat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: grad, side: THREE.DoubleSide, transparent: true });
+    this.floral = OUTFIT === 'sundress';
+    if (this.floral) { const ft = new THREE.CanvasTexture(floralCanvas(1024, 512, 1.0, 5)); ft.colorSpace = THREE.SRGBColorSpace; ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.repeat.set(3, 1); ft.anisotropy = 4; mat.map = ft; }
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <uv_pars_vertex>', '#include <uv_pars_vertex>\nvarying vec2 vSk;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvSk = uv;');
       sh.uniforms.uRim = this.rimU; sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>\nvarying vec2 vSk;\nuniform vec3 uRim;')
-        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n float hem = smoothstep(0.78, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, min(vec3(1.), gl_FragColor.rgb*vec3(1.02,1.02,1.05)+0.04), hem); gl_FragColor.a = mix(0.97, 0.72, hem); vec3 vd = normalize(vViewPosition); float fr = pow(1.0 - abs(dot(normalize(vNormal), vd)), 2.5); gl_FragColor.rgb += uRim * (fr * 0.9 + hem * 0.35);');
+        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + (this.floral ?
+          // sundress: inside (and the last band) is the white ruffled petticoat with a scalloped lace edge
+          ' float pet = gl_FrontFacing ? 0.0 : 1.0; float sc = 0.955 + 0.03 * abs(sin(vSk.x * 3.14159 * 72.0)); pet = max(pet, step(sc, vSk.y)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.98, 0.97, 0.95) * (0.82 + 0.18 * abs(sin(vSk.x * 3.14159 * 144.0))) * (gl_FrontFacing ? 1.0 : 0.9), pet);' : '') + '\n float hem = smoothstep(0.78, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, min(vec3(1.), gl_FragColor.rgb*vec3(1.02,1.02,1.05)+0.04), hem); gl_FragColor.a = mix(0.97, 0.72, hem); vec3 vd = normalize(vViewPosition); float fr = pow(1.0 - abs(dot(normalize(vNormal), vd)), 2.5); gl_FragColor.rgb += uRim * (fr * 0.9 + hem * 0.35);');
     };
     this.mesh = new THREE.Mesh(geo, mat); this.mesh.frustumCulled = false;
     scene.add(this.mesh);
