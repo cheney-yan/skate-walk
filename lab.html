@@ -13,6 +13,16 @@
   #cap{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 14px);transform:translateX(-50%);background:rgba(255,250,240,.86);padding:8px 14px;border-radius:16px;font-size:15px;font-weight:600;white-space:nowrap;box-shadow:0 2px 10px rgba(0,0,0,.1)}
   #cap small{display:block;font-weight:400;font-size:12px;opacity:.6;text-align:center}
   body.rec #ui{display:none}
+  #stam{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 70px);width:min(62vw,300px);pointer-events:none}
+  #stamB{height:12px;border-radius:7px;background:rgba(255,250,240,.75);box-shadow:0 1px 6px rgba(0,0,0,.12);overflow:hidden}
+  #stamF{height:100%;width:70%;border-radius:7px;transition:width .2s}
+  #stamT{font-size:11px;text-align:center;opacity:.7;margin-top:3px;font-weight:600}
+  body.nodbg #ui button:not(#dbg):not(#snd),body.nodbg #cap,body.nodbg #tip{display:none}
+  body.nodbg #stam{bottom:calc(env(safe-area-inset-bottom) + 20px)}
+  #corner{position:fixed;right:10px;top:calc(env(safe-area-inset-top) + 10px);display:flex;gap:6px;z-index:5}
+  #corner button{min-height:36px;min-width:36px;border-radius:18px;border:0;background:rgba(255,250,240,.8);font-size:14px;font-weight:600}
+  #corner button.on{background:#ff8a5c;color:#fff}
+  body.rec #corner,body.rec #stam{display:none}
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:15px;opacity:.7}
 </style>
 </head>
@@ -29,6 +39,8 @@
   <button id="slow">慢放</button>
   <button id="tod">☀️ 正午</button>
 </div>
+<div id="stam"><div id="stamB"><div id="stamF"></div></div><div id="stamT">🪶</div></div>
+<div id="corner"><button id="snd">🔇</button><button id="dbg">debug</button></div>
 <div id="load">加载女孩模型（10MB）…</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 <script type="module" src="./js/lab.js"></script>

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { loadGirl, setupHair, Skirt, Hat, OUTFIT } from './girl.js';
-import { Rider } from './rider.js';
+import { loadGirl, setupHair, Skirt, Hat, OUTFIT, addWristGuards } from './girl.js';
+import { Rider, EMAX } from './rider.js';
 
 const Q = new URLSearchParams(location.search);
 const REC = Q.has('rec');
@@ -18,6 +18,7 @@ const SEG = [
   [18, 0, 0, '站直滑行'], [10, 0.34, 0, '压弯转向'], [10, -0.34, 0, '压弯转向'], [10, 0.34, 0, '压弯转向'], [6, 0, 0, ''],
   [20, 0, 0, '前面有坑'], [40, 0.015, -0.07, '下坡'], [12, 0, 0, ''], [32, 0, 0.06, '上坡'],
   [24, 0, 0, '左边来风', 'left'], [24, 0, 0, '右边来风', 'right'], [24, 0, 0, '迎面来风', 'front'], [33, -0.02, 0, '回头看你一眼'],
+  [14, 0, 0, ''], [22, 0, 0.14, '陡坡（>6°）下来走'], [16, 0, 0, '坡顶，上板'], [30, 0, -0.06, '下坡，太快就飞板减速'], [30, 0, 0, '平路'],
 ];
 const HOLES = RD ? [] : [60, 240];
 const LOOKS = RD ? [] : [13, 226];
@@ -31,7 +32,7 @@ const track = RD ? routeTrack(RD) : (() => {
   const smooth = (s, k) => { let acc = 0, n = 0; for (let d = -3; d <= 3; d += 0.5) { acc += raw(clamp(s + d, 0, total - 0.01), k); n++; } return acc / n; };
   while (s <= total + 20) {
     const kap = smooth(Math.min(s, total - 0.01), 1), gr = smooth(Math.min(s, total - 0.01), 2);
-    pts.push({ s, x, y, z, yaw, kap, gr });
+    pts.push({ s, x, y, z, yaw, kap, gr: smooth(Math.min(s, total - 0.01), 2) });
     yaw += kap * DS; x += Math.sin(yaw) * DS; z += Math.cos(yaw) * DS; y += gr * DS; s += DS;
   }
   const at = (s) => {
@@ -67,7 +68,7 @@ function routeTrack(R) {
   }
   for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 4)], b = pts[Math.min(pts.length - 1, i + 4)]; pts[i].yaw = Math.atan2(b.x - a.x, b.z - a.z); }
   for (let i = 1; i < pts.length; i++) { let d = pts[i].yaw - pts[i - 1].yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; pts[i].yaw = pts[i - 1].yaw + d; }
-  for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 8)], b = pts[Math.min(pts.length - 1, i + 8)], ds = b.s - a.s || 1; pts[i].kap = clamp((b.yaw - a.yaw) / ds, -0.35, 0.35); pts[i].gr = clamp((b.y - a.y) / ds, -0.08, 0.08); }
+  for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 8)], b = pts[Math.min(pts.length - 1, i + 8)], ds = b.s - a.s || 1; pts[i].kap = clamp((b.yaw - a.yaw) / ds, -0.35, 0.35); pts[i].gr = clamp((b.y - a.y) / ds, -0.2, 0.2); }   // real grade (steps/ramps > 6° make her walk)
   // place names along the way (for the caption)
   const names = []; let cur = 'Bondi'; for (const q of P) { if (q.name) cur = q.name; names.push([q.s, cur]); }
   const nameAt = (s) => { let n = 'Bondi'; for (const [a, m] of names) { if (a > s * (L / total)) break; n = m; } return n; };
@@ -326,6 +327,7 @@ async function init() {
   const SD = OUTFIT === 'sundress';   // reference look: knee-length floral sundress, no hat, hair fully free
   skirt = new Skirt(vrm, scene, SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
   hat = SD ? { step() {} } : new Hat(vrm, scene);
+  addWristGuards(vrm);
   rider = new Rider(vrm, scene); rider.track = track;
   rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS); let best = 1e9, y = 0; for (let i = Math.max(0, c - 30); i < Math.min(track.pts.length, c + 30); i++) { const p = track.pts[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < best) { best = d; y = p.y; } } return y; };
   hair = setupHair(vrm);
@@ -334,7 +336,7 @@ async function init() {
 }
 let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
-  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0;
+  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
   lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false;
   rider.update(1 / 60, (s) => track.at(s), ctx);
   skirt.inited = false; vrm.springBoneManager?.reset?.();
@@ -351,7 +353,11 @@ function windTarget(s) {
 function caption() {
   const r = rider, { g } = track.segAt(r.s);
   let a = g[3] || '巡航';
-  if (r.ollie) a = 'Ollie 跳过坑';
+  if (r.mode === 'off') a = r.seq?.ph === 'brake' ? ({ slide: '板打横刹停', heel: '脚后跟蹭地刹车', roll: '慢慢滑停' })[r.seq.kind] + (r.offWhy === 'steep' ? '（坡太陡）' : '（没力气了）') : r.seq?.pick === 'kick' ? '踢板，转一圈接住' : '弯腰捡板';
+  else if (r.mode === 'walk') a = '拿着板走路' + (r.offWhy === 'steep' ? '（陡坡）' : '（歇一歇）');
+  else if (r.mode === 'on') a = '放板，上板';
+  else if (r.ollie?.kind === 'shove') a = r.ollie.why === 'speed' ? '太快了，飞板耗点力减速' : '蓄力满了，飞板！';
+  else if (r.ollie) a = 'Ollie 跳过坑';
   else if (r.look) a = '回头看你一眼';
   else if (r.hairHand) a = '风大，拢一下头发';
   else if (r.push) a = g[2] > 0.03 ? '上坡，用力蹬' : '蹬地';
@@ -362,6 +368,13 @@ function caption() {
   $('cap').innerHTML = `${a}<small>${(r.v * 3.6).toFixed(1)} km/h · 坡度 ${grade > 0 ? '+' : ''}${grade}% · ${r.s.toFixed(0)}/${track.total} m</small>`;
 }
 
+// ---------------- stamina bar (always on) ----------------
+function stamHUD() {
+  const r = rider, f = r.stam;
+  $('stamF').style.width = (f * 100).toFixed(1) + '%';
+  $('stamF').style.background = f > 0.999 ? 'linear-gradient(90deg,#ffb36b,#ff7a59)' : f < 0.15 ? '#e8a0a0' : 'linear-gradient(90deg,#9fd8c8,#6cbfb0)';
+  $('stamT').textContent = `🪶 ${Math.round(f * EMAX / 1000 * 10) / 10} / ${EMAX / 1000} kJ`;
+}
 // ---------------- camera ----------------
 let camMode = Q.get('cam') || 'chase', camInit = false;
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
@@ -482,6 +495,7 @@ function step(dt) {
   }
   updateCamera(dt);
   caption();
+  stamHUD();
 }
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 55 : 40; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
@@ -497,6 +511,39 @@ requestAnimationFrame(frame);
 
 document.querySelectorAll('[data-cam]').forEach((b) => b.onclick = () => { camMode = b.dataset.cam; camInit = false; document.querySelectorAll('[data-cam]').forEach((x) => x.classList.toggle('on', x === b)); });
 $('restart').onclick = restart;
+// debug switch: hides everything except the stamina bar (and the switch itself)
+const setDbg = (on) => { document.body.classList.toggle('nodbg', !on); $('dbg').classList.toggle('on', on); localStorage.sw_dbg = on ? '1' : '0'; };
+setDbg(Q.has('debug') ? Q.get('debug') !== '0' : localStorage.sw_dbg !== '0');
+$('dbg').onclick = () => setDbg(document.body.classList.contains('nodbg'));
+// ---- music: the old demo's procedural soundtrack (soft waves + Cmaj7-Am7-Fmaj7-G6 fingerpicking, ~66 bpm)
+let AC = null, master;
+function pluck(freq, t, vol = .12, dur = 2.2) {
+  const o = AC.createOscillator(), o2 = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  o.type = 'triangle'; o.frequency.value = freq; o2.type = 'sine'; o2.frequency.value = freq * 2.001;
+  f.type = 'lowpass'; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(500, t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .006); g.gain.exponentialRampToValueAtTime(.0005, t + dur);
+  o.connect(f); o2.connect(f); f.connect(g); g.connect(master); o.start(t); o2.start(t); o.stop(t + dur); o2.stop(t + dur);
+}
+function music() {
+  const N = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const prog = [[48, 55, 64, 71, 67], [45, 52, 60, 67, 64], [41, 48, 57, 64, 60], [43, 50, 59, 64, 62]];
+  const beat = 60 / 66 / 2; let bar = 0;
+  const loop = () => { if (!AC) return; const t0 = AC.currentTime + .1, ch = prog[bar % 4]; [0, 2, 3, 4, 1, 3, 2, 4].forEach((k, i) => { if (Math.random() < .9) pluck(N(ch[k]), t0 + i * beat + Math.random() * .02, k ? .06 : .1, 2.6); }); bar++; setTimeout(loop, beat * 8 * 1000); };
+  loop();
+}
+function startAudio() {
+  AC = new AudioContext(); master = AC.createGain(); master.gain.value = .6; master.connect(AC.destination);
+  const len = AC.sampleRate * 4, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0); let b = 0;
+  for (let i = 0; i < len; i++) { b = (b + .02 * (Math.random() * 2 - 1)) / 1.02; d[i] = b * 3.5; }
+  const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700;
+  const gw = AC.createGain(); gw.gain.value = .25; const lfo = AC.createOscillator(); lfo.frequency.value = .11; const lg = AC.createGain(); lg.gain.value = .18;
+  lfo.connect(lg); lg.connect(gw.gain); src.connect(f); f.connect(gw); gw.connect(master); src.start(); lfo.start();
+  music();
+}
+const sndUI = () => { $('snd').textContent = AC && AC.state === 'running' ? '🔊' : '🔇'; };
+$('snd').onclick = (e) => { e.stopPropagation(); if (!AC) startAudio(); else if (AC.state === 'running') AC.suspend(); else AC.resume(); setTimeout(sndUI, 50); };
+if (!REC) addEventListener('pointerdown', function first() { removeEventListener('pointerdown', first); if (!AC) { startAudio(); setTimeout(sndUI, 50); } }, { once: true });   // browsers need a tap before audio
 $('tod').onclick = () => { TOD = TOD === 'golden' ? 'noon' : 'golden'; $('tod').textContent = TOD === 'golden' ? '☀️ 正午' : '🌅 夕阳'; };
 $('slow').onclick = () => { slow = slow === 1 ? 0.35 : 1; $('slow').classList.toggle('on', slow !== 1); };
 // 360° orbit: drag to spin around her (any angle), pinch / wheel to zoom; double-tap to go back behind her
@@ -525,5 +572,5 @@ window.LAB = {
   runTo(s, budget = 120000) { const t0 = performance.now(); while (rider.s < s && performance.now() - t0 < budget) step(1 / 30); return { s: rider.s, done: rider.s >= s }; },
   prof() { const r = {}; let t0 = performance.now(); for (let i = 0; i < 10; i++) rider.update(1 / 30, (s) => track.at(s), ctx); r.rider = (performance.now() - t0) / 10; t0 = performance.now(); for (let i = 0; i < 10; i++) skirt.step(1 / 30, windNow, simT); r.skirt = (performance.now() - t0) / 10; t0 = performance.now(); renderer.render(scene, camera); r.render = performance.now() - t0; return r; },
   shot(q = 0.82) { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', q); },
-  events: () => rider.ev,
+  events: () => rider.ev, setDbg, stam(v) { rider.stam = v; },
 };

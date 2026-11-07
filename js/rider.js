@@ -13,7 +13,9 @@ const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t 
 const damp = (cur, tgt, k, dt) => cur + (tgt - cur) * (1 - Math.exp(-k * dt));
 const D = Math.PI / 180;
 
-export const DECK_Y = 0.118;          // deck top above ground (m)
+export const DECK_Y = 0.118;
+export const EMAX = 15000;   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
+const EFF = 0.25, P_AERO = 230;   // W: what her aerobic system refills continuously; above it she spends the bar, below it she refills          // deck top above ground (m)
 const WHEEL_R = 0.035, HALF_WB = 0.31;
 
 export function buildLongboard() {
@@ -79,7 +81,10 @@ export class Rider {
     this.board = buildLongboard(); scene.add(this.board);
     this.board.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.deck = this.board.userData.deck;
-    this.body = new THREE.Group(); this.deck.add(this.body);   // rider stands on the (rolled) deck
+    // rider root lives in the scene: follows the deck while riding, the ground while walking (blend m)
+    this.root = new THREE.Group(); scene.add(this.root);
+    this.body = new THREE.Group(); this.root.add(this.body);
+    this.deckF = new THREE.Object3D(); this.walkF = new THREE.Object3D();
     this.body.add(vrm.scene);
     this.flip = vrm.userData?.vrm0 ? -1 : 1;   // VRM0: model space is mirrored in x/z
     this.yaw0 = this.flip < 0 ? Math.PI : 0;
@@ -105,93 +110,218 @@ export class Rider {
     this.breath = 0; this.footPlant = new V();
     this.camAnchor = new V();
     this.ev = [];
+    this.mode = 'ride'; this.modeT = 0; this.seq = null; this.m = 0; this.face = 0; this.carry = 0; this.lat = 0; this.phi = 0;
+    this.stam = 0.7; this.spin = 0; this.bend = 0; this.armIKw = 0; this.armIKt = new V(); this.footTap = 0; this.tapPt = new V(); this.drag = 0;
   }
 
   // track: (s) -> {p:V3 ground point, dir:V3 unit forward, up:V3, grade, kappa}
   update(dt, track, ctx) {
-    this.t += dt; const t = this.t;
+    this.t += dt; this.modeT += dt; this.track = this.track || null;
     const tr = track(this.s), grade = tr.grade, kappa = tr.kappa;
-    // ---------------- layer 1: board physics ----------------
-    const g = 9.81, m = 52;
-    const theta = Math.atan(grade);
-    let a = -g * Math.sin(theta) - 0.009 * g * Math.cos(theta) - (0.5 * 1.2 * 0.42 * this.v * this.v) / m;
-    // autopilot: cruise target, pushes when slow; speed-check (carve/foot drag) when too fast downhill
-    const cruise = ctx.cruise ?? 3.0;
-    const holeSoon = (ctx.holes || []).some((h) => h - this.s > 0 && h - this.s < this.v * 0.42 + 0.35 + this.v * 1.3 + 0.5);
-    const wantPush = !holeSoon && !this.ollie && this.air <= 0 && (this.v < cruise - 1.3 || (grade > 0.025 && this.v < cruise - 0.4));
-    if (!this.push && wantPush && this.pushCool <= 0) this.startPush(grade);
-    if (this.push) a += this.pushAccel();
-    if (this.v > (ctx.vmax ?? 5.2)) a -= 1.6 * (this.v - (ctx.vmax ?? 5.2)) + 0.8;
-    this.pushCool -= dt;
-    this.v = Math.max(0, this.v + a * dt);
-    this.s += this.v * dt;
-    // ollie trigger: obstacle ahead
-    if (!this.ollie && ctx.holes) for (const h of ctx.holes) {
-      const d = h - this.s, lead = this.v * 0.42 + 0.35;
-      if (d > 0 && d < lead + this.v * 0.12 && !this.push) { this.ollie = { t: 0, h }; this.ev.push(['ollie', this.s]); break; }
-    }
-    // lean from turning physics
-    const leanT = clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6, -30 * D, 30 * D);
+    const g = 9.81, m = 52, theta = Math.atan(grade), TAN6 = Math.tan(6 * D);
+    // STAMINA (蓄力槽) in joules of spare mechanical work, EMAX = full bar.
+    // spent: push work F·v (F = m·a_push), walking uphill m·g·v·sinθ (×0.5, walking is efficient), ollie/trick jump energy;
+    // recovered: resting on the board ~40 W (downhill coast 55 W), standing/walking on the flat ~30 W.
+    let spend = 0;
+    const brake = this.mode === 'off' && this.seq.ph === 'brake';
+    if (this.mode === 'ride' || brake) {
+      let a = -g * Math.sin(theta) - 0.009 * g * Math.cos(theta) - (0.5 * 1.2 * 0.42 * this.v * this.v) / m;
+      if (this.mode === 'ride') {
+        const cruise = ctx.cruise ?? 3.0, vmax = ctx.vmax ?? 5.2;
+        const holeSoon = (ctx.holes || []).some((h) => h - this.s > 0 && h - this.s < this.v * 0.42 + 0.35 + this.v * 1.3 + 0.5);
+        const wantPush = this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < cruise - 1.3 || (grade > 0.025 && this.v < cruise - 0.4));
+        if (!this.push && wantPush && this.pushCool <= 0) this.startPush(grade);
+        const BASE = 110;   // W metabolic just standing balanced on a rolling board
+        if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
+        spend += (BASE - P_AERO) * dt;
+        if (this.v > vmax) a -= 1.6 * (this.v - vmax) + 0.8;          // carve / foot-drag speed check
+        this.pushCool -= dt; this.trickCool = (this.trickCool ?? 6) - dt;
+        const ahead = Math.max(track(this.s + 1).grade, track(this.s + this.v * 1.6 + 2).grade);
+        if (!this.ollie && this.air <= 0 && !this.push) {
+          if (ahead > TAN6) this.startOff('steep');
+          else if (this.stam <= 0.02 && (grade > 0.02 || this.v < 1.0)) this.startOff('tired');
+          else if (!holeSoon && this.v > vmax - 0.05 && grade < -0.02 && this.stam > 0.3 && this.trickCool <= 0) this.startTrick('speed');
+          else if (!holeSoon && this.stam >= 0.999 && Math.abs(grade) < 0.03 && this.v > 2.2 && this.trickCool <= 0) this.startTrick('full');
+        }
+      } else a -= this.seq.decel;
+      this.v = Math.max(0, this.v + a * dt);
+      this.s += this.v * dt;
+      if (this.mode === 'ride' && !this.ollie && ctx.holes) for (const h of ctx.holes) {
+        const d = h - this.s, lead = this.v * 0.42 + 0.35;
+        if (d > 0 && d < lead + this.v * 0.12 && !this.push) { this.ollie = { t: 0, h }; this.stam -= (m * g * 0.35 / EFF) / EMAX; this.ev.push(['ollie', this.s]); break; }
+      }
+    } else if (this.mode === 'walk') {
+      this.v = damp(this.v, grade > 0.03 ? 1.0 : 1.3, 2, dt); this.s += this.v * dt; this.phi += this.v * dt / 1.1;
+      spend += ((m * g * this.v * Math.max(0, Math.sin(theta))) / EFF * 0.6 + 170 - P_AERO) * dt;   // walking ~170 W + climb work (walking up stairs/hills is efficient)
+      const ahead = Math.max(grade, track(this.s + 1.5).grade, track(this.s + 5).grade);
+      if (ahead < 0.07 && this.modeT > 2.5 && this.stam > (this.offWhy === 'steep' ? 0.05 : 0.25)) this.startOn();
+    } else { if (!brake) this.v = this.mode === 'on' ? this.v : 0; spend += (130 - P_AERO) * dt; if (this.mode === 'on') this.s += this.v * dt; }
+    this.stam = clamp(this.stam - spend / EMAX, 0, 1);
+    this.stepSeq(dt, track);
+    const riding = this.mode === 'ride' || (this.mode === 'off' && this.seq?.ph === 'brake');
+    // lean from turning physics (only on the board)
+    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6, -30 * D, 30 * D) : 0;
     this.lean = damp(this.lean, leanT, 6, dt);
-    this.tilt = clamp(this.lean * 0.8, -19 * D, 19 * D);   // deck rolls on the bushings, less than the rider leans
-    this.steer = damp(this.steer, clamp(Math.atan(kappa * HALF_WB) + this.tilt * 0.35, -0.32, 0.32), 10, dt); // RKP: lean -> hanger yaw
-    // ollie ballistics (board + rider leave the ground)
-    let popPitch = 0;
+    this.tilt = clamp(this.lean * 0.8, -19 * D, 19 * D);
+    this.steer = damp(this.steer, riding ? clamp(Math.atan(kappa * HALF_WB) + this.tilt * 0.35, -0.32, 0.32) : 0, 10, dt);
+    // ollie / shove-it ballistics
+    let popPitch = 0; this.spin = 0; this.footLift = 0;
     if (this.ollie) {
-      const o = this.ollie; o.t += dt;
-      if (o.t >= 0.38 && !o.popped) { o.popped = true; this.airV = 2.75; }
+      const o = this.ollie, sh = o.kind === 'shove'; o.t += dt;
+      if (o.t >= 0.38 && !o.popped) { o.popped = true; this.airV = sh ? 2.5 : 2.75; }
       if (o.popped) {
         this.air += this.airV * dt; this.airV -= g * dt;
-        if (this.air <= 0 && this.airV < 0) { this.air = 0; this.airV = 0; o.landT = o.landT ?? o.t; }
+        if (this.air <= 0 && this.airV < 0) { this.air = 0; this.airV = 0; if (!o.landT) { o.landT = o.t; if (o.why === 'speed') this.v *= 0.72; } }
       }
-      // pitch: tail snaps down (nose up) at pop, front foot levels it at apex
-      const tp = o.t - 0.38;
-      if (tp > -0.05 && tp <= 0.05) popPitch = sstep(-0.05, 0.04, tp) * 28 * D;         // tail snaps down, nose shoots up
-      else if (tp > 0.05 && tp <= 0.13) popPitch = 28 * D;                                // rising nose-up
-      else if (tp > 0.13 && tp <= 0.32) popPitch = (1 - sstep(0.13, 0.3, tp)) * 28 * D;  // front foot drags it level by the peak
-      else if (o.popped && !o.landT && tp > 0.32) popPitch = -2 * D + Math.min(0, this.airV) * -0.012; // level, tail a touch low on the way down
+      const tp = o.t - 0.38, ps = sh ? 0.45 : 1;
+      if (tp > -0.05 && tp <= 0.05) popPitch = sstep(-0.05, 0.04, tp) * 28 * D * ps;
+      else if (tp > 0.05 && tp <= 0.13) popPitch = 28 * D * ps;
+      else if (tp > 0.13 && tp <= 0.32) popPitch = (1 - sstep(0.13, 0.3, tp)) * 28 * D * ps;
+      else if (o.popped && !o.landT && tp > 0.32) popPitch = -2 * D + Math.min(0, this.airV) * -0.012;
+      if (sh) { this.spin = (o.dir || 1) * 2 * Math.PI * sstep(0.04, 0.36, tp); this.footLift = Math.sin(clamp((tp - 0.0) / 0.42, 0, 1) * Math.PI) * 0.08; }
       if (o.landT && o.t - o.landT > 0.6) this.ollie = null;
     }
     this.boardPitch = damp(this.boardPitch, popPitch, 40, dt);
-    // place board
-    const up = new V(0, 1, 0);
-    this.pos.copy(tr.p).addScaledVector(up, this.air);
+    const up = new V(0, 1, 0), yaw = Math.atan2(tr.dir.x, tr.dir.z);
     this.dir.copy(tr.dir);
-    const yaw = Math.atan2(tr.dir.x, tr.dir.z);
-    this.pitch = damp(this.pitch, Math.atan(grade), 12, dt);
-    const qY = new Q().setFromAxisAngle(up, yaw);
-    const qP = new Q().setFromAxisAngle(new V(1, 0, 0), -this.pitch - this.boardPitch);
-    const qR = new Q().setFromAxisAngle(new V(0, 0, 1), -this.tilt);
-    this.board.position.copy(this.pos);
-    // pop: the tail drops until its tip strikes the road, then the board pivots on the tail (centre rises);
-    // board height = max(ballistic air, tail-on-ground pivot lift) so the tail never goes through the ground
-    const th = this.boardPitch, tailLift = Math.max(0, 0.49 * Math.sin(th) - 0.105 * (1 - Math.cos(th)) - 0.095);
-    this.board.position.y = tr.p.y + Math.max(this.air, tailLift);
-    this.board.quaternion.copy(qY).multiply(qP);
-    const PIV = new V(0, DECK_Y - 0.05, 0);
-    this.deck.quaternion.copy(qR);
-    this.deck.position.copy(PIV).sub(PIV.clone().applyQuaternion(qR));
-    // rider frame: stay ~upright against slope pitch, lean with the turn beyond deck tilt
-    this.body.quaternion.setFromEuler(new THREE.Euler(this.pitch + this.boardPitch * 0.85, 0, -(this.lean - this.tilt), 'XYZ'));
-    // wheels + trucks
+    this.pitch = damp(this.pitch, riding ? Math.atan(grade) : 0, 12, dt);
+    const qY = new Q().setFromAxisAngle(up, yaw + (this.slideYaw || 0));
+    if (riding) {
+      this.pos.copy(tr.p).addScaledVector(up, this.air);
+      const qP = new Q().setFromAxisAngle(new V(1, 0, 0), -this.pitch - this.boardPitch);
+      const qR = new Q().setFromAxisAngle(new V(0, 0, 1), -this.tilt);
+      this.board.position.copy(this.pos);
+      const th = this.boardPitch, tailLift = Math.max(0, 0.49 * Math.sin(th) - 0.105 * (1 - Math.cos(th)) - 0.095);
+      this.board.position.y = tr.p.y + Math.max(this.air, tailLift);
+      this.board.quaternion.copy(qY).multiply(qP);
+      const PIV = new V(0, DECK_Y - 0.05, 0);
+      this.deck.quaternion.copy(qR);
+      this.deck.position.copy(PIV).sub(PIV.clone().applyQuaternion(qR));
+    } else if (this.seq?.bPos && this.boardFixed && !(this.mode === 'off' && this.seq.ph === 'pick' && this.seq.pick === 'kick')) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); this.deck.quaternion.identity(); this.deck.position.set(0, 0, 0); }
+    this.board.updateMatrixWorld(true);
+    this.deck.getWorldPosition(this.deckF.position); this.deck.getWorldQuaternion(this.deckF.quaternion); this.deckF.updateMatrixWorld();
+    if (this.spin) { this.board.quaternion.multiply(new Q().setFromAxisAngle(up, this.spin)); this.board.updateMatrixWorld(true); }
+    // walking frame: on the ground at s, facing along the path, stepped aside by lat
+    const left = new V(Math.cos(yaw), 0, -Math.sin(yaw));
+    this.lat = this.mode === 'walk' ? damp(this.lat, 0, 0.8, dt) : this.lat;
+    this.walkF.position.copy(tr.p).addScaledVector(left, this.lat);
+    if (this.groundFn) this.walkF.position.y = this.groundFn(this.walkF.position.x, this.walkF.position.z);
+    this.walkF.quaternion.setFromAxisAngle(up, yaw); this.walkF.updateMatrixWorld();
+    this.root.position.lerpVectors(this.deckF.position, this.walkF.position, this.m);
+    this.root.quaternion.slerpQuaternions(this.deckF.quaternion, this.walkF.quaternion, this.m);
+    if (this.spin || this.ollie?.kind === 'shove') this.root.position.y += 0;
+    this.vrm.scene.rotation.y = lerp(-Math.PI / 2, 0, this.face) + this.yaw0;
+    this.body.position.y = -DECK_Y * this.m;
+    const bq = new Q().setFromEuler(new THREE.Euler(this.pitch + this.boardPitch * 0.85, 0, -(this.lean - this.tilt), 'XYZ'));
+    this.body.quaternion.copy(bq).slerp(new Q(), this.m);
+    this.root.updateMatrixWorld(true);
     for (const [k, tk] of this.board.userData.trucks.entries()) {
       tk.hanger.rotation.y = (k === 0 ? 1 : -1) * this.steer;
-      for (const w of tk.wheels) w.rotation.x += (this.v * dt) / WHEEL_R;
+      if (riding) for (const w of tk.wheels) w.rotation.x += (this.v * dt) / WHEEL_R;
     }
-    // wind relative to rider (board frame)
     const wind = ctx.wind || new V();
-    const vel = tr.dir.clone().multiplyScalar(this.v);
-    this.airRel.copy(wind).sub(vel);
-    const inv = new Q().copy(qY).invert();
-    this.windLocal.copy(wind).applyQuaternion(inv);    // board frame: +x left, +z forward
-
+    this.airRel.copy(wind).sub(tr.dir.clone().multiplyScalar(this.v));
+    this.windLocal.copy(wind).applyQuaternion(new Q().setFromAxisAngle(up, yaw).invert());
     // ---------------- layer 2: body ----------------
+    this.armTargets(track);
     this.stateWeights(dt, grade, ctx);
     this.pose(dt, ctx);
-    this.board.updateMatrixWorld(true);
+    this.root.updateMatrixWorld(true);
     this.solveLegs(dt);
+    this.placeHeldBoard();
     this.events(dt, ctx);
     this.vrm.update(dt);
+  }
+
+  // ---------------- mode sequences ----------------
+  startOff(why) {
+    this.push = null; this.offWhy = why; this.mode = 'off'; this.modeT = 0;
+    const r = Math.random(), kind = this.v > 3.2 ? (r < 0.6 ? 'slide' : 'heel') : (r < 0.34 ? 'slide' : r < 0.67 ? 'heel' : 'roll');
+    this.seq = { kind, ph: 'brake', t: 0, decel: { slide: 2.6, heel: 1.4, roll: 0.45 }[kind] };
+    this.ev.push(['off', this.s, kind, why]);
+  }
+  startOn() { this.mode = 'on'; this.modeT = 0; const bs = this.s + 0.75; this.seq = { ph: 'drop', t: 0, bs }; this.ev.push(['on', this.s]); }
+  startTrick(why) {
+    this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 14 : 6;
+    this.stam = Math.max(0, this.stam - (52 * 9.81 * 0.32 / EFF + 150) / EMAX); this.ev.push(['trick', this.s, why]);
+  }
+  boardRestQ(s, track) { const tr = track(s), q = new Q().setFromAxisAngle(new V(0, 1, 0), Math.atan2(tr.dir.x, tr.dir.z)); return q.multiply(new Q().setFromAxisAngle(new V(1, 0, 0), -Math.atan(tr.grade))); }
+  carryQ() { return this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), -Math.PI / 2)); }
+  stepSeq(dt, track) {
+    const S = this.seq; if (!S || (this.mode !== 'off' && this.mode !== 'on')) { this.m = damp(this.m, this.mode === 'walk' ? 1 : 0, 6, dt); this.face = this.m; return; }
+    S.t += dt;
+    if (this.mode === 'off') {
+      if (S.ph === 'brake') {
+        // slide: deck swings ~75° across the path, she sinks and leans back against the skid; heel: back heel drags; roll: just coast down
+        if (S.kind === 'slide') this.slideYaw = lerp(0, 75 * D, sstep(0, 0.5, S.t)) * (this.slideDir || (this.slideDir = Math.random() < 0.5 ? 1 : -1));
+        this.drag = S.kind === 'heel' ? sstep(0, 0.3, S.t) : 0;
+        if (this.v < 0.3 || S.t > 6) {
+          this.v = 0; S.ph = 'step'; S.t = 0; this.drag = 0;
+          this.board.updateMatrixWorld(true); S.bPos = this.board.position.clone(); S.bQ = this.board.quaternion.clone(); this.boardFixed = true;
+          this.lat = 0.34; this.ev.push(['step', this.s]);
+        }
+      } else if (S.ph === 'step') {
+        this.m = sstep(0, 0.7, S.t); this.face = sstep(0.05, 0.75, S.t);
+        if (S.t > 0.8) { S.ph = 'pick'; S.t = 0; S.pick = S.kind === 'slide' || Math.random() < 0.5 ? 'bend' : 'kick'; this.ev.push(['pick', this.s, S.pick]); }
+      } else if (S.ph === 'pick') {
+        this.m = 1; this.face = 1;
+        if (S.pick === 'bend') {
+          this.bend = Math.sin(clamp(S.t / 1.3, 0, 1) * Math.PI) * (S.t < 0.65 ? 1 : 1);
+          if (S.t >= 0.62 && !this.hold) this.grab(S.bPos, S.bQ, new V(-0.117, DECK_Y - 0.004, 0), 0.62);
+          if (S.t > 1.4) this.toWalk();
+        } else {
+          // kick-up: step on the tail, the nose shoots up while the board rolls a full turn, catch it by the nose
+          const u = sstep(0.3, 0.68, S.t), pitch = 72 * D * u, spin = 2 * Math.PI * sstep(0.36, 0.68, S.t);
+          this.kickStep = sstep(0.0, 0.3, S.t) * (1 - sstep(0.4, 0.6, S.t));
+          if (!this.hold) {
+            const q = S.bQ.clone().multiply(new Q().setFromAxisAngle(new V(1, 0, 0), -pitch)).multiply(new Q().setFromAxisAngle(new V(0, 0, 1), spin));
+            const pivL = new V(0, 0, -0.42), pivW = pivL.clone().applyQuaternion(S.bQ).add(S.bPos);
+            this.board.quaternion.copy(q); this.board.position.copy(pivW).sub(pivL.clone().applyQuaternion(q)).add(new V(0, 0.22 * sstep(0.4, 0.62, S.t), 0));
+            S.kPos = this.board.position.clone(); S.kQ = q.clone();
+          }
+          if (S.t >= 0.68 && !this.hold) this.grab(S.kPos, S.kQ, new V(0, DECK_Y, 0.44), 0.6);
+          if (S.t > 1.3) this.toWalk();
+        }
+      }
+    } else { // mounting
+      if (S.ph === 'drop') {
+        // lower the board to the path a step ahead, then let go
+        if (!S.bPos) { S.bPos = track(S.bs).p.clone(); S.bQ = this.boardRestQ(S.bs, track); }
+        if (this.hold) { this.hold.drop = sstep(0.0, 0.7, S.t); }
+        if (S.t > 0.75) { this.hold = null; this.carry = 0; this.boardFixed = true; S.ph = 'step'; S.t = 0; S.s0 = this.s; }
+      } else {
+        const u = sstep(0, 0.8, S.t); this.s = lerp(S.s0, S.bs, u); this.v = 0.9; this.phi += 0.9 / 30 / 1.1;
+        this.m = 1 - sstep(0.15, 0.8, S.t); this.face = 1 - sstep(0.05, 0.7, S.t); this.lat = lerp(0.34, 0, u);
+        if (S.t > 0.85) { this.mode = 'ride'; this.modeT = 0; this.seq = null; this.boardFixed = false; this.m = 0; this.face = 0; this.lat = 0; this.slideYaw = 0; this.slideDir = 0; this.v = 1.1; this.pushCool = 0; }
+      }
+    }
+    if (this.boardFixed && !this.hold && S.bPos && !(this.mode === 'off' && S.ph === 'pick' && S.pick === 'kick')) { this.board.position.copy(S.bPos); this.board.quaternion.copy(S.bQ); }
+  }
+  toWalk() { this.mode = 'walk'; this.modeT = 0; this.seq = null; this.boardFixed = false; this.bend = 0; this.kickStep = 0; this.carry = 1; }
+  grab(pos, q, gripL, T) { this.hold = { qFrom: q.clone(), gFrom: gripL.clone(), t: 0, T, drop: 0 }; this.carry = 1; }
+  // hand targets for the right arm (reach for the board, carry it, hand it down)
+  armTargets(track) {
+    let w = 0; const S = this.seq;
+    if (this.hold || this.mode === 'walk') { w = 1; this.armIKt.copy(this.walkF.localToWorld(new V(-0.2, 0.76, 0.04))); }
+    if (S && this.mode === 'off' && S.ph === 'pick' && !this.hold) {
+      const tgt = S.pick === 'bend' ? new V(-0.117, DECK_Y, 0).applyQuaternion(S.bQ).add(S.bPos) : new V(0, DECK_Y, 0.44).applyQuaternion(this.board.quaternion).add(this.board.position);
+      w = S.pick === 'bend' ? sstep(0.15, 0.55, S.t) : sstep(0.42, 0.66, S.t); this.armIKt.copy(tgt);
+    }
+    if (this.hold && this.hold.drop > 0) { const gp = new V(-0.117, DECK_Y, 0).applyQuaternion(this.seq.bQ).add(this.seq.bPos); this.armIKt.lerp(gp, this.hold.drop); }
+    if (this.mode === 'on' && S?.ph === 'step') w = 0;
+    this.armIKw = damp(this.armIKw, w, 14, 1 / 30);
+  }
+  placeHeldBoard() {
+    const H = this.hold; if (!H) return;
+    H.t += 1 / 30; const u = sstep(0, H.T, H.t), du = H.drop;
+    const hand = this.b.rightHand.getWorldPosition(new V());
+    const gTo = new V(-0.117, DECK_Y - 0.004, 0);
+    let q = H.qFrom.clone().slerp(this.carryQ().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), Math.sin(this.phi * Math.PI * 2) * 0.05)), u);
+    let g = H.gFrom.clone().lerp(gTo, u);
+    if (du > 0) { q = q.slerp(this.seq.bQ, du); }
+    this.board.quaternion.copy(q); this.board.position.copy(hand).sub(g.clone().applyQuaternion(q));
+    if (du > 0.98) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); }
+    this.board.updateMatrixWorld(true);
   }
 
   startPush(grade) {
@@ -217,12 +347,12 @@ export class Rider {
     }
     w.push = damp(w.push, this.push ? 1 : 0, 7, dt);
     w.tuck = damp(w.tuck, sstep(-0.02, -0.06, grade) * sstep(2.6, 4.2, this.v), 2.5, dt);
-    w.effort = damp(w.effort, sstep(0.02, 0.055, grade), 2, dt);
+    w.effort = damp(w.effort, sstep(0.02, 0.055, grade) * (this.mode === 'ride' ? 1 : 0.5) + (this.stam < 0.15 ? 0.3 : 0), 2, dt); this.gradeNow = grade;
     const wl = this.windLocal; const ws = Math.hypot(wl.x, wl.z);
     w.wind = damp(w.wind, sstep(1.5, 6, ws), 1.5, dt);
     // look-back: occasionally turn over the trailing (right) shoulder toward the camera
     this.nextLook -= dt;
-    if (!this.look && this.nextLook <= 0 && !this.push && !this.ollie && Math.abs(this.lean) < 8 * D && w.tuck < 0.3 && w.effort < 0.5) {
+    if (!this.look && this.nextLook <= 0 && this.mode !== 'off' && this.mode !== 'on' && !this.push && !this.ollie && Math.abs(this.lean) < 8 * D && w.tuck < 0.3 && w.effort < 0.5) {
       this.look = { t: 0, T: 2.6 }; this.ev.push(['look', this.s]);
     }
     if (this.nextLook <= 0 && !this.look) this.nextLook = 0.5;
@@ -258,7 +388,8 @@ export class Rider {
     const landAbs = this.ollie && this.ollie.landT ? Math.sin(Math.min(1, (ol - this.ollie.landT) / 0.18) * Math.PI / 2) * (1 - sstep(0.18, 0.6, ol - this.ollie.landT)) : 0;
     const carve = clamp(this.lean / 0.16, -1, 1), heel = Math.max(0, carve), toe = Math.max(0, -carve);
     this.carve = carve;
-    const crouchT = clamp(heel * 0.38 + toe * 0.3 + w.tuck * 1.05 + crouchO * 1.55 - extend * 0.2 + tuckAir * 1.15 + landAbs * 1.1 + w.effort * 0.25 + reach * 0.15, -0.35, 1.6);
+    const S = this.seq, brk = this.mode === 'off' && S?.ph === 'brake' ? S : null;
+    const crouchT = clamp((brk ? (brk.kind === 'slide' ? 0.7 : brk.kind === 'heel' ? 0.45 : 0.1) * sstep(0, 0.3, brk.t) : 0) + heel * 0.38 + toe * 0.3 + w.tuck * 1.05 + crouchO * 1.55 - extend * 0.2 + tuckAir * 1.15 + landAbs * 1.1 + w.effort * 0.25 + reach * 0.15, -0.35, 1.6);
     this.crouch = damp(this.crouch ?? crouchT, crouchT, this.ollie ? 18 : 9, dt);
     const breathe = Math.sin(t * (w.effort > 0.3 ? 4.2 : 1.6)) * (0.012 + w.effort * 0.03);
     // ---- hips placement (vrm model frame: +z facing, +x = board forward)
@@ -266,16 +397,18 @@ export class Rider {
     const hipX = 0.0 + reach * 0.1 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
     this.oTuck = tuckAir;
     this.oDrop = damp(this.oDrop ?? 0, crouchO * 0.16 + tuckAir * 0.27 + landAbs * 0.12, 22, dt);
-    const hipDrop = 0.06 + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3;
+    const M = this.m, F = this.face, bob = Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
+    const hipDrop = lerp(0.06 + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.035 - bob + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);
     const hipZ = 0.015 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
-    b.hips.position.set(this.hipRest.x + hipX * this.flip, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ + sway) * this.flip);
+    b.hips.position.set(this.hipRest.x + hipX * this.flip * (1 - M), this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
-    const open = 30 * D + reach * 34 * D + w.tuck * 6 * D;
+    const open = (30 * D + reach * 34 * D + w.tuck * 6 * D) * (1 - F);
     const lb = w.look;
     const leanIn = -this.windSideLean() ;
     const tw = this.gazeTwist || 0;   // extra torso twist the head could not reach last frame (look-back toward camera)
     this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15, leanIn * 0.3);
-    const fwd = -0.02 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
+    const walkLean = M * (0.06 + Math.max(0, this.gradeNow || 0) * 2.2) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
+    const fwd = walkLean - 0.02 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     this.rot('spine', fwd * 0.45 + breathe, open * 0.2 + tw * 0.25, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
     this.rot('chest', fwd * 0.35 - breathe * 0.5, open * 0.2 + tw * 0.35, leanIn * 0.3);
     this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25, 0);
@@ -290,24 +423,28 @@ export class Rider {
     //  active: open for balance (lead arm forward-low, trail arm back-low, port-de-bras).
     //  need = how much balance the moment demands; arms rise fast (~0.25 s), then settle down slowly (~1.5 s).
     const hh = w.hair;
-    const need = clamp(Math.max(bal, w.push * (0.35 + 0.4 * w.effort), w.effort * 0.6, Math.abs(carve) * 0.95, crouchO * 1.1, tuckAir * 1.2, landAbs, w.tuck * 0.9, (this.gust || 0) * 0.5), 0, 1);
+    const need = M > 0.5 ? clamp(this.bend * 0.6 + (brk ? 0.8 : 0), 0, 1) : clamp(Math.max(bal, (brk ? 0.85 : 0), w.push * (0.35 + 0.4 * w.effort), w.effort * 0.6, Math.abs(carve) * 0.95, crouchO * 1.1, tuckAir * 1.2, landAbs, w.tuck * 0.9, (this.gust || 0) * 0.5), 0, 1);
     this.armUp = this.armUp ?? 0;
     if (need > this.armUp) this.armUp = damp(this.armUp, need, 9, dt);           // quick rise
     else { this.armHold = (this.armHold ?? 0) + dt; if (this.armHold > 0.6) this.armUp = damp(this.armUp, need, 1.3, dt); } // linger, then lower
     if (need > this.armUp - 0.02) this.armHold = 0;
-    const up = this.armUp;
+    const up = this.armForce ?? this.armUp;
     const brz = Math.sin(t * 0.73) * 0.05, brz2 = Math.sin(t * 0.57 + 1.3) * 0.06;
     const bodySw = Math.sin(t * 1.6) * 0.04 + this.lean * 0.4;   // passive pendulum with the body
     const A = this.armT || (this.armT = {});
-    const rest = { lx: 0.06, ly: -0.12 + bodySw, lz: -72 * D, le: -0.32, lw: -0.12 + brz2 * 0.5,
-                   rx: 0.06, ry: 0.12 + bodySw, rz: 72 * D, re: 0.32, rw: 0.12 - brz * 0.5 };
+    // elbows soft and turned slightly IN toward the body (not winged out): upper-arm x-rotation rolls the elbow back/in,
+    // forearm carries the hand forward of the hip, palms face the thighs.
+    const wsw = M * Math.sin(this.phi * Math.PI * 2) * 0.35;   // walking arm swing (opposite to legs)
+    const AT = this.armTwist ?? 0.2;
+    const rest = { lx: AT + wsw, ly: -0.05 + bodySw * (1 - M), lz: -76 * D, le: -0.42, lw: -0.05 + brz2 * 0.5,
+                   rx: AT - wsw, ry: 0.05 + bodySw * (1 - M), rz: 76 * D, re: 0.42, rw: 0.05 - brz * 0.5 };
     const act = {
-      lx: 0.12 + brz * 0.5, ly: -0.55 - bal * 0.25 + swing * 0.3 - heel * 0.5 + toe * 0.3 - w.tuck * 0.2,
-      lz: -22 * D + bal * 12 * D + heel * 10 * D + w.effort * 8 * D + brz,
-      le: -0.75 - bal * 0.2 - w.effort * 0.5 - heel * 0.2, lw: -0.3 + brz2,
-      rx: 0.1, ry: 0.55 + bal * 0.2 - swing * 0.6 + heel * 0.5 - toe * 0.3 + w.tuck * 0.2,
-      rz: 24 * D - bal * 12 * D - heel * 10 * D - w.effort * 8 * D + brz2,
-      re: 0.85 + bal * 0.2 + w.effort * 0.5 + heel * 0.2 + Math.max(0, -swing) * 0.4, rw: 0.28 - brz,
+      lx: (this.armTwA ?? -0.7) + brz * 0.5, ly: -0.55 - bal * 0.25 + swing * 0.3 - heel * 0.5 + toe * 0.3 - w.tuck * 0.2,
+      lz: (this.armLz ?? -40) * D + bal * 10 * D + heel * 10 * D + w.effort * 8 * D + brz,
+      le: (this.armLe ?? -0.45) - bal * 0.12 - w.effort * 0.35 - heel * 0.15, lw: -0.3 + brz2,
+      rx: (this.armTwA ?? -0.7), ry: 0.55 + bal * 0.2 - swing * 0.6 + heel * 0.5 - toe * 0.3 + w.tuck * 0.2,
+      rz: -(this.armLz ?? -40) * D - bal * 10 * D - heel * 10 * D - w.effort * 8 * D + brz2,
+      re: -(this.armLe ?? -0.45) + 0.05 + bal * 0.12 + w.effort * 0.35 + heel * 0.15 + Math.max(0, -swing) * 0.4, rw: 0.28 - brz,
     };
     // ollie: arms drop low/back in the wind-up, sweep up through the pop, spread wide at shoulder height in the air
     const sweep = clamp(extend + tuckAir, 0, 1), load = crouchO * (1 - sweep);
@@ -327,6 +464,15 @@ export class Rider {
     this.rot('rightUpperArm', A.rx, A.ry, A.rz);
     this.rot('rightLowerArm', 0, A.re, 0);
     this.rot('rightHand', 0.25 * (1 - hh), lerp(0.1, 0.5, hh), A.rw + 0.15 * (1 - hh));
+    if (this.armIKw > 0.01) {
+      this.root.updateMatrixWorld(true);
+      const ua = b.rightUpperArm, la = b.rightLowerArm, hd = b.rightHand, sp = ua.getWorldPosition(new V());
+      const tgt = sp.clone().lerp(this.armIKt, 1).sub(sp).multiplyScalar(1).add(sp);
+      const cur = hd.getWorldPosition(new V()), goal = cur.lerp(tgt, this.armIKw);
+      const pole = sp.clone().add(new V(0, -0.5, 0)).addScaledVector(this.walkF.localToWorld(new V(-1, 0, -0.6)).sub(this.walkF.position), 0.4);
+      twoBoneIK(ua, la, hd, goal, pole);
+      if (this.hold) { this.rot('rightHand', 0, 0, 0); }
+    }
     // fingers softly curled (graceful hands)
     for (const f of this.fing) {
       const sgn = f.side === 'left' ? -1 : 1;
@@ -406,11 +552,11 @@ export class Rider {
     let lf = deck(0.015, 0.2 + pr * 0.04), rf = deck(-0.01, -0.21);
     let rYaw = -78 * D, lYaw = lerp(-50 * D, -12 * D, pr);
     let rPitch = 0;
-    if (this.ollie) { // back foot to the tail during the crouch, front foot slides toward the nose after the pop
+    if (this.ollie && this.m < 0.5) { // back foot to the tail during the crouch, front foot slides toward the nose after the pop
       const o = this.ollie.t; const tail = sstep(0.0, 0.3, o) * (1 - sstep(0.6, 0.9, o)), slide = sstep(0.36, 0.55, o) * (1 - sstep(0.75, 1.05, o));
       rf = deck(-0.01, -0.21 - tail * 0.13); lf = deck(0.015, 0.2 + slide * 0.17, DECK_Y + 0.093 + slide * 0.008); rYaw = -80 * D; lYaw = -65 * D;
     }
-    if (this.push && !this.ollie) {
+    if (this.push && !this.ollie && this.m < 0.5) {
       const p = this.push; const c0 = p.c0 ?? 0.3 * p.T, c1 = p.c1 ?? c0 + 0.3; const tt = p.t;
       if (tt < c0) { // lift off deck, swing down beside the front wheels (toe side = -x)
         const u = sstep(0, c0, tt);
@@ -427,6 +573,21 @@ export class Rider {
         rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u * Math.PI) * 0.11; rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
       }
     }
+    const M = this.m;
+    if (M > 0.01) {
+      // walking: feet on the ground under the hips, alternating stride ~0.55 m; at a standstill side by side
+      const ph = this.phi * Math.PI * 2, st = this.mode === 'walk' || (this.mode === 'on' && this.seq?.ph === 'step') ? 0.27 : 0.0;
+      const kick = this.kickStep || 0, bend = this.bend;
+      const wf = (side, s) => { const sg = side === 'left' ? 1 : -1, c = Math.sin(ph + (side === 'left' ? 0 : Math.PI));
+        const lift = Math.max(0, Math.cos(ph + (side === 'left' ? 0 : Math.PI))) * 0.09 * (st > 0 ? 1 : 0);
+        let z = c * st, x = sg * 0.09; if (side === 'left' && kick) { z += kick * 0.25; }
+        if (bend) { z += side === 'left' ? 0.12 * bend : -0.1 * bend; }
+        const p = this.walkF.localToWorld(new V(x, 0, z)); p.y = (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y) + 0.093 + lift + (side === 'left' ? kick * 0.04 : 0); return p; };
+      const wl = wf('left'), wr = wf('right');
+      lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); lYaw = lerp(lYaw, -90 * D, M); rYaw = lerp(rYaw, -90 * D, M); rPitch = lerp(rPitch, 0, M);
+    }
+    if (this.drag > 0) { const dp = this.groundAt(-0.02, -0.5); rf = rf.lerp(dp, this.drag * 0.8); rPitch = -0.5 * this.drag; }
+    if (this.footLift) { lf.y += this.footLift; rf.y += this.footLift; }
     const fwdModel = new V(0, 0, this.flip).applyQuaternion(this.vrm.scene.getWorldQuaternion(new Q()));
     for (const [side, target, yaw, pitch] of [['left', lf, lYaw, 0], ['right', rf, rYaw, rPitch]]) {
       const up = B[side + 'UpperLeg'], lo = B[side + 'LowerLeg'], ft = B[side + 'Foot'];
@@ -436,7 +597,7 @@ export class Rider {
       const along = target.clone().sub(hip); pole.addScaledVector(along.setY(0).normalize(), 0.25);
       twoBoneIK(up, lo, ft, target, pole);
       // foot flat on deck, toes angled
-      const qb = this.deck.getWorldQuaternion(new Q());
+      const qb = this.deck.getWorldQuaternion(new Q()).slerp(this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 1, 0), 90 * D)), this.m);
       const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch * this.flip, yaw + this.yaw0, 0, 'YXZ')));
       setWorldQuat(ft, qf);
       const toes = B[side + 'Toes']; if (toes) toes.quaternion.identity();

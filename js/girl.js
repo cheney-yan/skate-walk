@@ -498,3 +498,30 @@ export class Hat {
     }
   }
 }
+
+// ---------- wrist guards (护手板): pale grey palm/back plates + two velcro straps on each forearm/hand ----------
+export function addWristGuards(vrm) {
+  const H = vrm.humanoid, mat = new THREE.MeshStandardMaterial({ color: '#e9ecef', roughness: 0.75 }), strap = new THREE.MeshStandardMaterial({ color: '#6fb6c9', roughness: 0.8 }), plate = new THREE.MeshStandardMaterial({ color: '#cfd6dc', roughness: 0.4, metalness: 0.1 });
+  vrm.scene.updateMatrixWorld(true);
+  for (const side of ['left', 'right']) {
+    const la = H.getNormalizedBoneNode(side + 'LowerArm'), hd = H.getNormalizedBoneNode(side + 'Hand');
+    const raw = H.getRawBoneNode(side + 'Hand'), rawLa = H.getRawBoneNode(side + 'LowerArm');
+    const a = rawLa.getWorldPosition(new THREE.Vector3()), h = raw.getWorldPosition(new THREE.Vector3());
+    const len = a.distanceTo(h);
+    // sleeve: tapered tube over the distal 45% of the forearm, built along the forearm axis in the raw bone's frame
+    const g = new THREE.Group(); rawLa.add(g);
+    const axisW = h.clone().sub(a).normalize(), inv = rawLa.getWorldQuaternion(new THREE.Quaternion()).invert(), axL = axisW.clone().applyQuaternion(inv);
+    const qAlign = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axL);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.029, len * 0.46, 14, 1, true), mat); tube.material.side = THREE.DoubleSide;
+    tube.quaternion.copy(qAlign); tube.position.copy(axL.clone().multiplyScalar(len * 0.74)); g.add(tube);
+    for (const f of [0.6, 0.88]) { const s = new THREE.Mesh(new THREE.CylinderGeometry(0.0335, 0.0335, 0.016, 14, 1, true), strap); s.material.side = THREE.DoubleSide; s.quaternion.copy(qAlign); s.position.copy(axL.clone().multiplyScalar(len * f)); g.add(s); }
+    // palm plate on the hand
+    const hg = new THREE.Group(); raw.add(hg);
+    const hand = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.016, 0.06), mat); hand.position.set(0, 0, 0); hg.add(hand);
+    const pl = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.006, 0.07), plate); pl.position.set(0, -0.012, 0); hg.add(pl);
+    // orient hand pad along the hand bone direction (towards middle finger)
+    const mid = H.getRawBoneNode(side + 'MiddleProximal');
+    if (mid) { const mp = mid.getWorldPosition(new THREE.Vector3()).applyMatrix4(raw.matrixWorld.clone().invert()); const dir = mp.clone().normalize(); hg.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir); hg.position.copy(mp.multiplyScalar(0.45)); }
+    [g, hg].forEach((o) => o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; } }));
+  }
+}
