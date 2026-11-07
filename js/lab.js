@@ -243,12 +243,18 @@ const flags = [];
 // ---------------- real-world blocks (Apple-Maps style): terrain, OSM building footprints as clean extruded boxes ----------------
 if (RD) {
   const T = RD.terrain, tH = terrainFn({ ...T, h: T.hSea || T.h });
+  const PH = new Map();   // spatial hash of path points (8 m cells, with neighbours) for the ground cut
+  for (let i = 0; i < track.pts.length; i += 4) { const q = track.pts[i]; const ci = Math.floor(q.x / 8), cj = Math.floor(q.z / 8);
+    for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) { const kk = (ci + di) + ',' + (cj + dj); if (!PH.has(kk)) PH.set(kk, []); PH.get(kk).push(q); } }
   const geo = new THREE.PlaneGeometry((T.nx - 1) * T.step, (T.ny - 1) * T.step, T.nx - 1, T.ny - 1); geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
   const cx = T.x0 + (T.nx - 1) * T.step / 2, cy = T.y0 + (T.ny - 1) * T.step / 2;
   const sand = new THREE.Color('#efe2bf'), grass = new THREE.Color('#bfd9a3'), park = new THREE.Color('#a9cf8c'), rock = new THREE.Color('#cfc4b1'), c = new THREE.Color();
   for (let k = 0; k < pos.count; k++) {
     const x = pos.getX(k) + cx, y = -pos.getZ(k) + cy; let h = tH(x, y); if (h < 1.3) h = -2.5 + h;
+    // the smoothed path runs slightly below crests of the raw terrain: cut the ground away under / beside the path so it never buries the board
+    const cell = PH.get(Math.floor(x / 8) + ',' + Math.floor(-y / 8));
+    if (cell) { let best = 1e9, py = 0; for (const q of cell) { const d = (q.x - x) ** 2 + (q.z + y) ** 2; if (d < best) { best = d; py = q.y; } } const d = Math.sqrt(best); if (d < 14) h = Math.min(h, py - 0.12 + Math.max(0, d - 2.2) * 0.45); }
     pos.setXYZ(k, x, h, -y);
     const sl = Math.hypot(tH(x + 4, y) - tH(x - 4, y), tH(x, y + 4) - tH(x, y - 4)) / 8;
     if (h < 3.5) c.copy(sand).lerp(grass, clamp((h - 2) / 1.5, 0, 1)); else c.copy(grass).lerp(park, clamp((h - 8) / 40, 0, 1));
