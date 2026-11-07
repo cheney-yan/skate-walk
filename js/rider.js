@@ -756,9 +756,23 @@ export class Rider {
       twoBoneIK(up, lo, ft, target, pole);
       // foot flat on deck, toes angled
       const qb = this.deck.getWorldQuaternion(new Q()).slerp(this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 1, 0), 90 * D)), this.m);
-      const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch * this.flip, yaw + this.yaw0, 0, 'YXZ')));
+      // a foot OFF the deck/ground is not held flat: the ankle relaxes, toes drop and point (Peter Pan back foot hangs,
+      // a stepping foot leads with the toes). Lift = height of the ankle above the surface it would stand on.
+      let lift = 0;
+      if (this.m < 0.5) { const up = new V(0, 1, 0).applyQuaternion(this.deck.getWorldQuaternion(new Q())); lift = target.clone().sub(this.deck.localToWorld(new V(0, DECK_Y, 0))).dot(up) - ANK; }
+      const relax = sstep(0.025, 0.16, lift) * (1 - this.m);       // 0 on the deck .. 1 clearly in the air
+      const hang = 0;   // pointing is applied relative to the shin below
+      const sickle = relax * 0.12 * (side === 'left' ? 1 : -1);    // slight inversion of a relaxed foot
+      const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler((pitch + hang) * this.flip, yaw + this.yaw0, sickle, 'YXZ')));
       setWorldQuat(ft, qf);
-      const toes = B[side + 'Toes']; if (toes) toes.quaternion.identity();
+      if (relax > 0.01) {   // relaxed / pointed foot: rotate the foot toward the shin line (ankle ~140°, gently alive)
+        ft.updateMatrixWorld(true); const toesB = B[side + 'Toes'];
+        if (toesB) { const kp = bw(lo), ap = bw(ft), tp = bw(toesB), shin = ap.clone().sub(kp).normalize(), fd = tp.clone().sub(ap).normalize();
+          const k = relax * (0.5 + 0.06 * Math.sin(this.t * 1.7 + (side === 'left' ? 0 : 1.3)));
+          const want = fd.clone().lerp(shin, k).normalize(), dq = new Q().setFromUnitVectors(fd, want);
+          setWorldQuat(ft, dq.multiply(ft.getWorldQuaternion(new Q()))); } }
+      this['footHang_' + side] = relax;
+      const toes = B[side + 'Toes']; if (toes) toes.quaternion.setFromAxisAngle(new V(1, 0, 0), relax * 0.25 * this.flip);   // toes curl a touch when pointed
       ft.updateMatrixWorld(true);
     }
   }
