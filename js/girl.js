@@ -113,6 +113,7 @@ function restyle(vrm) {
       for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y) P.setY(i, Y - (Y - y) * K); }
       P.needsUpdate = true; o.geometry.computeBoundingSphere(); }
     for (const m of matsByName(vrm, 'Body')) { if (!/Outline/.test(m.name)) legForm(m); }   // rounded knee / shin shading
+    addHairFlutter(vrm);
     // edges of the heavy cloth (jacket hem, cuffs, collar; skirt hem) flutter a little, faster with speed (shader below)
     for (const [key, w] of [['Tops', (y, ax) => Math.max(sstepG(0.98, 0.9, y), y > 1.05 ? sstepG(0.42, 0.5, ax) : 0, sstepG(1.36, 1.42, y) * 0.6)], ['Bottoms', (y) => sstepG(0.86, 0.78, y)]])
       for (const o of meshesByMat(vrm, key)) { const P = o.geometry.attributes.position, fl = new Float32Array(P.count);
@@ -154,7 +155,7 @@ function restyle(vrm) {
 const sstepG = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // thin-fabric flutter: vertices with aFlut>0 ripple and lean with the RELATIVE air (wind minus her own motion), on top of
 // the spring bones. Uniforms are shared and updated once per frame by flutterUpdate().
-export const FLUTTER = { wind: new THREE.Vector3(), t: { value: 0 } }; const FLUTTER_MESHES = [];
+export const FLUTTER = { wind: new THREE.Vector3(), t: { value: 0 }, phi: { value: 0 }, lastT: null }; const FLUTTER_MESHES = [];
 function addFlutter(m, amp) {
   const uW = { value: new THREE.Vector3() }; m.userData.uWind = uW;
   const prev = m.onBeforeCompile;
@@ -180,9 +181,45 @@ function addFlutter(m, amp) {
   m.customProgramCacheKey = () => 'flutter' + amp;
 }
 export function flutterUpdate(airWorld, t) {
+  { const dt = FLUTTER.lastT === null ? 0 : Math.min(0.1, Math.max(0, t - FLUTTER.lastT)); FLUTTER.lastT = t; FLUTTER.phi.value += Math.min(6, airWorld.length()) * dt; }   // Φ = ∫U dt (U capped ~22 km/h)
   FLUTTER.t.value = t; const q = new THREE.Quaternion();
   for (const o of FLUTTER_MESHES) { o.getWorldQuaternion(q).invert(); const wl = airWorld.clone().applyQuaternion(q);
     (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.userData.uWind?.value.copy(wl)); }
+}
+
+// HAIR EDGE FLUTTER (Cheney): the main mass stays on the spring bones; the loose ends — the last few cm of every card,
+// short side locks, bangs — flutter fast. Flag physics: flapping frequency f ≈ St·U/L (U = relative air speed incl. wind,
+// L = free length of that lock): short locks shiver faster than the long tail, everything speeds up with speed and wind.
+// Phase is integrated (Φ = ∫U dt) so a change of speed never makes the waves jump. Waves travel from root to tip.
+function addHairFlutter(vrm) {
+  if (new URLSearchParams(location.search).get('hfl') === '0') return;
+  const head = vrm.humanoid.getRawBoneNode('head'); vrm.scene.updateMatrixWorld(true);
+  const hcW = head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0));
+  for (const o of meshesByMat(vrm, 'HAIR')) {
+    const g = o.geometry, P = g.attributes.position, idx = g.index, n = P.count, hc = o.worldToLocal(hcW.clone());
+    const par = new Int32Array(n); for (let i = 0; i < n; i++) par[i] = i;
+    const fd = (i) => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+    if (idx) for (let q = 0; q < idx.count; q += 3) { const a = fd(idx.getX(q)), b = fd(idx.getX(q + 1)), c = fd(idx.getX(q + 2)); par[b] = a; par[fd(c)] = a; }
+    const s = new Float32Array(n), mn = new Map(), mx = new Map(), v = new THREE.Vector3();
+    for (let i = 0; i < n; i++) { v.fromBufferAttribute(P, i); s[i] = Math.max(0, v.distanceTo(hc) - 0.1); const r = fd(i);
+      mn.set(r, Math.min(mn.get(r) ?? 9, s[i])); mx.set(r, Math.max(mx.get(r) ?? -9, s[i])); }
+    const W = new Float32Array(n), Lf = new Float32Array(n), Ph = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const r = fd(i), a = mn.get(r), b = mx.get(r), L = Math.min(0.6, Math.max(0.03, b - a)), zone = Math.min(0.14, L * 0.65);
+      W[i] = sstepG(b - zone, b, s[i]) * sstepG(0.0, 0.025, s[i]); Lf[i] = L; Ph[i] = ((r * 2654435761) % 1000) / 1000 * 6.2832; }
+    g.setAttribute('aHW', new THREE.BufferAttribute(W, 1)); g.setAttribute('aHL', new THREE.BufferAttribute(Lf, 1)); g.setAttribute('aHP', new THREE.BufferAttribute(Ph, 1));
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) { if (m.userData.hairFl) continue; m.userData.hairFl = true;
+      const uW = m.userData.uWind || (m.userData.uWind = { value: new THREE.Vector3() }); const prev = m.onBeforeCompile;
+      m.onBeforeCompile = (sh, rr) => { prev?.call(m, sh, rr); sh.uniforms.uWindL = uW; sh.uniforms.uTime = FLUTTER.t; sh.uniforms.uPhi = FLUTTER.phi;
+        sh.vertexShader = 'uniform vec3 uWindL; uniform float uTime; uniform float uPhi; attribute float aHW; attribute float aHL; attribute float aHP;\n' + sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>
+      if (aHW > 0.001) { float U = length(uWindL); vec3 wd = U > 0.05 ? uWindL / U : vec3(0.0, 0.0, 1.0);
+        float L = max(aHL, 0.08);
+        float ph = 6.2832 * (0.15 * uPhi / L + 1.2 * uTime) + aHP - aHW * 4.0;          // f = 0.15·U/L + 1.2 Hz, travelling to the tip
+        float A = aHW * min(0.03, 0.007 + 0.07 * L) * clamp(0.3 + U / 6.0, 0.3, 1.4);    // longer lock = larger, more air = larger (bounded)
+        vec3 sd = normalize(cross(wd, vec3(0.0, 1.0, 0.0)) + vec3(1e-4));
+        transformed += objectNormal * A * (0.7 * sin(ph) + 0.3 * sin(1.9 * ph + 1.1)) + sd * A * 0.45 * sin(1.3 * ph + 2.0) + wd * A * 0.5 * (0.5 + 0.5 * sin(0.5 * ph)); }`);
+        m.userData.hairFlOK = sh.vertexShader.includes('aHW > 0.001'); };
+      m.customProgramCacheKey = () => 'hairfl'; m.needsUpdate = true; }
+    FLUTTER_MESHES.push(o); }
 }
 // leg form: soft darkening toward the silhouette and a gentle front highlight (shin, knee cap, thigh) so the legs read as
 // rounded forms in flat toon light. Only below the hips (bind-pose y < 0.9).
