@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '../vendor/three-vrm.module.min.js';
 
-export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'shirt';
+export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'sundress';
 export async function loadGirl(url) {
   const loader = new GLTFLoader();
   loader.register((p) => new VRMLoaderPlugin(p));
@@ -19,7 +19,7 @@ export async function loadGirl(url) {
   if (vrm.userData.vrm0) VRMUtils.rotateVRM0(vrm);
   vrm.scene.traverse((o) => { o.frustumCulled = false; });
   restyle(vrm);
-  if (OUTFIT === 'shirt') proportions(vrm);
+  if (OUTFIT === 'shirt' || OUTFIT === 'native') proportions(vrm);
   return vrm;
 }
 
@@ -107,6 +107,7 @@ function matsByName(vrm, key) {
 
 export const STOCKING_TOP = 0.80; // metres in bind pose (thigh-high)
 function restyle(vrm) {
+  if (OUTFIT === 'native') return;   // keep the model's own designed clothes (and its own cloth spring bones)
   if (OUTFIT === 'sundress') return restyleSundress(vrm);
   if (OUTFIT === 'shirt') return restyleShirt(vrm);
   // white stockings: every body triangle fully below the stocking top
@@ -219,7 +220,8 @@ function restyleSundress(vrm) {
 export function setupHair(vrm) {
   const joints = [...(vrm.springBoneManager?.joints || [])];
   const hair = joints.filter((j) => /Hair/i.test(j.bone.name));
-  const cloth = joints.filter((j) => /Tops|Skirt|Bust/i.test(j.bone.name) && !/Bust/i.test(j.bone.name));
+  const cloth = joints.filter((j) => /Tops|Skirt|Bust|Coat|Jacket|Cloth|Bottoms/i.test(j.bone.name) && !/Bust/i.test(j.bone.name));
+  if (OUTFIT === 'native') cloth.forEach((j) => { j.settings.stiffness *= 0.55; j.settings.dragForce = Math.min(j.settings.dragForce, 0.3); });
   // softer, lighter strands: low stiffness near the tips, a little drag so they swing instead of snapping
   hair.forEach((j, i) => { j.settings.stiffness = Math.min(j.settings.stiffness, 0.35) * 0.6; j.settings.dragForce = 0.22; j._ph = i * 2.399; j._k = 0.8 + ((i * 37) % 10) / 25; });
   const tmp = new THREE.Vector3(), side = new THREE.Vector3();
@@ -239,7 +241,7 @@ export function setupHair(vrm) {
         j.settings.gravityDir.copy(tmp).divideScalar(mag || 1);
         j.settings.gravityPower = mag * 0.8;
       }
-      for (const j of cloth) { tmp.set(0, -1, 0).addScaledVector(air, 0.1); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * 0.2; }
+      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.8 + Math.random() * 0.5), fl = 1 + 0.3 * Math.sin(t * (4 + k * 3) + k * 9); tmp.set(0, -1, 0).addScaledVector(air, (OUTFIT === 'native' ? 0.28 : 0.1) * k * fl); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (OUTFIT === 'native' ? 0.35 : 0.2); }
     },
   };
 }

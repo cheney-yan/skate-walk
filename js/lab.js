@@ -320,7 +320,7 @@ scene.add(petals);
 let vrm, rider, skirt, skirt2 = null, hair, hat;
 const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: RD ? undefined : 999, camera };
 async function init() {
-  const M = { shino: './models/shino.vrm', sample: './models/girl.vrm' };
+  const M = { shino: './models/shino.vrm', sample: './models/girl.vrm', a: './models/cand/AvatarSample_A.vrm', b: './models/sample_b.vrm', vita: './models/cand/Vita.vrm', vic: './models/cand/Victoria_Rubin.vrm' };
   vrm = await loadGirl(M[Q.get('m') || 'shino'] || M.shino);
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
@@ -331,7 +331,8 @@ async function init() {
       extraCaps: (w, B, mid, hip, sp) => [[sp, mid.clone().lerp(hip, 0.4), 0.19]] });
   }
   skirt = new Skirt(vrm, scene, OUTFIT === 'shirt' ? { style: 'pleat', top: 0.93, hem: 0.69, rows: 9, cols: 44, flare: 0.95, maxSwing: 84, airGain: 1.1, soft: 0.35 } : SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
-  hat = SD ? { step() {} } : new Hat(vrm, scene);
+  if (OUTFIT === 'native') skirt.mesh.visible = false;   // the model's own skirt (spring bones) is used instead
+  hat = SD || OUTFIT === 'native' ? { step() {} } : new Hat(vrm, scene);
   addWristGuards(vrm);
   rider = new Rider(vrm, scene); rider.track = track;
   rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS); let best = 1e9, y = 0; for (let i = Math.max(0, c - 30); i < Math.min(track.pts.length, c + 30); i++) { const p = track.pts[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < best) { best = d; y = p.y; } } return y; };
@@ -341,7 +342,7 @@ async function init() {
 }
 let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
-  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
+  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.pump = null; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
   lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
   rider.update(1 / 60, (s) => track.at(s), ctx);
   skirt.inited = false; if (skirt2) skirt2.inited = false; vrm.springBoneManager?.reset?.();

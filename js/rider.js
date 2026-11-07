@@ -116,7 +116,7 @@ export class Rider {
     this.camAnchor = new V();
     this.ev = [];
     this.mode = 'ride'; this.modeT = 0; this.seq = null; this.m = 0; this.face = 0; this.carry = 0; this.lat = 0; this.phi = 0;
-    this.stam = 0.7; this.spin = 0; this.bend = 0; this.armIKw = 0; this.armIKt = new V(); this.footTap = 0; this.tapPt = new V(); this.drag = 0;
+    this.stam = 0.7; this.pump = null; this.pumpYaw = 0; this.pumpLat = 0; this.pumpDrop = 0; this.spin = 0; this.bend = 0; this.armIKw = 0; this.armIKt = new V(); this.footTap = 0; this.tapPt = new V(); this.drag = 0;
   }
 
   // track: (s) -> {p:V3 ground point, dir:V3 unit forward, up:V3, grade, kappa}
@@ -134,8 +134,17 @@ export class Rider {
       if (this.mode === 'ride') {
         const gdeg = Math.atan(grade) / D, cruise = (ctx.cruise ?? 3.0) * (gdeg > 2 ? clamp(1 - (gdeg - 2) * 0.1, 0.6, 1) : 1), vmax = ctx.vmax ?? 5.2;
         const holeSoon = (ctx.holes || []).some((h) => h - this.s > 0 && h - this.s < this.v * 0.42 + 0.35 + this.v * 1.3 + 0.5);
-        const wantPush = !this.dance && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < cruise - 1.3 || (grade > 0.025 && this.v < cruise - 0.4));
-        if (!this.push && wantPush && this.pushCool <= 0) this.startPush(grade);
+        const needGo = !this.dance && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < cruise - 1.3 || (grade > 0.025 && this.v < cruise - 0.4));
+        // PUMP (S-carve): rhythmic weight shifts through the turns convert body work into forward speed. Real pumping needs
+        // speed to work (~>7 km/h) and is less efficient than a push, but feet stay on the board: she prefers it on the flat
+        // and on gentle climbs (<3.5°) when she already rolls; below that speed (or steeper) she pushes.
+        const canPump = this.v > 1.9 && grade < 0.06 && Math.abs(kappa) < 0.06 && !this.push && !this.ollie && this.air <= 0 && !this.dance && this.stam > 0.05 && !holeSoon;
+        const wantPump = canPump && (needGo || (this.pump && this.v < cruise - 0.2));
+        if (wantPump && !this.pump) this.pump = { t: 0, f: 0.8 + Math.random() * 0.15, A: 0 };
+        if (this.pump) { const P = this.pump; P.t += dt; P.A = damp(P.A, wantPump ? 1 : 0, 2.2, dt); if (!wantPump && P.A < 0.05) this.pump = null; }
+        if (!this.push && !this.pump && needGo && this.pushCool <= 0) this.startPush(grade);
+        if (this.pump) { const P = this.pump, ph = Math.sin(2 * Math.PI * P.f * P.t) ** 2;   // propulsion peaks mid-turn, twice per S cycle
+          const pa = P.A * (0.18 + 0.32 * ph) * clamp((this.v - 1.2) / 1.2, 0, 1); a += pa; spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
         const BASE = 110;   // W metabolic just standing balanced on a rolling board
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
         spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0)) * dt;   // rolling downhill is the best rest: the bar fills fastest there
@@ -172,8 +181,12 @@ export class Rider {
     this.stepSeq(dt, track);
     const riding = this.mode === 'ride' || (this.mode === 'off' && this.seq?.ph === 'brake');
     // lean from turning physics (only on the board)
-    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6, -30 * D, 30 * D) : 0;
-    this.lean = damp(this.lean, leanT, 6, dt);
+    const pw = this.pump && riding ? this.pump.A : 0, pph = this.pump ? 2 * Math.PI * this.pump.f * this.pump.t : 0;
+    this.pumpYaw = pw * 0.2 * Math.sin(pph);                   // board heading weaves ±11°
+    this.pumpLat = pw * 0.22 * -Math.cos(pph) / (2 * Math.PI * (this.pump?.f || 1)) * 2.2;   // ∫ of heading: S-line on the path (~±0.24 m)
+    this.pumpDrop = pw * 0.07 * (0.5 - 0.5 * Math.cos(2 * pph));   // compress into each turn, extend through the transition
+    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + pw * 0.27 * Math.sin(pph + 0.6), -30 * D, 30 * D) : 0;
+    this.lean = damp(this.lean, leanT, this.pump ? 10 : 6, dt);
     this.tilt = clamp(this.lean * 0.8, -19 * D, 19 * D);
     this.steer = damp(this.steer, riding ? clamp(Math.atan(kappa * HALF_WB) + this.tilt * 0.35, -0.32, 0.32) : 0, 10, dt);
     // ollie / shove-it ballistics
@@ -197,9 +210,9 @@ export class Rider {
     const up = new V(0, 1, 0), yaw = Math.atan2(tr.dir.x, tr.dir.z);
     this.dir.copy(tr.dir);
     this.pitch = damp(this.pitch, riding ? Math.atan(grade) : 0, 12, dt);
-    const qY = new Q().setFromAxisAngle(up, yaw + (this.slideYaw || 0));
+    const qY = new Q().setFromAxisAngle(up, yaw + (this.slideYaw || 0) + (riding ? this.pumpYaw || 0 : 0));
     if (riding) {
-      this.pos.copy(tr.p).addScaledVector(up, this.air);
+      this.pos.copy(tr.p).addScaledVector(up, this.air).addScaledVector(new V(Math.cos(yaw), 0, -Math.sin(yaw)), this.pumpLat || 0);
       const qP = new Q().setFromAxisAngle(new V(1, 0, 0), -this.pitch - this.boardPitch);
       const qR = new Q().setFromAxisAngle(new V(0, 0, 1), -this.tilt);
       this.board.position.copy(this.pos);
@@ -388,7 +401,8 @@ export class Rider {
     this.board.updateMatrixWorld(true);
   }
 
-  startDance() { this.dance = { t: 0 }; this.stam = Math.max(0, this.stam - 300 / EMAX); this.ev.push(['dance', this.s]); }
+  startDance() {
+    this.pump = null; this.dance = { t: 0 }; this.stam = Math.max(0, this.stam - 300 / EMAX); this.ev.push(['dance', this.s]); }
   // foot keyframes on the deck (z along board, + = nose; x across, + = her toe side is -x): [t, lz, rz, liftL, liftR, lx, rx]
   danceFeet() {
     const u = this.dance.t, K = DANCE_K; let i = 0; while (i < K.length - 2 && K[i + 1][0] <= u) i++;
@@ -468,7 +482,7 @@ export class Rider {
     const sway = Math.sin(t * 0.9) * 0.008;
     const hipX = 0.0 + reach * 0.1 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
     this.oTuck = tuckAir;
-    this.oDrop = damp(this.oDrop ?? 0, crouchO * 0.16 + tuckAir * 0.27 + landAbs * 0.12, 22, dt);
+    this.oDrop = damp(this.oDrop ?? 0, crouchO * 0.16 + tuckAir * 0.27 + landAbs * 0.12 + (this.pumpDrop || 0), 22, dt);
     const dn = this.dance ? sstep(0.2, 0.9, this.dance.t) * (1 - sstep(5.5, 6.3, this.dance.t)) : 0, DF = this.dance ? this.danceFeet() : null;
     this.dn = dn;
     const M = this.m, F = this.face, bob = Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
