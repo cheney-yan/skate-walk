@@ -113,6 +113,12 @@ function restyle(vrm) {
       for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y) P.setY(i, Y - (Y - y) * K); }
       P.needsUpdate = true; o.geometry.computeBoundingSphere(); }
     for (const m of matsByName(vrm, 'Body')) { if (!/Outline/.test(m.name)) legForm(m); }   // rounded knee / shin shading
+    // edges of the heavy cloth (jacket hem, cuffs, collar; skirt hem) flutter a little, faster with speed (shader below)
+    for (const [key, w] of [['Tops', (y, ax) => Math.max(sstepG(0.98, 0.9, y), y > 1.05 ? sstepG(0.42, 0.5, ax) : 0, sstepG(1.36, 1.42, y) * 0.6)], ['Bottoms', (y) => sstepG(0.86, 0.78, y)]])
+      for (const o of meshesByMat(vrm, key)) { const P = o.geometry.attributes.position, fl = new Float32Array(P.count);
+        for (let i = 0; i < P.count; i++) fl[i] = w(P.getY(i), Math.abs(P.getX(i)));
+        o.geometry.setAttribute('aFlut', new THREE.BufferAttribute(fl, 1));
+        (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { addFlutter(m, 1.0); m.needsUpdate = true; }); FLUTTER_MESHES.push(o); }
     return; }
   if (OUTFIT === 'breeze') return restyleBreeze(vrm);
   if (OUTFIT === 'sundress') return restyleSundress(vrm);
@@ -412,8 +418,9 @@ export function setupHair(vrm) {
       // ---- velocity tiers (smoothly blended): T0 idle 0-5, T1 cruise 5-25, T2 high speed 25-60+
       const w1 = sstepG(3, 8, kmh), w2 = sstepG(22, 32, kmh);
       const pitchDeg = kmh < 5 ? 0 : kmh < 25 ? 35 * (kmh - 5) / 20 : 35 + (78 - 35) * Math.min(1, (kmh - 25) / 35);   // lift from hanging toward horizontal
-      const damping = 0.75 - 0.15 * w1 - 0.35 * w2;     // T0 ~0.75, T1 0.6, T2 0.25 (three-vrm dragForce)
-      const stiffMul = 1 - 0.0 * w1 - 0.3 * w2;         // T1 root/tip ratio as set up; T2 a little looser so the tail straightens
+      const s01 = Math.min(1, kmh / 30);
+      const damping = 0.5 - 0.1 * s01;                 // moderate, nearly constant: amplitude stays in a small range
+      const stiffMul = 0.9 + 2.6 * s01 * s01;            // Cheney: faster speed = FASTER swing (stiffer spring -> higher frequency), not bigger
       // ---- direction matrix in the character frame (yaw of the air relative to her forward)
       fwd.copy(o.fwd || tmp.set(0, 0, 1)).setY(0).normalize(); side.crossVectors(up, fwd);   // side = her left
       const aH = tmp.copy(air).setY(0), aHl = aH.length() || 1e-6, ad = aH.divideScalar(aHl).clone();   // downwind (horizontal)
@@ -444,6 +451,8 @@ export function setupHair(vrm) {
         d.addScaledVector(side, (1 - w1) * 0.035 * vn(t, 0.5, ph));
         // T1 soft wave along the strands (travelling toward the tips)
         d.addScaledVector(side, w1 * (1 - w2) * 0.08 * tip * Math.sin(t * 2.4 - j._depth * 1.3 + j._jit));
+        // flutter: small, frequency ∝ air speed (2 Hz at a walk .. ~7 Hz at 20 km/h), stronger toward the tips
+        { const fq = 1.6 + sp * 0.95, a = (0.025 + 0.035 * s01) * (0.3 + tip); d.addScaledVector(side, a * vn(t, fq, ph)).addScaledVector(up, a * 0.5 * vn(t, fq * 1.3, ph + 2)); }
         // T2 turbulence: 8-15 Hz tip tearing
         if (w2 > 0) { const a = w2 * 0.22 * tip * tip; d.addScaledVector(side, a * vn(t, 8 + 7 * j._jit, ph)).addScaledVector(up, a * 0.7 * vn(t, 11 + 4 * j._jit, ph + 2)); }
         // carve pseudo-force (outward = −latAcc) and vertical bumps/downhill unloading
@@ -461,11 +470,15 @@ export function setupHair(vrm) {
         j.settings.stiffness = j._k0 * stiffMul;
       }
       // ---- clothing spring bones (coat sleeves/front): drag ∝ v², same direction logic, lighter than hair
-      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.85 + Math.random() * 0.3), fl = 1 + 0.25 * Math.sin(t * (3 + k * 2) + k * 9) + (0.12 + 0.3 * w2) * Math.sin(t * (7.3 + 6 * w2) + k * 4);
-        const coat = /CoatSkirt/.test(j.bone.name), cd = (coat ? 0.03 : 0.018) * k * fl, sp2 = Math.min(1.8, cd * sp);
-        tmp.set(0, -1, 0); if (sp > 0.05) tmp.addScaledVector(air, sp2 / sp * (NAT ? 1 : 0.3));
-        tmp.addScaledVector(lagLat, -0.03);
-        const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.55 : 0.2); }
+      // HEAVY CLOTH (jacket tails, skirt): hangs by its weight; with speed it swings FASTER in a small range, leans back only
+      // a little (tanθ = k·v²/g with a small k for heavy fabric: ~6° at 20 km/h, ~12° at 35 km/h)
+      for (const j of cloth) { if (j._k0c === undefined) { j._k0c = j.settings.stiffness; j._ck = 0.9 + ((j.bone.name.length * 7) % 10) / 50; }
+        const coat = /CoatSkirt/.test(j.bone.name), kq = coat ? 0.0024 : 0.002, lean = Math.atan(kq * sp * sp);
+        tmp.set(0, -1, 0); if (sp > 0.05) tmp.addScaledVector(air, Math.tan(lean) / sp);
+        tmp.addScaledVector(lagLat, -0.02).normalize();
+        j.settings.gravityDir.copy(tmp); j.settings.gravityPower = 1.0;
+        j.settings.stiffness = Math.max(0.5, j._k0c) * (1.0 + 2.0 * s01 * s01) * j._ck;   // natural frequency rises with speed
+        j.settings.dragForce = coat ? 0.72 : 0.6; }
       this.state = { kmh, tier: w2 > 0.5 ? 2 : w1 > 0.5 ? 1 : 0, pitchDeg: THREE.MathUtils.radToDeg(pitch), along, damping, err: chains.map((c) => Math.round(c.err * 57.3)), gain: chains.map((c) => +c.gain.toFixed(2)) };
     },
   };
