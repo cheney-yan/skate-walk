@@ -24,8 +24,29 @@ const EFF = 0.25, P_AERO = 230, CRR = 0.0045, CDA = 0.3;   // slicker than reali
 const WHEEL_R = 0.035, HALF_WB = 0.36, DECK_L = 1.12;
 let ANK = 0.093;   // ankle (foot bone) height above the shoe sole — measured per model in the Rider constructor
 
-// deck flex profile: deflection (m, +down) at z for a centre sag f (simply supported beam with overhangs)
-export function flexAt(z, f) { const u = z / HALF_WB; return Math.abs(u) <= 1 ? f * (1 - u * u) * (1 - 0.25 * u * u) / 1 : -f * 0.9 * (Math.abs(u) - 1) * 1.2; }
+// DECK SHAPE + FLEX (Cheney: a longboard deck is a concave bridge; it only bends under the load of her feet).
+//  - concave: across the width the rails are higher than the centre line (~8 mm), fading out at nose/tail,
+//  - flex: a beam on two supports (the trucks) loaded by the two feet. Between the trucks it sags under the load (max
+//    under/between the feet), beyond the trucks the unloaded nose/tail stay STRAIGHT on the beam's end slope — they tilt
+//    up a little, they never curl down. Uneven load (front/back foot) shifts where it sags most.
+//  - a sideways lean (heel/toe) twists the deck a bit: the loaded rail sinks a few mm more.
+export const CONCAVE = 0.008, DECK_W = 0.235;
+export const DECKLOAD = { a: 0.2, b: -0.21, wa: 0.5, twist: 0 };   // foot positions along the deck (m) and front-foot share
+function beamDefl(z, f, a, b, wa) {
+  // simply supported span [-H, H], point loads at a (front foot) and b (back foot); deflection normalised so the larger of
+  // the two foot points sags by f. Closed form for a point load P at c: y(z) = P·(H+z)(H−c)... (standard formula).
+  const H = HALF_WB, Lw = 2 * H;
+  const one = (z, c) => { const x = z + H, cc = c + H, bb = Lw - cc; return x <= cc ? bb * x * (Lw * Lw - bb * bb - x * x) / (6 * Lw) : cc * (Lw - x) * (Lw * Lw - cc * cc - (Lw - x) * (Lw - x)) / (6 * Lw); };
+  const zc = Math.max(-H, Math.min(H, z)), y = (zz) => wa * one(zz, a) + (1 - wa) * one(zz, b);
+  const peak = Math.max(y(a), y(b), y((a + b) / 2), 1e-9);
+  if (Math.abs(z) <= H) return f * y(zc) / peak;
+  const s = Math.sign(z), e = 1e-3, dy = (y(s * H) - y(s * (H - e))) / e;   // dy/d|z| at the support (<0: sag falls to 0)
+  return f * dy * (Math.abs(z) - H) / peak;                                      // straight overhang continuing that line: rises (negative = up)
+}
+export function flexAt(z, f, x = 0) {
+  const L = DECKLOAD; return beamDefl(z, f, L.a, L.b, L.wa) + L.twist * (x / (DECK_W / 2)) * 0.004 * Math.min(1, Math.max(0, 1 - Math.abs(z) / (HALF_WB + 0.1)));
+}
+export function concaveAt(x, z) { const u = Math.min(1, Math.abs(x) / (DECK_W / 2)), along = 1 - Math.pow(Math.min(1, Math.abs(z) / (DECK_L / 2)), 4); return CONCAVE * u * u * along; }
 export function buildLongboard() {
   const g = new THREE.Group();
   const L = DECK_L, W = 0.235;
@@ -38,16 +59,40 @@ export function buildLongboard() {
   sh.bezierCurveTo(-W * 0.36, L / 2, -W / 2, L * 0.38, -W / 2, L * 0.18);
   sh.lineTo(-W / 2, -L * 0.1);
   sh.bezierCurveTo(-W / 2, -L * 0.3, -W * 0.42, -L / 2, 0, -L / 2);
-  const deckGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.011, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.003, bevelSegments: 2, curveSegments: 40, steps: 1 });
-  deckGeo.rotateX(-Math.PI / 2);
+  // half-width of the outline along the length (sampled from the shape), so the deck can be a real tessellated slab:
+  // the outline-only Shape/Extrude geometries had NO interior vertices, so any bend (flex, concave) became huge flat
+  // triangles hinging across the board — it looked like the two halves folding down.
+  const outline = sh.getSpacedPoints(400), halfW = (zz) => { let best = 0; for (let i = 0; i < outline.length; i++) { const a = outline[i], b = outline[(i + 1) % outline.length];
+      if ((a.y - zz) * (b.y - zz) <= 0 && a.y !== b.y) { const u = (zz - a.y) / (b.y - a.y); best = Math.max(best, Math.abs(a.x + (b.x - a.x) * u)); } } return best; };
+  const NZ = 72, NX = 14;
+  const slab = (th, edgeR) => {   // closed slab: top grid (y=+th/2), bottom grid (y=-th/2), rounded side wall
+    const pos = [], idx = [], zs = [], rowW = [];
+    for (let j = 0; j <= NZ; j++) { const v = j / NZ, zz = -L / 2 + 0.0015 + (L - 0.003) * (0.5 - 0.5 * Math.cos(Math.PI * v)); zs.push(zz); rowW.push(Math.max(0.004, halfW(zz))); }
+    const grid = (y, flip) => { const base = pos.length / 3;
+      for (let j = 0; j <= NZ; j++) for (let i = 0; i <= NX; i++) { const u = -1 + 2 * i / NX; pos.push(u * rowW[j], y, -zs[j]); }
+      for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const a = base + j * (NX + 1) + i, b = a + 1, c = a + NX + 1, d = c + 1; if (flip) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d); }
+      return base; };
+    const top = grid(th / 2, false), bot = grid(-th / 2, true);
+    const ring = (base, j, i) => base + j * (NX + 1) + i;
+    const wall = (i) => { for (let j = 0; j < NZ; j++) { const a = ring(top, j, i), b = ring(top, j + 1, i), c = ring(bot, j, i), d = ring(bot, j + 1, i); if (i === 0) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c); } };
+    wall(0); wall(NX);
+    for (const j of [0, NZ]) for (let i = 0; i < NX; i++) { const a = ring(top, j, i), b = ring(top, j, i + 1), c = ring(bot, j, i), d = ring(bot, j, i + 1); if (j === 0) idx.push(a, b, c, b, d, c); else idx.push(a, c, b, b, c, d); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; };
+  const sheet = (sc) => { const pos = [], idx = [];   // single tessellated top sheet (grip tape / graphic)
+    for (let j = 0; j <= NZ; j++) { const v = j / NZ, zz = (-L / 2 + 0.003 + (L - 0.006) * (0.5 - 0.5 * Math.cos(Math.PI * v))); const w = Math.max(0.003, halfW(zz)) * sc;
+      for (let i = 0; i <= NX; i++) pos.push((-1 + 2 * i / NX) * w, 0, -zz); }
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const a = j * (NX + 1) + i, b = a + 1, c = a + NX + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g; };
+  const deckGeo = slab(0.013); deckGeo.translate(0, 0.0065, 0);
   const wood = new THREE.MeshStandardMaterial({ color: '#e2c79c', roughness: 0.6 });
   const deck = new THREE.Mesh(deckGeo, wood); deck.position.y = DECK_Y - 0.013; deck.castShadow = true; g.add(deck);
-  const gripGeo = new THREE.ShapeGeometry(sh, 40); gripGeo.rotateX(-Math.PI / 2);
+  const gripGeo = sheet(0.97);
   const grip = new THREE.Mesh(gripGeo, new THREE.MeshStandardMaterial({ color: '#3a3d42', roughness: 0.95 }));
-  grip.position.y = DECK_Y + 0.0006; grip.scale.set(0.97, 1, 0.985); g.add(grip);
+  grip.position.y = DECK_Y + 0.0006; g.add(grip);
   // bottom graphic: soft wave stripe
-  const art = new THREE.Mesh(gripGeo.clone(), new THREE.MeshStandardMaterial({ color: '#8fd3d6', roughness: 0.5 }));
-  art.rotation.x = Math.PI; art.position.y = DECK_Y - 0.0145; art.scale.set(0.7, 1, 0.55); g.add(art);
+  const artGeo = sheet(0.7); { const a = artGeo.attributes.position; for (let i = 0; i < a.count; i++) a.setZ(i, a.getZ(i) * 0.55); a.needsUpdate = true; }
+  const art = new THREE.Mesh(artGeo, new THREE.MeshStandardMaterial({ color: '#8fd3d6', roughness: 0.5, side: THREE.DoubleSide }));
+  art.rotation.x = Math.PI; art.position.y = DECK_Y - 0.0145; g.add(art);
   const metal = new THREE.MeshStandardMaterial({ color: '#c9ccd1', metalness: 0.8, roughness: 0.35 });
   const urethane = new THREE.MeshStandardMaterial({ color: '#ffd7a3', roughness: 0.55 });
   const trucks = [];
@@ -76,6 +121,10 @@ export function buildLongboard() {
   }
   g.add(chassis, deckG);
   // flex: bendable deck meshes (CPU, ~1k verts): between the trucks it sags like a loaded beam, beyond them it rises
+  // bake the concave into all deck layers (rails up), then keep that as the rest shape for flexing
+  for (const m of [deck, grip, art]) { const a = m.geometry.attributes.position, arr = a.array, sgn = Math.cos(m.rotation.x) < 0 ? -1 : 1, sx = m.scale.x || 1, sz = m.scale.z || 1;
+    for (let i = 0; i < arr.length; i += 3) arr[i + 1] += sgn * concaveAt(arr[i] * sx, arr[i + 2] * sz) / (m.scale.y || 1);
+    a.needsUpdate = true; m.geometry.computeVertexNormals(); }
   const flexMeshes = [deck, grip, art].map((m) => ({ m, base: m.geometry.attributes.position.array.slice() }));
   g.userData = { trucks, deck: deckG, chassis, flexMeshes };
   return g;
@@ -229,7 +278,7 @@ export class Rider {
       const kTot = riding ? kappa + kP : 0;
       this.steerT = Math.atan(kTot * HALF_WB); this.tiltT = clamp(this.steerT / KT, -19 * D, 19 * D); }
     { const onB = riding && this.air <= 0 && this.m < 0.5, dyn = (this.pumpTurn || 0) * 0.02 + (this.landFlex || 0);
-      const tgt = onB ? 0.016 + dyn * 1.3 : 0; this.flexV = (this.flexV || 0) + ((tgt - (this.flex || 0)) * 230 - (this.flexV || 0) * 6.5) * dt; this.flex = (this.flex || 0) + this.flexV * dt;   // springy deck: under-damped
+      const tgt = onB ? 0.007 + dyn * 0.55 : 0;   /* a 52 kg rider on a dancer deck: ~7 mm static, ~1.5-2 cm at the pump peaks */ this.flexV = (this.flexV || 0) + ((tgt - (this.flex || 0)) * 230 - (this.flexV || 0) * 6.5) * dt; this.flex = (this.flex || 0) + this.flexV * dt;   // springy deck: under-damped
       this.landFlex = Math.max(0, (this.landFlex || 0) - dt * 0.12); }
     if (this.air > 0) this.wasAir = true; else if (this.wasAir) { this.wasAir = false; this.landFlex = 0.03; }
     this.tilt = damp(this.tilt, this.tiltT || 0, 16, dt);          // deck roll = what the trucks need for this curve
@@ -268,12 +317,13 @@ export class Rider {
       this.deck.quaternion.copy(qR);
       this.deck.position.copy(PIV).sub(PIV.clone().applyQuaternion(qR));
     } else if (this.seq?.bPos && this.boardFixed && !(this.mode === 'off' && this.seq.ph === 'pick' && this.seq.pick === 'kick')) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); this.deck.quaternion.identity(); this.deck.position.set(0, 0, 0); }
-    { const f = this.flex || 0; if (Math.abs(f - (this.flexDrawn || 0)) > 0.0003) { this.flexDrawn = f;
+    { const f = this.flex || 0, L = DECKLOAD, key = f + L.a * 3 + L.b * 7 + L.wa * 11 + L.twist * 13; if (Math.abs(key - (this.flexDrawn || 0)) > 0.0003) { this.flexDrawn = key;
         // bend in the BOARD's frame: the bottom graphic is rotated 180° about x (its local y points down), so its sign flips —
         // before, it bent the opposite way, poked up through the grip at the ends (wrong colour) and looked like the edges curling down.
         // Normals are recomputed so the bent deck shades correctly.
         for (const { m, base } of this.board.userData.flexMeshes) { const a = m.geometry.attributes.position, arr = a.array, sgn = Math.cos(m.rotation.x) < 0 ? -1 : 1;
-          for (let i = 0; i < arr.length; i += 3) arr[i + 1] = base[i + 1] - sgn * flexAt(base[i + 2], f) / (m.scale.y || 1);
+          const sx = m.scale.x || 1, sz = m.scale.z || 1;
+          for (let i = 0; i < arr.length; i += 3) arr[i + 1] = base[i + 1] - sgn * flexAt(base[i + 2] * sz, f, base[i] * sx) / (m.scale.y || 1);
           a.needsUpdate = true; m.geometry.computeVertexNormals(); } } }
     this.board.updateMatrixWorld(true);
     this.deck.getWorldPosition(this.deckF.position); this.deck.getWorldQuaternion(this.deckF.quaternion); this.deckF.updateMatrixWorld();
@@ -704,7 +754,7 @@ export class Rider {
   // ---------------- IK ----------------
   solveLegs(dt) {
     const B = this.b, bw = (o) => o.getWorldPosition(new V());
-    const deck = (x, z, y = DECK_Y + ANK) => this.deck.localToWorld(new V(x, y - flexAt(z, this.flex || 0), z));
+    const deck = (x, z, y = DECK_Y + ANK) => this.deck.localToWorld(new V(x, y + concaveAt(x, z) - flexAt(z, this.flex || 0, x), z));
     // feet stance on deck (board frame: z forward): front (left) foot over front bolts, back (right) over tail
     const P = this.push ? this.push.t / this.push.T : 0;
     const pr = this.push ? sstep(0.0, 0.25, P) * (1 - sstep(0.78, 1.0, P)) : 0;
@@ -739,6 +789,13 @@ export class Rider {
         rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u * Math.PI) * 0.11; rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
       }
     }
+    { // load the deck where the feet actually are: front/back positions and weight share (pumping shifts weight fore/aft,
+      // a foot lifted off the deck carries nothing); a heel/toe lean twists the deck toward the loaded rail
+      const inv = this.deck.matrixWorld.clone().invert(), lz = lf.clone().applyMatrix4(inv), rz = rf.clone().applyMatrix4(inv);
+      const onL = lz.y < DECK_Y + ANK + 0.05, onR = rz.y < DECK_Y + ANK + 0.05, fa = this.pumpFA || 0;
+      const L = DECKLOAD, wa = onL && onR ? clamp(0.5 + 0.22 * fa, 0.15, 0.85) : onL ? 1 : onR ? 0 : 0.5;
+      L.a = clamp(lz.z, -HALF_WB + 0.02, HALF_WB - 0.02); L.b = clamp(rz.z, -HALF_WB + 0.02, HALF_WB - 0.02); if (L.a < L.b) { const tmp = L.a; L.a = L.b; L.b = tmp; }
+      L.wa = damp(L.wa, wa, 12, dt); L.twist = damp(L.twist, clamp(-(this.tilt || 0) / (12 * D), -1, 1), 10, dt); }
     const M = this.m;
     if (M > 0.01) {
       // walking: feet on the ground under the hips, alternating stride ~0.55 m; at a standstill side by side
