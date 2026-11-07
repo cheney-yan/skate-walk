@@ -159,7 +159,7 @@ export class Rider {
         const BASE = 110;   // W metabolic just standing balanced on a rolling board
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
         spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0)) * dt;   // rolling downhill is the best rest: the bar fills fastest there
-        if (this.v > vmax) a -= 1.6 * (this.v - vmax) + 0.8;          // carve / foot-drag speed check
+        if (this.v > vmax) a -= (this.pump ? 1.1 : 1.6) * (this.v - vmax) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
         this.pushCool -= dt; this.trickCool = (this.trickCool ?? 6) - dt; this.danceCool = (this.danceCool ?? 10) - dt;
         if (this.dance) { this.dance.t += dt; if (this.dance.t > DANCE_T) { this.dance = null; this.danceCool = 22 + Math.random() * 10; } }
         if (!this.planT || this.t - this.planT > 0.5) { this.plan = this.planClimb(track); this.planT = this.t; }
@@ -170,7 +170,7 @@ export class Rider {
           if (pl.kind === 'walk' && pl.start <= stopDist) this.startOff(pl.maxG > TAN6 ? 'steep' : 'long');
           else if (this.slowT > 2.2) this.startOff('slow');
           else if (this.stam <= 0.02 && (grade > 0.02 || this.v < 1.0)) this.startOff('tired');
-          else if (!holeSoon && this.v > vmax - 0.05 && grade < -0.02 && this.stam > 0.3 && this.trickCool <= 0) this.startTrick('speed');
+          else if (!holeSoon && this.v > vmax + 0.6 && grade < -0.02 && this.stam > 0.3 && this.trickCool <= 0) this.startTrick('speed');
           else if (!holeSoon && this.stam >= 0.999 && Math.abs(grade) < 0.03 && this.v > 2.2 && this.trickCool <= 0) this.startTrick('full');
           else if (!this.dance && !holeSoon && this.stam > 0.45 && Math.abs(grade) < 0.025 && Math.abs(kappa) < 0.05 && this.v > 2.0 && (this.danceCool ?? 10) <= 0 && pl.kind !== 'walk') this.startDance();
         }
@@ -182,7 +182,7 @@ export class Rider {
         if (d > 0 && d < lead + this.v * 0.12 && !this.push) { this.ollie = { t: 0, h }; this.stam -= (m * g * 0.35 / EFF) / EMAX; this.ev.push(['ollie', this.s]); break; }
       }
     } else if (this.mode === 'walk') {
-      this.v = damp(this.v, grade > 0.03 ? 1.0 : 1.3, 2, dt); this.s += this.v * dt; this.phi += this.v * dt / 1.1;
+      this.v = damp(this.v, grade > 0.03 ? 1.0 : 1.3, 2, dt); this.s += this.v * dt; this.phi += this.v * dt / (1.1 * (1 - Math.min(0.3, Math.max(0, grade) * 1.6)));
       spend += ((m * g * this.v * Math.max(0, Math.sin(theta))) / EFF * 0.6 + 170 - P_AERO) * dt;   // walking ~170 W + climb work (walking up stairs/hills is efficient)
       if (!this.planT || this.t - this.planT > 0.5) { this.plan = this.planClimb(track); this.planT = this.t; }
       const pl = this.plan, nearFlat = grade < 0.02 && track(this.s + 2).grade < 0.02;
@@ -420,7 +420,8 @@ export class Rider {
     // under: hand cups the LOWER rail from below, forearm runs along the outside of the deck.
     const gTo = this.carryStyle === 'under' ? new V(0.117, DECK_Y - 0.03, 0.05) : new V(-0.117, DECK_Y - 0.004, 0);
     const tw = H.twirl ? 2 * Math.PI * sstep(0.1, 0.9, H.t / (H.T + 0.5)) : 0;
-    let q = H.qFrom.clone().slerp(this.carryQ().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), Math.sin(this.phi * Math.PI * 2) * 0.05)), u).multiply(new Q().setFromAxisAngle(new V(0, 0, 1), tw));
+    const sw = this.mode === 'walk' ? 1 : 0.4, ph2 = this.phi * Math.PI * 2;
+    let q = H.qFrom.clone().slerp(this.carryQ().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), Math.sin(ph2) * 0.05 * sw)).multiply(new Q().setFromAxisAngle(new V(0, 1, 0), Math.sin(ph2 - 0.7) * 0.07 * sw)).multiply(new Q().setFromAxisAngle(new V(1, 0, 0), Math.sin(2 * ph2 - 0.9) * 0.03 * sw)), u).multiply(new Q().setFromAxisAngle(new V(0, 0, 1), tw));
     let g = H.gFrom.clone().lerp(gTo, u);
     if (du > 0) { q = q.slerp(this.seq.bQ, du); }
     this.board.quaternion.copy(q); this.board.position.copy(hand).sub(g.clone().applyQuaternion(q));
@@ -525,7 +526,7 @@ export class Rider {
     const tw = this.gazeTwist || 0;   // extra torso twist the head could not reach last frame (look-back toward camera)
     const tall = 1 - 0.6 * (this.pump?.A || 0);
     this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0), leanIn * 0.3);
-    const walkLean = M * (0.06 + Math.max(0, this.gradeNow || 0) * 2.2) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
+    const walkLean = M * (0.06 + Math.min(0.5, Math.max(0, this.gradeNow || 0) * 3.6)) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
     const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     const ptw = this.pumpTwist || 0;
     this.rot('spine', fwd * 0.45 * tall + breathe, open * 0.2 + tw * 0.25 + ptw * 0.3, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
@@ -548,7 +549,7 @@ export class Rider {
     if (need > this.armUp) this.armUp = damp(this.armUp, need, 9, dt);           // quick rise
     else { this.armHold = (this.armHold ?? 0) + dt; if (this.armHold > 0.6) this.armUp = damp(this.armUp, need, 1.3, dt); } // linger, then lower
     if (need > this.armUp - 0.02) this.armHold = 0;
-    const glide = M < 0.5 && !this.push ? (0.38 + 0.18 * Math.sin(t * 0.45)) * (1 - 0.55 * (this.pump?.A || 0)) : 0;
+    const pmA = this.pump?.A || 0, pmI = this.pump?.I ?? 0, glide = M < 0.5 && !this.push ? (0.38 + 0.18 * Math.sin(t * 0.45)) * (1 - pmA * (0.85 - 0.5 * pmI)) : 0;
     const up = this.armForce ?? Math.max(this.armUp, glide);
     const brz = Math.sin(t * 0.73) * 0.05, brz2 = Math.sin(t * 0.57 + 1.3) * 0.06;
     const bodySw = Math.sin(t * 1.6) * 0.04 + this.lean * 0.4;   // passive pendulum with the body
@@ -720,7 +721,7 @@ export class Rider {
       // walking speed, so it never slides on the ground; SWING it lifts, travels forward fast and sets down heel first.
       // stance length = SF·L (L = metres per foot cycle; phi advances v/L per second) => z runs +SF·L/2 .. -SF·L/2.
       const runPh = this.mode === 'on' && this.seq?.ph === 'run', gaitOn = this.mode === 'walk' || runPh;
-      const L = runPh ? 1.25 : 1.1, SF = runPh ? 0.42 : 0.56, half = SF * L / 2;
+      const gUp = Math.max(0, this.gradeNow || 0), L = runPh ? 1.25 : 1.1 * (1 - Math.min(0.3, gUp * 1.6)), SF = runPh ? 0.42 : 0.56, half = SF * L / 2;
       const gait = (off) => { const u = ((this.phi + off) % 1 + 1) % 1;
         if (u < SF) { const k = u / SF; return { z: half * (1 - 2 * k), lift: 0, pitch: 0.42 * Math.max(0, 1 - k / 0.2) ** 2 - 0.5 * Math.max(0, (k - 0.72) / 0.28) ** 2 }; }   // heel strike → flat → heel rises (toe-off)
         const w = (u - SF) / (1 - SF), e = 0.5 - 0.5 * Math.cos(Math.PI * w);
