@@ -15,7 +15,7 @@ await page.setViewport({ width: +W, height: +H, deviceScaleFactor: 1 });
 const logs = [];
 page.on('console', (m) => logs.push(m.type() + ': ' + m.text()));
 page.on('pageerror', (e) => logs.push('PAGEERR ' + e.message));
-await page.goto('http://127.0.0.1:8797/lab.html?rec&cam=' + cam, { waitUntil: 'load', timeout: 120000 });
+await page.goto('http://127.0.0.1:8797/lab.html?rec&cam=' + cam + (process.env.LABQ || ''), { waitUntil: 'load', timeout: 120000 });
 await page.waitForFunction('window.LAB && document.getElementById("load").style.display==="none"', { timeout: 180000 });
 if (cam === 'eval') {
   const code = fs.readFileSync(from, 'utf8');

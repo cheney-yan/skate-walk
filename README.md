@@ -3,6 +3,7 @@
 **Live demo:**
 - 🛹 Character lab (girl + longboard physics, 360° view): https://cheney-yan.github.io/skate-walk/lab.html
   - drag = orbit 360°, pinch/wheel = zoom, double-tap = back behind her. `?outfit=white` = white dress + straw hat.
+- 🌊 Same girl on the real Bondi → Bronte coastal walk (OSM path, AWS terrain, OSM buildings as white blocks): https://cheney-yan.github.io/skate-walk/lab.html?route=bondi
 - 🗺️ Early route demo (Bondi → Bronte, real OSM + terrain + Wikipedia postcards): https://cheney-yan.github.io/skate-walk/
 
 A calm "skate stroll" toy: she rides by herself along real places, you push occasionally, collect real postcards. Not a thrill game.

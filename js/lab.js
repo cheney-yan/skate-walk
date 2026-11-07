@@ -4,6 +4,8 @@ import { Rider } from './rider.js';
 
 const Q = new URLSearchParams(location.search);
 const REC = Q.has('rec');
+// ?route=bondi -> ride the real Bondi -> Bronte coastal walk (OSM path + AWS terrain + OSM building blocks)
+const RD = Q.get('route') ? await (await fetch('./data/route.json')).json() : null;
 if (REC) document.body.classList.add('rec');
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -16,10 +18,10 @@ const SEG = [
   [20, 0, 0, '前面有坑'], [40, 0.015, -0.07, '下坡'], [12, 0, 0, ''], [32, 0, 0.06, '上坡'],
   [24, 0, 0, '左边来风', 'left'], [24, 0, 0, '右边来风', 'right'], [24, 0, 0, '迎面来风', 'front'], [33, -0.02, 0, '回头看你一眼'],
 ];
-const HOLES = [60, 240];
-const LOOKS = [13, 226];
+const HOLES = RD ? [] : [60, 240];
+const LOOKS = RD ? [] : [13, 226];
 const DS = 0.25;
-const track = (() => {
+const track = RD ? routeTrack(RD) : (() => {
   const pts = []; let s = 0, x = 0, y = 0, z = 0, yaw = 0;
   const segAt = (s) => { let a = 0; for (const g of SEG) { if (s < a + g[0]) return { g, a }; a += g[0]; } return { g: SEG[SEG.length - 1], a: a - SEG[SEG.length - 1][0] }; };
   const total = SEG.reduce((a, g) => a + g[0], 0);
@@ -38,6 +40,44 @@ const track = (() => {
   };
   return { pts, at, total, segAt };
 })();
+// ---------------- real route -> uniform track (same shape as the test track) ----------------
+function terrainFn(T) {
+  return (x, y) => {
+    const fi = (x - T.x0) / T.step, fj = (y - T.y0) / T.step;
+    const i = Math.max(0, Math.min(T.nx - 2, Math.floor(fi))), j = Math.max(0, Math.min(T.ny - 2, Math.floor(fj)));
+    const u = Math.min(1, Math.max(0, fi - i)), v = Math.min(1, Math.max(0, fj - j));
+    const g = (ii, jj) => Math.max(-4, T.h[jj * T.nx + ii] / 10);
+    return g(i, j) * (1 - u) * (1 - v) + g(i + 1, j) * u * (1 - v) + g(i, j + 1) * (1 - u) * v + g(i + 1, j + 1) * u * v;
+  };
+}
+function routeTrack(R) {
+  const P = R.pts, L = R.length, tH = terrainFn(R.terrain);
+  const lin = (s) => { let k = 0; while (k < P.length - 2 && P[k + 1].s < s) k++; const a = P[k], b = P[k + 1], u = b.s > a.s ? clamp((s - a.s) / (b.s - a.s), 0, 1) : 0; return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, e: a.e + (b.e - a.e) * u }; };
+  // dense 0.5 m polyline in three coords (X = east, Z = -north), height = path or ground, whichever is higher
+  let D = []; for (let s = 0; s <= L; s += 0.5) { const q = lin(s); D.push({ X: q.x, Z: -q.y, Y: Math.max(q.e, tH(q.x, q.y)) + 0.08 }); }
+  const blur = (arr, key, r, passes) => { for (let p = 0; p < passes; p++) { const src = arr.map((o) => o[key]); for (let i = 0; i < arr.length; i++) { let a = 0, n = 0; for (let j = Math.max(0, i - r); j <= Math.min(arr.length - 1, i + r); j++) { a += src[j]; n++; } arr[i][key] = a / n; } } };
+  blur(D, 'X', 8, 3); blur(D, 'Z', 8, 3); blur(D, 'Y', 16, 3);          // round off polyline corners (a board can't turn on a point)
+  const cum = [0]; for (let i = 1; i < D.length; i++) cum.push(cum[i - 1] + Math.hypot(D[i].X - D[i - 1].X, D[i].Z - D[i - 1].Z));
+  const total = cum[cum.length - 1], pts = []; let k = 0;
+  for (let s = 0; s <= total; s += DS) {
+    while (k < D.length - 2 && cum[k + 1] < s) k++;
+    const u = (s - cum[k]) / ((cum[k + 1] - cum[k]) || 1), a = D[k], b = D[k + 1];
+    pts.push({ s, x: a.X + (b.X - a.X) * u, y: a.Y + (b.Y - a.Y) * u, z: a.Z + (b.Z - a.Z) * u });
+  }
+  for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 4)], b = pts[Math.min(pts.length - 1, i + 4)]; pts[i].yaw = Math.atan2(b.x - a.x, b.z - a.z); }
+  for (let i = 1; i < pts.length; i++) { let d = pts[i].yaw - pts[i - 1].yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; pts[i].yaw = pts[i - 1].yaw + d; }
+  for (let i = 0; i < pts.length; i++) { const a = pts[Math.max(0, i - 8)], b = pts[Math.min(pts.length - 1, i + 8)], ds = b.s - a.s || 1; pts[i].kap = clamp((b.yaw - a.yaw) / ds, -0.35, 0.35); pts[i].gr = clamp((b.y - a.y) / ds, -0.08, 0.08); }
+  // place names along the way (for the caption)
+  const names = []; let cur = 'Bondi'; for (const q of P) { if (q.name) cur = q.name; names.push([q.s, cur]); }
+  const nameAt = (s) => { let n = 'Bondi'; for (const [a, m] of names) { if (a > s * (L / total)) break; n = m; } return n; };
+  const at = (s) => {
+    const f = clamp(s / DS, 0, pts.length - 2), i = Math.floor(f), u = f - i, a = pts[i], b = pts[i + 1];
+    const yaw = a.yaw + (b.yaw - a.yaw) * u;
+    return { p: new THREE.Vector3(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, a.z + (b.z - a.z) * u), dir: new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), yaw, grade: a.gr + (b.gr - a.gr) * u, kappa: a.kap + (b.kap - a.kap) * u };
+  };
+  const segAt = (s) => ({ g: [0, at(s).kappa, at(s).grade, nameAt(s)], a: 0 });
+  return { pts, at, total: Math.floor(total), segAt, terrainH: tH };
+}
 // height of ground anywhere: nearest track point's height (road + verge)
 function groundY(x, z) {
   let best = 1e9, y = 0;
@@ -52,7 +92,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog('#d6ebf5', 40, 260);
+scene.fog = RD ? new THREE.Fog('#d6ebf5', 160, 1100) : new THREE.Fog('#d6ebf5', 40, 260);
 const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 1500);
 const hemi = new THREE.HemisphereLight('#eef6ff', '#d8c49a', 1.4); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe9c8', 2.5);
@@ -99,17 +139,16 @@ const pathTex = (() => {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
 })();
 { const r = ribbon(-1.6, 1.6, 0.0, '#ffffff', 0.85); r.material.map = pathTex; r.material.needsUpdate = true; }
-ribbon(1.6, 40, -0.03, '#93bd6c');
-ribbon(-1.6, -12, -0.03, '#e8d6a6');      // sand on the right
+if (!RD) { ribbon(1.6, 40, -0.03, '#93bd6c'); ribbon(-1.6, -12, -0.03, '#e8d6a6'); }  // test-track verges      // sand on the right
 { // sea
   const m = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ color: '#3f9fc2', roughness: 0.25, metalness: 0.1 }));
-  m.rotation.x = -Math.PI / 2; m.position.y = -6; scene.add(m);
+  m.rotation.x = -Math.PI / 2; m.position.y = RD ? 0.9 : -6; scene.add(m);
 }
 // trees + flags along the left verge
 const flags = [];
 {
   const trunk = new THREE.MeshStandardMaterial({ color: '#8a6a4a' }), leaf = new THREE.MeshStandardMaterial({ color: '#6fa25a', roughness: 1 });
-  for (let s = 6; s < track.total; s += 9 + (s * 7 % 5)) {
+  for (let s = 6; !RD && s < track.total; s += 9 + (s * 7 % 5)) {
     const p = track.at(s), l = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw)), off = 4 + (s * 13 % 7);
     const t = new THREE.Group(); t.position.copy(p.p).addScaledVector(l, off);
     const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 2.2, 8), trunk); tr.position.y = 1.1; t.add(tr);
@@ -118,13 +157,40 @@ const flags = [];
   }
   // little pennant flags on poles at the wind segments (show wind direction)
   const pole = new THREE.MeshStandardMaterial({ color: '#f4f4f4' });
-  for (const s of [150, 162, 174, 186, 198, 210, 222]) {
+  for (const s of RD ? [] : [150, 162, 174, 186, 198, 210, 222]) {
     const p = track.at(s), l = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
     const g = new THREE.Group(); g.position.copy(p.p).addScaledVector(l, 2.3);
     const pl = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.4, 6), pole); pl.position.y = 1.2; g.add(pl);
     const fgeo = new THREE.PlaneGeometry(0.7, 0.35, 8, 1); fgeo.translate(0.35, 0, 0);
     const f = new THREE.Mesh(fgeo, new THREE.MeshStandardMaterial({ color: '#ff8a5c', side: THREE.DoubleSide })); f.position.y = 2.2; g.add(f);
     scene.add(g); flags.push({ f, base: fgeo.attributes.position.array.slice() });
+  }
+}
+// ---------------- real-world blocks (Apple-Maps style): terrain, OSM building footprints as clean extruded boxes ----------------
+if (RD) {
+  const T = RD.terrain, tH = track.terrainH;
+  const geo = new THREE.PlaneGeometry((T.nx - 1) * T.step, (T.ny - 1) * T.step, T.nx - 1, T.ny - 1); geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+  const cx = T.x0 + (T.nx - 1) * T.step / 2, cy = T.y0 + (T.ny - 1) * T.step / 2;
+  const sand = new THREE.Color('#efe2bf'), grass = new THREE.Color('#bfd9a3'), park = new THREE.Color('#a9cf8c'), rock = new THREE.Color('#cfc4b1'), c = new THREE.Color();
+  for (let k = 0; k < pos.count; k++) {
+    const x = pos.getX(k) + cx, y = -pos.getZ(k) + cy; let h = tH(x, y); if (h < 1.3) h = -2.5 + h;
+    pos.setXYZ(k, x, h, -y);
+    const sl = Math.hypot(tH(x + 4, y) - tH(x - 4, y), tH(x, y + 4) - tH(x, y - 4)) / 8;
+    if (h < 3.5) c.copy(sand).lerp(grass, clamp((h - 2) / 1.5, 0, 1)); else c.copy(grass).lerp(park, clamp((h - 8) / 40, 0, 1));
+    if (sl > 0.55 && h > 0.5) c.lerp(rock, clamp((sl - 0.55) * 2, 0, 1));
+    col.set([c.r, c.g, c.b], k * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
+  const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })); ground.receiveShadow = true; scene.add(ground);
+  // buildings: soft off-white blocks, slightly lighter roofs, the way Apple Maps draws a city before photo-3D loads
+  const side = new THREE.MeshStandardMaterial({ color: '#ecebe7', roughness: 0.95 }), top = new THREE.MeshStandardMaterial({ color: '#fbfaf8', roughness: 0.9 });
+  const sideAlt = new THREE.MeshStandardMaterial({ color: '#e4e6ea', roughness: 0.95 });
+  for (const b of RD.buildings) {
+    if (b.poly.length < 4) continue;
+    const g = new THREE.ExtrudeGeometry(new THREE.Shape(b.poly.map(([x, y]) => new THREE.Vector2(x, y))), { depth: Math.max(3, b.h), bevelEnabled: false });
+    g.rotateX(-Math.PI / 2);
+    const m = new THREE.Mesh(g, [top, b.poly.length % 3 ? side : sideAlt]); m.position.y = b.base - 0.6; m.castShadow = m.receiveShadow = true; scene.add(m);
   }
 }
 // potholes (dark, slightly sunk) + a little cone so the eye reads them
@@ -143,7 +209,7 @@ scene.add(petals);
 
 // ---------------- girl ----------------
 let vrm, rider, skirt, hair, hat;
-const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: 999, camera };
+const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: RD ? undefined : 999, camera };
 async function init() {
   const M = { shino: './models/shino.vrm', sample: './models/girl.vrm' };
   vrm = await loadGirl(M[Q.get('m') || 'shino'] || M.shino);
@@ -152,7 +218,7 @@ async function init() {
   const SD = OUTFIT === 'sundress';   // reference look: knee-length floral sundress, no hat, hair fully free
   skirt = new Skirt(vrm, scene, SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
   hat = SD ? { step() {} } : new Hat(vrm, scene);
-  rider = new Rider(vrm, scene);
+  rider = new Rider(vrm, scene); rider.track = track;
   rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS); let best = 1e9, y = 0; for (let i = Math.max(0, c - 30); i < Math.min(track.pts.length, c + 30); i++) { const p = track.pts[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < best) { best = d; y = p.y; } } return y; };
   hair = setupHair(vrm);
   restart();
@@ -160,12 +226,13 @@ async function init() {
 }
 let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
-  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = 1e9; rider.ev.length = 0;
+  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0;
   lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false;
   rider.update(1 / 60, (s) => track.at(s), ctx);
   skirt.inited = false; vrm.springBoneManager?.reset?.();
 }
 function windTarget(s) {
+  if (RD) return new THREE.Vector3(-2.2 - 1.2 * Math.sin(s * 0.013), 0, 0.6 * Math.sin(s * 0.021));   // onshore sea breeze from the east
   const { g } = track.segAt(s), p = track.at(s), left = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
   const W = 6.5;
   if (g[4] === 'left') return left.multiplyScalar(-W);     // blows from left to right
@@ -182,6 +249,7 @@ function caption() {
   else if (r.push) a = g[2] > 0.03 ? '上坡，用力蹬' : '蹬地';
   else if (r.w.tuck > 0.4) a = '下坡，压低重心';
   else if (Math.abs(r.lean) > 0.06) a = `压弯 ${r.lean > 0 ? '向左' : '向右'}（侧倾 ${Math.round(Math.abs(r.lean) * 57.3)}°）`;
+  if (RD && a === g[3] && Math.abs(r.lean) <= 0.06) a = g[3];
   const grade = Math.round(g[2] * 100);
   $('cap').innerHTML = `${a}<small>${(r.v * 3.6).toFixed(1)} km/h · 坡度 ${grade > 0 ? '+' : ''}${grade}% · ${r.s.toFixed(0)}/${track.total} m</small>`;
 }

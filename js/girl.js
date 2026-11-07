@@ -124,7 +124,22 @@ function restyle(vrm) {
 }
 
 function restyleSundress(vrm) {
-  // bare legs; floral bodice; tan strappy sandals
+  // bare legs: the stock texture paints black tights on the legs -> repaint those regions with the skin tone
+  const SKIN = [248, 218, 199];
+  for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {
+    const c = texToCanvas(m[k]), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height;
+    const sk = k === 'map' ? SKIN : [235, 190, 180];
+    for (let y = Math.floor(H * 0.6); y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, lum = (p[i] + p[i + 1] + p[i + 2]) / 3;
+      if (lum < 150) { const f = Math.min(1, (150 - lum) / 60); for (let j = 0; j < 3; j++) p[i + j] = p[i + j] * (1 - f) + sk[j] * f; }
+    }
+    g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]);
+    // strappy sandals: thin tan leather straps around the ankle + across the instep (bind-pose heights)
+    const body = meshesByMat(vrm, 'Body')[0];
+    if (body) m[k] = paintTris(m[k], body.geometry, (ys) => { const lo = Math.min(...ys), hi = Math.max(...ys); return (hi > 0.085 && lo < 0.1) || (hi > 0.135 && lo < 0.145) ? true : false; }, k === 'map' ? 'rgb(150,98,62)' : 'rgb(110,70,45)');
+    m.needsUpdate = true;
+  }
+  // floral bodice; tan strappy sandals
   const fl = floralCanvas(1024, 1024, 1.6, 11);
   for (const m of matsByName(vrm, 'Tops')) {
     if (m.color) m.color.set('#ffffff');
