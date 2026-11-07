@@ -462,9 +462,9 @@ export class Rider {
         S.bPos = track(S.rs).p.clone(); S.bQ = this.boardRestQ(S.rs, track);
         if (S.t > 1.1 || this.s > S.rs - 0.35) { S.ph = 'step'; S.t = 0; S.s0 = this.s; S.bs = S.rs; }
       } else {
-        const u = sstep(0, 0.35, S.t); S.bs += 2.2 * dt; S.bPos = track(S.bs).p.clone(); S.bQ = this.boardRestQ(S.bs, track); this.s = lerp(S.s0, S.bs, u); this.v = 2.2; this.phi += 0.9 / 30 / 1.1;
-        this.m = 1 - sstep(0.0, 0.35, S.t); this.face = 1 - sstep(0.0, 0.35, S.t); this.lat = lerp(this.lat, 0, u);
-        if (S.t > 0.38) { this.mode = 'ride'; this.modeT = 0; this.seq = null; this.boardFixed = false; this.m = 0; this.face = 0; this.lat = 0; this.slideYaw = 0; this.slideDir = 0; this.v = 2.1; this.pushCool = 0.6; this.ev.push(['hop-on', this.s]); }
+        const u = sstep(0, 0.5, S.t); S.bs += 2.2 * dt; S.bPos = track(S.bs).p.clone(); S.bQ = this.boardRestQ(S.bs, track); this.s = lerp(S.s0, S.bs, u); this.v = 2.2; this.phi += 0.9 / 30 / 1.1;
+        this.m = 1 - sstep(0.0, 0.5, S.t); this.face = 1 - sstep(0.05, 0.5, S.t); this.lat = lerp(this.lat, 0, u);
+        if (S.t > 0.52) { this.mode = 'ride'; this.modeT = 0; this.seq = null; this.boardFixed = false; this.m = 0; this.face = 0; this.lat = 0; this.slideYaw = 0; this.slideDir = 0; this.v = 2.1; this.pushCool = 0.6; this.ev.push(['hop-on', this.s]); }
       }
     }
     if (this.boardFixed && !this.hold && S.bPos && !(this.mode === 'off' && S.ph === 'pick' && S.pick === 'kick')) { this.board.position.copy(S.bPos); this.board.quaternion.copy(S.bQ); }
@@ -776,18 +776,22 @@ export class Rider {
     if (this.push && !this.ollie && this.m < 0.5) {
       const p = this.push; const c0 = p.c0 ?? 0.3 * p.T, c1 = p.c1 ?? c0 + 0.3; const tt = p.t;
       if (tt < c0) { // lift off deck, swing down beside the front wheels (toe side = -x)
+        // reach down to where the foot WILL touch the road at c0 (a world-fixed point ahead, at the board's speed), so the
+        // foot arrives with zero ground speed — it used to ride along with the board and freeze instantly at contact (a jump)
         const u = sstep(0, c0, tt);
-        const a = deck(-0.01, -0.21), bpt = this.groundAt(-0.29, 0.1);
-        rf = a.clone().lerp(bpt, u); rf.y += Math.sin(u * Math.PI) * 0.06;
-        this.footPlant.copy(bpt);
+        const a = deck(-0.01, -0.21), here = this.groundAt(-0.29, 0.1), fwdW = new V(0, 0, 1).applyQuaternion(this.board.quaternion).setY(0).normalize();
+        if (!p.plantW || tt < (p.lastT ?? 0)) p.plantW = here.clone().addScaledVector(fwdW, this.v * Math.max(0, c0 - tt));
+        p.lastT = tt;
+        rf = a.clone().lerp(p.plantW, u); rf.y += Math.sin(u * Math.PI) * 0.05;
+        this.footPlant.copy(p.plantW);
         rYaw = lerp(-78 * D, -5 * D, u);
       } else if (tt < c1 && !p.abort) { // planted: world-stationary
         rf = this.footPlant.clone(); rYaw = -5 * D; rPitch = -0.12 * sstep(c0, c1, tt);
       } else { // recover: lift heel, come back to tail
         if (!p.rec) { p.rec = this.footPlant.clone(); p.recT = tt; }
-        const u = sstep(p.recT, p.T * 0.98, tt);
+        const u0 = clamp((tt - p.recT) / Math.max(0.05, p.T * 0.98 - p.recT), 0, 1), u = 0.5 - 0.5 * Math.cos(Math.PI * u0);   // sine ease: no velocity spike
         const back = deck(-0.01, -0.21);
-        rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u * Math.PI) * 0.11; rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
+        rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u0 * Math.PI) * 0.055; rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
       }
     }
     { // load the deck where the feet actually are: front/back positions and weight share (pumping shifts weight fore/aft,
@@ -818,7 +822,22 @@ export class Rider {
         if (bend) { z += side === 'left' ? 0.12 * bend : -0.1 * bend; }
         const p = this.walkF.localToWorld(new V(x, 0, z)); p.y = (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y) + ANK + lift + (side === 'left' ? kick * 0.04 : 0); return p; };
       const wl = wf('left'), wr = wf('right');
+      const deckL = lf.clone(), deckR = rf.clone();
       lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); lYaw = lerp(lYaw, -90 * D, M); rYaw = lerp(rYaw, -90 * D, M);
+      // HOP-ON: the feet used to be a blend of two unrelated poses (gait feet -> deck feet) while the run gait switched off,
+      // so they jumped. Now each foot has its own path from where it really is: the front foot steps up onto the front
+      // bolts first (0-0.28 s, small arc); the back foot pushes off the road (stays planted, heel rising) and swings onto
+      // the tail (0.14-0.48 s). Sine-eased, so no velocity jumps; both land exactly on the deck targets.
+      const S2 = this.seq;
+      if (this.mode === 'on' && S2?.ph === 'step') {
+        if (!S2.f0) S2.f0 = { l: (this._lfLast || lf).clone(), r: (this._rfLast || rf).clone() };
+        const tt = S2.t, ez = (a, b) => { const x = clamp((tt - a) / (b - a), 0, 1); return [0.5 - 0.5 * Math.cos(Math.PI * x), x]; };
+        const [ul, xl] = ez(0.0, 0.28), [ur, xr] = ez(0.14, 0.48);
+        lf = S2.f0.l.clone().lerp(deckL, ul); lf.y += Math.sin(Math.PI * xl) * 0.07;
+        rf = S2.f0.r.clone().lerp(deckR, ur); rf.y += Math.sin(Math.PI * xr) * 0.09;
+        lYaw = lerp(-90 * D, lYaw, ul); rYaw = lerp(-90 * D, -78 * D, ur);
+        rPitch = xr <= 0 ? -0.35 * sstep(0, 0.14, tt) : lerp(-0.35, 0, ur);   // push-off: heel up before the back foot leaves
+      }
       const gL = gaitOn ? gait(0).pitch : 0, gR = gaitOn ? gait(0.5).pitch : 0;   // + toes up (heel strike), - heel up (toe-off)
       rPitch = lerp(rPitch, -gR, M); this.lPitch = -gL * M;   // foot-bone pitch sign is the opposite (measured)
       // heel strike / toe-off: lifting the heel raises the ankle (pivot on the toes), toes-up keeps the heel on the ground
@@ -826,6 +845,7 @@ export class Rider {
     }
     if (this.drag > 0) { const dp = this.groundAt(-0.02, -0.5); rf = rf.lerp(dp, this.drag * 0.8); rPitch = -0.5 * this.drag; }
     if (this.footLift) { lf.y += this.footLift; rf.y += this.footLift; }
+    this._lfLast = lf.clone(); this._rfLast = rf.clone();
     const fwdModel = new V(0, 0, this.flip).applyQuaternion(this.vrm.scene.getWorldQuaternion(new Q()));
     for (const [side, target, yaw, pitch] of [['left', lf, lYaw, this.m > 0.01 ? (this.lPitch || 0) : 0], ['right', rf, rYaw, rPitch]]) {
       const up = B[side + 'UpperLeg'], lo = B[side + 'LowerLeg'], ft = B[side + 'Foot'];
@@ -863,7 +883,7 @@ export class Rider {
         if (this.seq?.pick === 'kick' && isBack) { state = 'hook'; A = 75; }                                        // kicking/catching the board
       } else {
         if (o && isBack && o.t > 0.28 && o.t < 0.42) { state = 'toe'; toeUp = 0.45; }                               // ollie pop: press the tail with the ball of the foot
-        const p = this.push; if (p && isBack && !p.abort) { const c1 = p.c1 ?? (p.c0 ?? 0.3 * p.T) + 0.3; if (p.t > c1 - 0.12 && p.t < c1 + 0.05) { state = 'toe'; toeUp = 0.5 * sstep(c1 - 0.12, c1, p.t); } }   // push toe-off
+        const p = this.push; if (p && isBack && !p.abort) { const c1 = p.c1 ?? (p.c0 ?? 0.3 * p.T) + 0.3; if (p.t > c1 - 0.15 && p.t < c1 + 0.15) { state = 'toe'; toeUp = 0.5 * sstep(c1 - 0.15, c1, p.t) * (1 - sstep(c1 + 0.03, c1 + 0.15, p.t)); } }   // push toe-off: heel rises, then rolls off the toes
       }
       const sickle = state === 'hang' ? air * 0.08 * (side === 'left' ? 1 : -1) : 0;   // a hanging foot inverts a touch; a pointed foot never sickles
       const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch * this.flip, yaw + this.yaw0, sickle, 'YXZ')));
@@ -881,6 +901,12 @@ export class Rider {
           setWorldQuat(ft, new Q().setFromUnitVectors(cur, tgt).multiply(ft.getWorldQuaternion(new Q()))); } }
       this['footHang_' + side] = state === 'hang' ? air : 0; this['footState_' + side] = state; this['fsAir_' + side] = state === 'toe' ? 1 : air;
       const toes = B[side + 'Toes']; if (toes) toes.quaternion.setFromAxisAngle(new V(1, 0, 0), (state === 'toe' ? -toeUp * 1.4 : state === 'hook' ? -0.25 * air : state === 'hang' ? 0.2 * air : 0) * this.flip);   // toes bend up when on tiptoe / hooked, curl a touch when hanging, straight when pointed
+      // no snapping between foot states: the foot's rotation relative to the shin follows its target with a short time
+      // constant (~50 ms) — state changes (tiptoe -> flat, flat -> hang, hang -> hook) used to jump up to 80° in one frame
+      { const kq = 'fq_' + side, tgt = ft.quaternion.clone();
+        if (!this[kq] || this.t - (this[kq + 't'] ?? -1) > 0.2) this[kq] = tgt.clone();
+        else this[kq].slerp(tgt, 1 - Math.exp(-dt * 12));
+        this[kq + 't'] = this.t; ft.quaternion.copy(this[kq]); }
       ft.updateMatrixWorld(true);
     }
   }
