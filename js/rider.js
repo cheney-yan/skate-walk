@@ -759,6 +759,7 @@ export class Rider {
     const P = this.push ? this.push.t / this.push.T : 0;
     const pr = this.push ? sstep(0.0, 0.25, P) * (1 - sstep(0.78, 1.0, P)) : 0;
     let lf = deck(0.015, 0.2 + pr * 0.04), rf = deck(-0.01, -0.21);
+    const toeRise = (side) => this['fs_' + side + 'Rise'] || 0;
     let rYaw = -78 * D, lYaw = lerp(-50 * D, -12 * D, pr);
     let rPitch = 0;
     if (this.dance && this.m < 0.5) {
@@ -837,23 +838,49 @@ export class Rider {
       twoBoneIK(up, lo, ft, target, pole);
       // foot flat on deck, toes angled
       const qb = this.deck.getWorldQuaternion(new Q()).slerp(this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 1, 0), 90 * D)), this.m);
-      // a foot OFF the deck/ground is not held flat: the ankle relaxes, toes drop and point (Peter Pan back foot hangs,
-      // a stepping foot leads with the toes). Lift = height of the ankle above the surface it would stand on.
+      // ---- FOOT STATE (Cheney): every foot is in ONE explicit state, chosen by what it is doing —
+      //  FLAT   bearing weight on deck/ground: sole follows the surface.
+      //  TOE    heel up, ball of the foot pressing (垫脚尖): walking/push toe-off, popping the tail in an ollie.
+      //  HOOK   dorsiflexed (勾脚), ankle ~75°: the foot is WORKING — dragging the nose in an ollie, kicking/catching the
+      //         board, reaching to land (heel strike / setting the foot back on the deck).
+      //  HANG   relaxed in the air (耷拉), ankle ~125°: gravity drops the toes, nothing held.
+      //  POINT  for beauty (脚尖弄平), ankle ~160°, foot continuing the shin line, no sickling: Peter Pan / Titanic back
+      //         leg, dance extensions.
+      // Ankle angle = angle between (ankle→knee) and (ankle→toes); 90° = neutral.
       let lift = 0;
-      if (this.m < 0.5) { const up = new V(0, 1, 0).applyQuaternion(this.deck.getWorldQuaternion(new Q())); lift = target.clone().sub(this.deck.localToWorld(new V(0, DECK_Y, 0))).dot(up) - ANK; }
-      const relax = sstep(0.025, 0.16, lift) * (1 - this.m);       // 0 on the deck .. 1 clearly in the air
-      const hang = 0;   // pointing is applied relative to the shin below
-      const sickle = relax * 0.12 * (side === 'left' ? 1 : -1);    // slight inversion of a relaxed foot
-      const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler((pitch + hang) * this.flip, yaw + this.yaw0, sickle, 'YXZ')));
+      if (this.m < 0.5) { const upv = new V(0, 1, 0).applyQuaternion(this.deck.getWorldQuaternion(new Q())); lift = target.clone().sub(this.deck.localToWorld(new V(0, DECK_Y, 0))).dot(upv) - ANK; }
+      else lift = target.y - ((this.groundFn ? this.groundFn(target.x, target.z) : this.walkF.position.y) + ANK);
+      const key = 'fs_' + side, prevLift = this[key + 'L'] ?? lift, vLift = (lift - prevLift) / Math.max(dt, 1e-3); this[key + 'L'] = lift;
+      const air = sstep(0.015, 0.06, lift);                     // 0 = on the surface .. 1 = clearly in the air
+      let state = 'flat', A = 90, toeUp = 0;
+      const o = this.ollie, dnc = this.dance && this.m < 0.5 ? this.danceFeet() : null, isBack = side === 'right';
+      if (air > 0.01) {
+        state = 'hang'; A = 125;
+        if (dnc && ((isBack && dnc.ry > 0.15) || (!isBack && dnc.ly > 0.15))) { state = 'point'; A = 160; }     // Peter Pan / extension
+        if (this.mode === 'walk' || (this.mode === 'on' && this.seq?.ph === 'run')) state = 'gait';               // gait pitch handles swing
+        if (o && !isBack && o.t > 0.36 && o.t < 0.6) { state = 'hook'; A = 72; }                                   // ollie: front foot drags the nose up
+        if (state === 'hang' && vLift < -0.25 && lift < 0.07) { state = 'hook'; A = lerp(125, 85, sstep(0.07, 0.02, lift)); }   // reaching down to land: toes up, heel first
+        if (this.seq?.pick === 'kick' && isBack) { state = 'hook'; A = 75; }                                        // kicking/catching the board
+      } else {
+        if (o && isBack && o.t > 0.28 && o.t < 0.42) { state = 'toe'; toeUp = 0.45; }                               // ollie pop: press the tail with the ball of the foot
+        const p = this.push; if (p && isBack && !p.abort) { const c1 = p.c1 ?? (p.c0 ?? 0.3 * p.T) + 0.3; if (p.t > c1 - 0.12 && p.t < c1 + 0.05) { state = 'toe'; toeUp = 0.5 * sstep(c1 - 0.12, c1, p.t); } }   // push toe-off
+      }
+      const sickle = state === 'hang' ? air * 0.08 * (side === 'left' ? 1 : -1) : 0;   // a hanging foot inverts a touch; a pointed foot never sickles
+      const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch * this.flip, yaw + this.yaw0, sickle, 'YXZ')));
       setWorldQuat(ft, qf);
-      if (relax > 0.01) {   // relaxed / pointed foot: rotate the foot toward the shin line (ankle ~140°, gently alive)
+      if (state === 'toe' && toeUp > 0) { /* heel up pivots on the ball of the foot: the ankle rises */ }
+      if (state === 'toe') { A = lerp(105, 135, toeUp / 0.5); }                    // tiptoe: plantar-flexed, heel up
+      const drive = state === 'toe' ? Math.min(1, toeUp * 2) : air;
+      if ((air > 0.01 || state === 'toe') && state !== 'gait') {
         ft.updateMatrixWorld(true); const toesB = B[side + 'Toes'];
-        if (toesB) { const kp = bw(lo), ap = bw(ft), tp = bw(toesB), shin = ap.clone().sub(kp).normalize(), fd = tp.clone().sub(ap).normalize();
-          const k = relax * (0.5 + 0.06 * Math.sin(this.t * 1.7 + (side === 'left' ? 0 : 1.3)));
-          const want = fd.clone().lerp(shin, k).normalize(), dq = new Q().setFromUnitVectors(fd, want);
-          setWorldQuat(ft, dq.multiply(ft.getWorldQuaternion(new Q()))); } }
-      this['footHang_' + side] = relax;
-      const toes = B[side + 'Toes']; if (toes) toes.quaternion.setFromAxisAngle(new V(1, 0, 0), relax * 0.25 * this.flip);   // toes curl a touch when pointed
+        if (toesB) { const kp = bw(lo), ap = bw(ft), tp = bw(toesB), up2 = kp.clone().sub(ap).normalize(), fd = tp.clone().sub(ap).normalize();
+          const fperp = fd.clone().addScaledVector(up2, -fd.dot(up2)); if (fperp.lengthSq() < 1e-6) fperp.set(0, 0, 1).applyQuaternion(qf); fperp.normalize();
+          const alive = state === 'hang' ? 4 * Math.sin(this.t * 1.7 + (isBack ? 1.3 : 0)) : 0;
+          const Ar = (A + alive) * D, want = up2.clone().multiplyScalar(Math.cos(Ar)).addScaledVector(fperp, Math.sin(Ar)).normalize();
+          const cur = fd, tgt = cur.clone().lerp(want, drive).normalize();
+          setWorldQuat(ft, new Q().setFromUnitVectors(cur, tgt).multiply(ft.getWorldQuaternion(new Q()))); } }
+      this['footHang_' + side] = state === 'hang' ? air : 0; this['footState_' + side] = state; this['fsAir_' + side] = state === 'toe' ? 1 : air;
+      const toes = B[side + 'Toes']; if (toes) toes.quaternion.setFromAxisAngle(new V(1, 0, 0), (state === 'toe' ? -toeUp * 1.4 : state === 'hook' ? -0.25 * air : state === 'hang' ? 0.2 * air : 0) * this.flip);   // toes bend up when on tiptoe / hooked, curl a touch when hanging, straight when pointed
       ft.updateMatrixWorld(true);
     }
   }

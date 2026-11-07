@@ -112,6 +112,7 @@ function restyle(vrm) {
     for (const o of [...meshesByMat(vrm, 'Shoes'), ...meshesByMat(vrm, 'Body')]) { const P = o.geometry.attributes.position, Y = 0.058, K = 0.42;
       for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y) P.setY(i, Y - (Y - y) * K); }
       P.needsUpdate = true; o.geometry.computeBoundingSphere(); }
+    fullerLegs(vrm, Number(new URLSearchParams(location.search).get('legk') ?? 1));
     for (const m of matsByName(vrm, 'Body')) { if (!/Outline/.test(m.name)) legForm(m); }   // rounded knee / shin shading
     addHairFlutter(vrm);
     // edges of the heavy cloth (jacket hem, cuffs, collar; skirt hem) flutter a little, faster with speed (shader below)
@@ -187,6 +188,36 @@ export function flutterUpdate(airWorld, t) {
     (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.userData.uWind?.value.copy(wl)); }
 }
 
+
+// HEALTHIER LEGS (Cheney): a little fuller, with soft muscle shape — thigh (quads front/outer, hamstring back), calf belly
+// high on the back of the shin, slimmer at knee and ankle. Done on the bind-pose mesh: every leg vertex moves out from
+// its leg's centre axis by a small profile; skinning then carries it. Shaped, not inflated (knee/ankle stay slim).
+function fullerLegs(vrm, K = 1) {
+  if (K <= 0) return; const H = vrm.humanoid; vrm.scene.updateMatrixWorld(true);
+  const P3 = (n) => H.getRawBoneNode(n).getWorldPosition(new THREE.Vector3());
+  const legs = ['left', 'right'].map((s) => ({ hip: P3(s + 'UpperLeg'), knee: P3(s + 'LowerLeg'), ank: P3(s + 'Foot') }));
+  const g = (x, c, w) => Math.exp(-(((x - c) / w) ** 2));
+  for (const o of meshesByMat(vrm, 'Body')) { const Pa = o.geometry.attributes.position, inv = o.matrixWorld.clone().invert(), M = o.matrixWorld;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < Pa.count; i++) { v.fromBufferAttribute(Pa, i).applyMatrix4(M);
+      if (v.y > legs[0].hip.y + 0.02 || v.y < legs[0].ank.y - 0.02) continue;
+      const L = Math.abs(v.x - legs[0].knee.x) < Math.abs(v.x - legs[1].knee.x) ? legs[0] : legs[1];
+      const upper = v.y > L.knee.y, a = upper ? L.hip : L.knee, b = upper ? L.knee : L.ank;
+      const ab = b.clone().sub(a), t = Math.max(0, Math.min(1, v.clone().sub(a).dot(ab) / ab.lengthSq())), c = a.clone().addScaledVector(ab, t);
+      const rad = v.clone().sub(c); const r = rad.length(); if (r < 1e-4 || r > 0.12) continue; rad.divideScalar(r);
+      const fwd = rad.z, out = Math.sign(v.x - L.knee.x) * rad.x, back = -rad.z;   // model faces +z
+      let s;
+      if (upper) { const u = 1 - t;   // 0 at knee .. 1 at hip
+        s = 0.045 * g(u, 0.55, 0.32) * (0.75 + 0.35 * Math.max(0, fwd) + 0.25 * Math.max(0, out) + 0.15 * Math.max(0, back))   // quads/outer thigh
+          + 0.02 * g(u, 0.15, 0.1) * Math.max(0, fwd) * Math.max(0, out) * 2                                                   // vastus lateralis above the knee
+          - 0.012 * g(u, 0.02, 0.05); }                                                                                        // knee stays slim
+      else { const u = t;   // 0 at knee .. 1 at ankle
+        s = 0.06 * g(u, 0.28, 0.17) * (0.35 + 0.95 * Math.max(0, back) + 0.2 * Math.max(0, out))                               // calf belly, high & back
+          + 0.012 * g(u, 0.35, 0.25) * Math.max(0, fwd)                                                                       // tibialis, faint
+          - 0.008 * g(u, 0.95, 0.1); }                                                                                         // slim ankle
+      const nv = v.addScaledVector(rad, r * s * K).applyMatrix4(inv); Pa.setXYZ(i, nv.x, nv.y, nv.z); }
+    Pa.needsUpdate = true; o.geometry.computeVertexNormals(); o.geometry.computeBoundingSphere(); }
+}
 // HAIR EDGE FLUTTER (Cheney): the main mass stays on the spring bones; the loose ends — the last few cm of every card,
 // short side locks, bangs — flutter fast. Flag physics: flapping frequency f ≈ St·U/L (U = relative air speed incl. wind,
 // L = free length of that lock): short locks shiver faster than the long tail, everything speeds up with speed and wind.
@@ -231,9 +262,9 @@ function legForm(m) {
     m.userData.legV = sh.vertexShader.includes('vLeg = 1.0');
     sh.fragmentShader = 'varying float vLeg; varying vec3 vNv; varying vec3 vVd;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
       { float ndv = clamp(dot(normalize(vNv), normalize(vVd)), 0.0, 1.0);
-        gl_FragColor.rgb *= 1.0 - vLeg * 0.3 * pow(1.0 - ndv, 1.4);
-        gl_FragColor.rgb += vLeg * vec3(1.0, 0.93, 0.88) * 0.1 * pow(ndv, 5.0); }`);
-    m.userData.legOK = sh.fragmentShader.includes('vLeg * 0.3') && m.userData.legV; };
+        gl_FragColor.rgb *= 1.0 - vLeg * 0.26 * pow(1.0 - ndv, 1.6);
+        gl_FragColor.rgb += vLeg * vec3(1.0, 0.93, 0.88) * 0.08 * pow(ndv, 6.0); }`);
+    m.userData.legOK = sh.fragmentShader.includes('vLeg * 0.26') && m.userData.legV; };
   m.customProgramCacheKey = () => 'legform';
 }
 
