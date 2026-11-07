@@ -317,7 +317,7 @@ const pdata = []; for (let i = 0; i < PN; i++) pdata.push({ p: new THREE.Vector3
 scene.add(petals);
 
 // ---------------- girl ----------------
-let vrm, rider, skirt, hair, hat;
+let vrm, rider, skirt, skirt2 = null, hair, hat;
 const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: RD ? undefined : 999, camera };
 async function init() {
   const M = { shino: './models/shino.vrm', sample: './models/girl.vrm' };
@@ -325,7 +325,12 @@ async function init() {
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
   const SD = OUTFIT === 'sundress' || OUTFIT === 'shirt';   // reference look: knee-length floral sundress, no hat, hair fully free
-  skirt = new Skirt(vrm, scene, OUTFIT === 'shirt' ? { top: 1.06, hem: 0.5, rows: 15, cols: 40, flare: 0.62, maxSwing: 64, airGain: 0.95 } : SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
+  if (OUTFIT === 'shirt') {
+    // the open shirt: tails sewn at the ribs, open at the front, flying free over a soft white pleated mini skirt (leggings underneath)
+    skirt2 = new Skirt(vrm, scene, { style: 'shirt', pin: 'upperChest', open: 0.62, top: 1.2, hem: 0.66, rows: 16, cols: 34, flare: 0.22, maxSwing: 92, airGain: 1.3, soft: 0.45,
+      extraCaps: (w, B, mid, hip, sp) => [[sp, mid.clone().lerp(hip, 0.4), 0.19]] });
+  }
+  skirt = new Skirt(vrm, scene, OUTFIT === 'shirt' ? { style: 'pleat', top: 0.93, hem: 0.69, rows: 9, cols: 44, flare: 0.95, maxSwing: 84, airGain: 1.1, soft: 0.35 } : SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
   hat = SD ? { step() {} } : new Hat(vrm, scene);
   addWristGuards(vrm);
   rider = new Rider(vrm, scene); rider.track = track;
@@ -339,7 +344,7 @@ function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
   lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
   rider.update(1 / 60, (s) => track.at(s), ctx);
-  skirt.inited = false; vrm.springBoneManager?.reset?.();
+  skirt.inited = false; if (skirt2) skirt2.inited = false; vrm.springBoneManager?.reset?.();
 }
 function windTarget(s) {
   if (RD) return new THREE.Vector3(-2.2 - 1.2 * Math.sin(s * 0.013), 0, 0.6 * Math.sin(s * 0.021));   // onshore sea breeze from the east
@@ -466,14 +471,14 @@ function sunFollow(base) {
     sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
     sun.color.set('#ffc98a'); sun.intensity = 2.9; hemi.color.set('#ffe2c4'); hemi.groundColor.set('#b89a72'); hemi.intensity = 1.25;
     scene.fog.color.set('#f4d9bd'); renderer.toneMappingExposure = 1.05; window.__sky.uniforms.uWarm.value = 1; window.__sky.uniforms.uSun.value.copy(sdir).setY(0.06);
-    if (skirt) skirt.rimU.value.set(0.75, 0.52, 0.3);
+    if (skirt) skirt.rimU.value.set(0.75, 0.52, 0.3); if (skirt2) skirt2.rimU.value.set(0.6, 0.45, 0.3);
     seaU.uSun.value.copy(sdir); seaU.uSunCol.value.set('#ffcf98'); seaU.uSky.value.set('#c9d6e0'); seaU.uFog.value.copy(scene.fog.color);
     rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2;
   } else {
     sun.position.copy(base).add(new THREE.Vector3(-6, 12, -4)); sun.target.position.copy(base);
     sun.color.set('#ffe9c8'); sun.intensity = 2.5; hemi.color.set('#eef6ff'); hemi.groundColor.set('#d8c49a'); hemi.intensity = 1.4;
     seaU.uSun.value.set(0.55, 0.75, -0.2).normalize(); seaU.uSunCol.value.set('#fff3dc'); seaU.uSky.value.set('#a8cdea');
-    scene.fog.color.set('#d6ebf5'); seaU.uFog.value.set('#d6ebf5'); renderer.toneMappingExposure = 1.12; window.__sky.uniforms.uWarm.value = 0; if (skirt) skirt.rimU.value.set(0, 0, 0); rimLight.intensity = 0;
+    scene.fog.color.set('#d6ebf5'); seaU.uFog.value.set('#d6ebf5'); renderer.toneMappingExposure = 1.12; window.__sky.uniforms.uWarm.value = 0; if (skirt) skirt.rimU.value.set(0, 0, 0); if (skirt2) skirt2.rimU.value.set(0, 0, 0); rimLight.intensity = 0;
   }
 }
 
@@ -492,8 +497,9 @@ function step(dt) {
   ctx.wind = windGust;
   rider.update(dt, (s) => track.at(s), ctx);
   hair.update(rider.airRel, simT);
-  skirt.setBoard(rider.board, !!rider.hold || rider.mode === 'off' || rider.mode === 'on');
-  skirt.step(dt, windGust, simT);
+  const nearBoard = !!rider.hold || rider.mode === 'off' || rider.mode === 'on';
+  skirt.setBoard(rider.board, nearBoard); skirt.step(dt, windGust, simT);
+  if (skirt2) { skirt2.setBoard(rider.board, nearBoard); skirt2.step(dt, windGust, simT); }
   hat.step(dt, rider.airRel, simT);
   if (rider.s > track.total - 2) restart();
   // petals
@@ -588,7 +594,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 
 // deterministic recording hooks
 window.LAB = {
-  scene, THREE, rider: () => rider, track, skirt: () => skirt, vrm: () => vrm, camera,
+  scene, THREE, rider: () => rider, track, skirt: () => skirt, skirt2: () => skirt2, vrm: () => vrm, camera,
   setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },

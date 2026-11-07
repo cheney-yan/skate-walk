@@ -139,16 +139,42 @@ function restyleShirt(vrm) {
   for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {   // bare legs (stock texture has black tights)
     const c = texToCanvas(m[k]), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height, sk = k === 'map' ? SKIN : [235, 190, 180];
     for (let y = Math.floor(H * 0.6); y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, lum = (p[i] + p[i + 1] + p[i + 2]) / 3; if (lum < 150) { const f = Math.min(1, (150 - lum) / 60); for (let j = 0; j < 3; j++) p[i + j] = p[i + j] * (1 - f) + sk[j] * f; } }
-    // the visible blouse is painted on the BODY texture (white, unsaturated) -> dye it the shirt's pale sky blue
-    const blue = k === 'map' ? [150, 194, 236] : [118, 156, 200];
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, r0 = p[i], g0 = p[i + 1], b0 = p[i + 2], mx = Math.max(r0, g0, b0), mn = Math.min(r0, g0, b0);
-      if (mx > 170 && mx - mn < 22 && b0 >= r0 - 4) { const l = mx / 255; for (let j = 0; j < 3; j++) p[i + j] = blue[j] * (0.75 + 0.25 * l); } }
     g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); m.needsUpdate = true;
   }
   const tint = (m, k, rgb, lo) => { const c = texToCanvas(m[k]), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data;
     for (let i = 0; i < p.length; i += 4) { const l = (p[i] + p[i + 1] + p[i + 2]) / 765, s = lo + (1 - lo) * Math.min(1, l * 1.5); for (let j = 0; j < 3; j++) p[i + j] = rgb[j] * s; }
     g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); };
-  for (const m of [...matsByName(vrm, 'Tops'), ...matsByName(vrm, 'Accessory')]) { if (m.color) m.color.set('#ffffff'); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.72, 0.84, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.5, 0.62, 0.82); if (m.map) tint(m, 'map', [128, 180, 230], 0.6); if (m.shadeMultiplyTexture) tint(m, 'shadeMultiplyTexture', [128, 168, 205], 0.8); m.needsUpdate = true; }
+  // body regions by bind-pose position (mesh space: +z = front, y = height, arms out along ±x at ~1.25 m)
+  // the body is split into several primitives (torso, arms, legs...) that share one texture: paint ALL of them
+  const bodies = meshesByMat(vrm, 'Body');
+  if (bodies.length) {
+    let P;
+    const zone = (a, b, c) => { const x = (P.getX(a) + P.getX(b) + P.getX(c)) / 3, y = (P.getY(a) + P.getY(b) + P.getY(c)) / 3, z = (P.getZ(a) + P.getZ(b) + P.getZ(c)) / 3, ax = Math.abs(x);
+      if (y > 1.13 && ax > 0.15) {                                  // arm
+        if (ax < 0.3) return 'sleeve'; if (ax < 0.345) return 'cuff'; return null; }
+      if (y > 0.985 && y < 1.37 && ax <= 0.17) {                   // torso
+        const front = z > -0.035;
+        if (front && ax < 0.105) return y > 1.15 && y < 1.255 ? 'bandeau' : 'skin';   // open front: bandeau, bare waist + collarbones (the stock texture is blank under the old blouse)
+        if (front && y > 1.15 && y < 1.255 && ax < 0.13) return 'bandeau';
+        return y < 1.36 ? 'shirt' : null; }
+      if (y > 0.66 && y <= 0.985) return 'legging';                 // bike-short leggings under the skirt
+      return null; };
+    const COL = { map: { skin: '#f8dac7', shirt: '#7fb3e6', sleeve: '#7fb3e6', cuff: '#b9d6f2', bandeau: '#fbf7f2', legging: '#2a3046' },
+                  shadeMultiplyTexture: { skin: '#ebbeb4', shirt: '#5f8fc4', sleeve: '#5f8fc4', cuff: '#94b6da', bandeau: '#ddd6d0', legging: '#1d2133' } };
+    for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {
+      const c = texToCanvas(m[k]), g = c.getContext('2d'), W = c.width, H = c.height;
+      g.lineWidth = 2.5; g.lineJoin = 'round';
+      for (const body of bodies) { P = body.geometry.attributes.position; const uv = body.geometry.attributes.uv, idx = body.geometry.index, n = idx ? idx.count : P.count; if (!uv) continue;
+      for (let q = 0; q < n; q += 3) { const a = idx ? idx.getX(q) : q, b = idx ? idx.getX(q + 1) : q + 1, cc = idx ? idx.getX(q + 2) : q + 2; const zn = zone(a, b, cc); if (!zn) continue;
+        (window.__zones = window.__zones || {})[zn] = (window.__zones[zn] || 0) + 1;
+        g.fillStyle = g.strokeStyle = COL[k][zn]; g.beginPath(); g.moveTo(uv.getX(a) * W, uv.getY(a) * H); g.lineTo(uv.getX(b) * W, uv.getY(b) * H); g.lineTo(uv.getX(cc) * W, uv.getY(cc) * H); g.closePath(); g.fill(); g.stroke(); }
+      }
+      m[k] = canvasTex(c, m[k]); m.needsUpdate = true;
+    }
+  }
+  for (const m of [...matsByName(vrm, 'Tops'), ...matsByName(vrm, 'Accessory')]) { m.visible = false; }   // the stock blouse is replaced by the open shirt
+  for (const m of matsByName(vrm, 'Bottoms')) { if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.17, 0.19, 0.27); if (m.color) m.color.set('#2a3046'); m.needsUpdate = true; }
+  for (const m of []) { if (m.color) m.color.set('#ffffff'); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.72, 0.84, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.5, 0.62, 0.82); if (m.map) tint(m, 'map', [128, 180, 230], 0.6); if (m.shadeMultiplyTexture) tint(m, 'shadeMultiplyTexture', [128, 168, 205], 0.8); m.needsUpdate = true; }
   for (const m of matsByName(vrm, 'Bottoms')) { if (m.map) m.map = lighten(m.map, 228, 0.15); m.needsUpdate = true; }
   for (const m of matsByName(vrm, 'Shoes')) { if (m.map) m.map = lighten(m.map, 236, 0.12); if (m.shadeMultiplyTexture) m.shadeMultiplyTexture = lighten(m.shadeMultiplyTexture, 205, 0.12); m.needsUpdate = true; }
 }
@@ -223,7 +249,8 @@ export class Skirt {
   constructor(vrm, scene, opt = {}) {
     this.vrm = vrm; this.R = opt.rows || 14; this.C = opt.cols || 30;
     const hum = vrm.humanoid;
-    this.hips = hum.getNormalizedBoneNode('hips');
+    this.hips = hum.getNormalizedBoneNode(opt.pin || 'hips');   // the bone the top ring is sewn to
+    this.opt = opt; this.open = opt.open || 0;
     this.bones = ['leftUpperLeg', 'leftLowerLeg', 'leftFoot', 'rightUpperLeg', 'rightLowerLeg', 'rightFoot', 'hips', 'spine', 'leftLowerArm', 'leftHand', 'rightLowerArm', 'rightHand'].reduce((o, n) => (o[n] = hum.getNormalizedBoneNode(n), o), {});
     vrm.scene.updateMatrixWorld(true);
     const hipRest = new THREE.Vector3(); this.hips.getWorldPosition(hipRest);
@@ -236,6 +263,9 @@ export class Skirt {
       for (let i = 0; i < p.count; i += 1) { v3.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); if (v3.y > 0.3 && v3.y < 1.08) verts.push(v3.x, v3.y, v3.z); }
     });
     const cx = hipRest.x, cz = hipRest.z;
+    // which way is 'front' (bind pose): toes point forward
+    const tw = hum.getRawBoneNode('leftToes')?.getWorldPosition(new THREE.Vector3()), fw = hum.getRawBoneNode('leftFoot')?.getWorldPosition(new THREE.Vector3());
+    const fa = tw && fw ? Math.atan2(tw.z - fw.z, tw.x - fw.x) : Math.PI / 2;
     const invHips = this.hips.matrixWorld.clone().invert();
     const C = this.C, R = this.R;
     const y0 = opt.top ?? 1.0, y1 = opt.hem ?? 0.40;
@@ -250,6 +280,7 @@ export class Skirt {
       return r;
     };
     const rTop = radAt(y0 - 0.03, y0 + 0.03);
+    const rWaist = radAt(1.0, 1.12);
     const rHip = radAt(0.78, 0.97);
     this.local = []; // rest positions in hips space
     this.rest = [];
@@ -258,8 +289,10 @@ export class Skirt {
     for (let r = 0; r < R; r++) {
       const f = r / (R - 1), y = y0 + (y1 - y0) * f;
       for (let c = 0; c < C; c++) {
-        const a = (c / C) * Math.PI * 2;
+        // open garments span the arc that leaves a gap of ±open around the front
+        const a = this.open ? fa + this.open + (c / (C - 1)) * (Math.PI * 2 - 2 * this.open) : (c / C) * Math.PI * 2;
         let rad = rTop[c] + 0.014;
+        if (y < 1.13) rad = Math.max(rad, rWaist[c] + 0.03);
         if (y < 0.97) rad = Math.max(rad, rHip[c] + 0.025);
         rad += Math.max(0, (y0 - y) - 0.05) * (opt.flare ?? 0.42);
         this.local.push(new THREE.Vector3(cx + Math.cos(a) * rad, y, cz + Math.sin(a) * rad).applyMatrix4(invHips));
@@ -271,10 +304,11 @@ export class Skirt {
     const d = (a, b) => this.local[a].distanceTo(this.local[b]);
     for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
       const a = id(r, c);
-      cons.push([a, id(r, c + 1), d(a, id(r, c + 1)), 1]);
-      if (r + 1 < R) { cons.push([a, id(r + 1, c), d(a, id(r + 1, c)), 1]); cons.push([a, id(r + 1, c + 1), d(a, id(r + 1, c + 1)), 0.5]); cons.push([a, id(r + 1, c - 1), d(a, id(r + 1, c - 1)), 0.5]); }
-      if (r + 2 < R) cons.push([a, id(r + 2, c), d(a, id(r + 2, c)), 0.25]);
-      if (c % 2 === 0) cons.push([a, id(r, c + 2), d(a, id(r, c + 2)), 0.3]);
+      const sb = opt.soft ?? 1, okR = !this.open || c < C - 1, okL = !this.open || c > 0, ok2 = !this.open || c < C - 2;
+      if (okR) cons.push([a, id(r, c + 1), d(a, id(r, c + 1)), 1]);
+      if (r + 1 < R) { cons.push([a, id(r + 1, c), d(a, id(r + 1, c)), 1]); if (okR) cons.push([a, id(r + 1, c + 1), d(a, id(r + 1, c + 1)), 0.5 * sb]); if (okL) cons.push([a, id(r + 1, c - 1), d(a, id(r + 1, c - 1)), 0.5 * sb]); }
+      if (r + 2 < R) cons.push([a, id(r + 2, c), d(a, id(r + 2, c)), 0.25 * sb]);
+      if (c % 2 === 0 && ok2) cons.push([a, id(r, c + 2), d(a, id(r, c + 2)), 0.3 * sb]);
     }
     this.cons = cons;
     this.maxDist = this.local.map((v, i) => v.distanceTo(this.local[i % C]) * 1.04);
@@ -284,7 +318,7 @@ export class Skirt {
     this.vpos = new Float32Array(R * vC * 3);
     const uvs = new Float32Array(R * vC * 2), idx = [];
     for (let r = 0; r < R; r++) for (let c = 0; c <= C; c++) { uvs[(r * vC + c) * 2] = c / C; uvs[(r * vC + c) * 2 + 1] = r / (R - 1); }
-    for (let r = 0; r < R - 1; r++) for (let c = 0; c < C; c++) { const a = r * vC + c, b = a + 1, e = a + vC, f2 = e + 1; idx.push(a, e, b, b, e, f2); }
+    for (let r = 0; r < R - 1; r++) for (let c = 0; c < (this.open ? C - 1 : C); c++) { const a = r * vC + c, b = a + 1, e = a + vC, f2 = e + 1; idx.push(a, e, b, b, e, f2); }
     geo.setAttribute('position', new THREE.BufferAttribute(this.vpos, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
     geo.setIndex(idx);
@@ -294,15 +328,18 @@ export class Skirt {
     // hem shading: slightly translucent-looking lower edge via uv-based tint
     this.rimU = { value: new THREE.Color(0, 0, 0) };
     const mat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: grad, side: THREE.DoubleSide, transparent: true });
-    this.floral = OUTFIT === 'sundress'; this.shirt = OUTFIT === 'shirt';
-    if (this.shirt) mat.color.set('#6fa6dc');
+    this.style = opt.style || (OUTFIT === 'sundress' ? 'floral' : 'plain');
+    this.floral = this.style === 'floral'; this.shirt = this.style === 'shirt'; this.pleat = this.style === 'pleat';
+    if (this.shirt) mat.color.set('#7fb3e6');
     if (this.floral) { const ft = new THREE.CanvasTexture(floralCanvas(1024, 512, 1.0, 5)); ft.colorSpace = THREE.SRGBColorSpace; ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.repeat.set(3, 1); ft.anisotropy = 4; mat.map = ft; }
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <uv_pars_vertex>', '#include <uv_pars_vertex>\nvarying vec2 vSk;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvSk = uv;');
       sh.uniforms.uRim = this.rimU; sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>\nvarying vec2 vSk;\nuniform vec3 uRim;')
         .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + (this.shirt ?
-          // shirt tail (pale blue linen, faint weave) over a short white pleated skirt that peeks out below the hem band
-          ' float wv = 0.97 + 0.03 * sin(vSk.x * 3.14159 * 220.0) * sin(vSk.y * 90.0); gl_FragColor.rgb *= wv; float sk = smoothstep(0.86, 0.89, vSk.y) + (gl_FrontFacing ? 0.0 : step(0.86, vSk.y)); sk = clamp(sk, 0., 1.); float pl = 0.86 + 0.14 * abs(sin(vSk.x * 3.14159 * 48.0)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.985, 0.98, 0.975) * pl, sk); gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * 0.82, (1. - sk) * smoothstep(0.82, 0.86, vSk.y));' : '') + (this.floral ?
+          // shirt tails: pale blue linen with a faint weave, a slightly darker placket along the open front edges, stitched hem
+          ' float wv = 0.97 + 0.03 * sin(vSk.x * 3.14159 * 220.0) * sin(vSk.y * 90.0); gl_FragColor.rgb *= wv; float edge = 1.0 - smoothstep(0.0, 0.035, min(vSk.x, 1.0 - vSk.x)); gl_FragColor.rgb *= 1.0 - 0.1 * edge; gl_FragColor.rgb *= 1.0 - 0.08 * smoothstep(0.93, 0.97, vSk.y);' : '') + (this.pleat ?
+          // soft white pleated skirt: knife pleats as light/shadow stripes, deeper at the hem where they open
+          ' float pl = 0.84 + 0.16 * abs(sin(vSk.x * 3.14159 * 56.0)) ; gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * pl, 0.4 + 0.6 * vSk.y);' : '') + (this.floral ?
           // sundress: inside (and the last band) is the white ruffled petticoat with a scalloped lace edge
           ' float pet = gl_FrontFacing ? 0.0 : 1.0; float sc = 0.955 + 0.03 * abs(sin(vSk.x * 3.14159 * 72.0)); pet = max(pet, step(sc, vSk.y)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.98, 0.97, 0.95) * (0.82 + 0.18 * abs(sin(vSk.x * 3.14159 * 144.0))) * (gl_FrontFacing ? 1.0 : 0.9), pet);' : '') + '\n float hem = smoothstep(0.78, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, min(vec3(1.), gl_FragColor.rgb*vec3(1.02,1.02,1.05)+0.04), hem); gl_FragColor.a = mix(0.97, 0.72, hem); vec3 vd = normalize(vViewPosition); float fr = pow(1.0 - abs(dot(normalize(vNormal), vd)), 2.5); gl_FragColor.rgb += uRim * (fr * 0.9 + hem * 0.35);');
     };
@@ -332,6 +369,7 @@ export class Skirt {
       [lU.clone().lerp(mid, 0.25), lL, 0.082], [lL, lF, 0.058],
       [rU.clone().lerp(mid, 0.25), rL, 0.082], [rL, rF, 0.058],
       [w(B.leftLowerArm), w(B.leftHand), 0.04], [w(B.rightLowerArm), w(B.rightHand), 0.04],
+      ...(this.opt.extraCaps ? this.opt.extraCaps(w, B, mid, hip, sp) : []),
     ];
   }
   // air(world vec3): wind velocity in world; groundY(x,z) for floor collision
