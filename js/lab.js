@@ -324,8 +324,8 @@ async function init() {
   vrm = await loadGirl(M[Q.get('m') || 'shino'] || M.shino);
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
-  const SD = OUTFIT === 'sundress';   // reference look: knee-length floral sundress, no hat, hair fully free
-  skirt = new Skirt(vrm, scene, SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
+  const SD = OUTFIT === 'sundress' || OUTFIT === 'shirt';   // reference look: knee-length floral sundress, no hat, hair fully free
+  skirt = new Skirt(vrm, scene, OUTFIT === 'shirt' ? { top: 1.06, hem: 0.5, rows: 15, cols: 40, flare: 0.62, maxSwing: 64, airGain: 0.95 } : SD ? { top: 0.985, hem: 0.5, rows: 14, cols: 40, flare: 0.75, maxSwing: 62, airGain: 0.9 } : { top: 0.985, hem: 0.27, rows: 18, cols: 36, flare: 0.5, maxSwing: 58, airGain: 0.75 });
   hat = SD ? { step() {} } : new Hat(vrm, scene);
   addWristGuards(vrm);
   rider = new Rider(vrm, scene); rider.track = track;
@@ -336,7 +336,7 @@ async function init() {
 }
 let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
-  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
+  rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
   lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
   rider.update(1 / 60, (s) => track.at(s), ctx);
   skirt.inited = false; vrm.springBoneManager?.reset?.();
@@ -353,9 +353,10 @@ function windTarget(s) {
 function caption() {
   const r = rider, { g } = track.segAt(r.s);
   let a = g[3] || '巡航';
-  if (r.mode === 'off') a = r.seq?.ph === 'brake' ? ({ slide: '板打横刹停', heel: '脚后跟蹭地刹车', roll: '慢慢滑停' })[r.seq.kind] + ({ steep: '（前面坡太陡）', long: '（坡太长，力气不够）', tired: '（没力气了）' })[r.offWhy] || '' : r.seq?.pick === 'kick' ? '踢板，转一圈接住' : '弯腰捡板';
-  else if (r.mode === 'walk') a = '拿着板走路' + ({ steep: '（陡坡）', long: '（长坡，走上去）', tired: '（歇一歇）' })[r.offWhy];
-  else if (r.mode === 'on') a = '放板，上板';
+  if (r.mode === 'off') a = r.seq?.ph === 'brake' ? ({ slide: '板打横刹停', heel: '脚后跟蹭地刹车', roll: '慢慢滑停' })[r.seq.kind] + ({ steep: '（前面坡太陡）', long: '（坡太长，力气不够）', tired: '（没力气了）', slow: '（速度起不来）' })[r.offWhy] || '' : r.seq?.pick === 'kick' ? '踢板，转一圈接住' : '弯腰捡板';
+  else if (r.mode === 'walk') a = '拿着板走路' + ({ steep: '（陡坡）', long: '（长坡，走上去）', tired: '（歇一歇）', slow: '（速度起不来，走一段）' })[r.offWhy];
+  else if (r.mode === 'on') a = r.seq?.ph === 'run' ? '助跑几步' : r.seq?.ph === 'step' ? '跳上板' : '放板';
+  else if (r.dance) a = r.dance.t < 1.8 ? '交叉步走到板头' : r.dance.t < 4.4 ? 'Peter Pan 单脚滑行' : '交叉步走回来';
   else if (r.ollie?.kind === 'shove') a = r.ollie.why === 'speed' ? '太快了，飞板耗点力减速' : '蓄力满了，飞板！';
   else if (r.ollie) a = 'Ollie 跳过坑';
   else if (r.look) a = '回头看你一眼';
@@ -372,8 +373,11 @@ function caption() {
 function stamHUD() {
   const r = rider, f = r.stam;
   $('stamF').style.width = (f * 100).toFixed(1) + '%';
+  const vm = ctx.vmax ?? 6, sp = Math.min(1, (r.v * r.v) / (vm * vm));   // speed bar = kinetic energy share of the top speed
+  $('spdF').style.width = (sp * 100).toFixed(1) + '%';
+  $('spdT').textContent = `💨 速度 ${(r.v * 3.6).toFixed(1)} km/h · 动能 ${(0.5 * 52 * r.v * r.v / 1000).toFixed(2)} kJ`;
   $('stamF').style.background = f > 0.999 ? 'linear-gradient(90deg,#ffb36b,#ff7a59)' : f < 0.15 ? '#e8a0a0' : 'linear-gradient(90deg,#9fd8c8,#6cbfb0)';
-  const pl = r.plan; $('stamT').textContent = `🪶 ${Math.round(f * EMAX / 1000 * 10) / 10} / ${EMAX / 1000} kJ` + (pl && pl.kind !== 'flat' && pl.start < 60 ? ` · 前方坡 ${Math.round(pl.L)}m 需 ${(pl.need / 1000).toFixed(1)}kJ` : '');
+  const pl = r.plan; $('stamT').textContent = `🪶 耐力 ${Math.round(f * EMAX / 1000 * 10) / 10} / ${EMAX / 1000} kJ` + (pl && pl.kind !== 'flat' && pl.start < 60 ? ` · 前方坡 ${Math.round(pl.L)}m 需 ${(pl.need / 1000).toFixed(1)}kJ` : '');
 }
 // ---------------- camera ----------------
 let camMode = Q.get('cam') || 'chase', camInit = false;
@@ -486,6 +490,7 @@ function step(dt) {
   ctx.wind = windGust;
   rider.update(dt, (s) => track.at(s), ctx);
   hair.update(rider.airRel, simT);
+  skirt.setBoard(rider.board, !!rider.hold || rider.mode === 'off' || rider.mode === 'on');
   skirt.step(dt, windGust, simT);
   hat.step(dt, rider.airRel, simT);
   if (rider.s > track.total - 2) restart();

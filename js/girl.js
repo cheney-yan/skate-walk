@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '../vendor/three-vrm.module.min.js';
 
-export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'sundress';
+export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'shirt';
 export async function loadGirl(url) {
   const loader = new GLTFLoader();
   loader.register((p) => new VRMLoaderPlugin(p));
@@ -19,9 +19,18 @@ export async function loadGirl(url) {
   if (vrm.userData.vrm0) VRMUtils.rotateVRM0(vrm);
   vrm.scene.traverse((o) => { o.frustumCulled = false; });
   restyle(vrm);
+  if (OUTFIT === 'shirt') proportions(vrm);
   return vrm;
 }
 
+// longer legs (+6% shin, +4% thigh) — done on the raw skeleton before anything measures the body, so IK, skirt and stance all see the new lengths
+function proportions(vrm) {
+  const H = vrm.humanoid, K = Number(new URLSearchParams(location.search).get('legs') || 1);
+  for (const [n, f] of [['leftLowerLeg', 1.04], ['rightLowerLeg', 1.04], ['leftFoot', 1.06], ['rightFoot', 1.06]]) {
+    const b = H.getRawBoneNode(n); if (b) b.position.multiplyScalar(1 + (f - 1) * K);
+  }
+  vrm.scene.updateMatrixWorld(true);
+}
 // ---------- texture helpers ----------
 function texToCanvas(tex) {
   const img = tex.image, c = document.createElement('canvas');
@@ -99,6 +108,7 @@ function matsByName(vrm, key) {
 export const STOCKING_TOP = 0.80; // metres in bind pose (thigh-high)
 function restyle(vrm) {
   if (OUTFIT === 'sundress') return restyleSundress(vrm);
+  if (OUTFIT === 'shirt') return restyleShirt(vrm);
   // white stockings: every body triangle fully below the stocking top
   const body = meshesByMat(vrm, 'Body')[0];
   if (body) {
@@ -123,6 +133,25 @@ function restyle(vrm) {
   }
 }
 
+// long pale-blue linen shirt worn loose over a short white pleated skirt; bare legs, white sneakers
+function restyleShirt(vrm) {
+  const SKIN = [248, 218, 199];
+  for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {   // bare legs (stock texture has black tights)
+    const c = texToCanvas(m[k]), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height, sk = k === 'map' ? SKIN : [235, 190, 180];
+    for (let y = Math.floor(H * 0.6); y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, lum = (p[i] + p[i + 1] + p[i + 2]) / 3; if (lum < 150) { const f = Math.min(1, (150 - lum) / 60); for (let j = 0; j < 3; j++) p[i + j] = p[i + j] * (1 - f) + sk[j] * f; } }
+    // the visible blouse is painted on the BODY texture (white, unsaturated) -> dye it the shirt's pale sky blue
+    const blue = k === 'map' ? [150, 194, 236] : [118, 156, 200];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, r0 = p[i], g0 = p[i + 1], b0 = p[i + 2], mx = Math.max(r0, g0, b0), mn = Math.min(r0, g0, b0);
+      if (mx > 170 && mx - mn < 22 && b0 >= r0 - 4) { const l = mx / 255; for (let j = 0; j < 3; j++) p[i + j] = blue[j] * (0.75 + 0.25 * l); } }
+    g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); m.needsUpdate = true;
+  }
+  const tint = (m, k, rgb, lo) => { const c = texToCanvas(m[k]), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 0; i < p.length; i += 4) { const l = (p[i] + p[i + 1] + p[i + 2]) / 765, s = lo + (1 - lo) * Math.min(1, l * 1.5); for (let j = 0; j < 3; j++) p[i + j] = rgb[j] * s; }
+    g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); };
+  for (const m of [...matsByName(vrm, 'Tops'), ...matsByName(vrm, 'Accessory')]) { if (m.color) m.color.set('#ffffff'); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.72, 0.84, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.5, 0.62, 0.82); if (m.map) tint(m, 'map', [128, 180, 230], 0.6); if (m.shadeMultiplyTexture) tint(m, 'shadeMultiplyTexture', [128, 168, 205], 0.8); m.needsUpdate = true; }
+  for (const m of matsByName(vrm, 'Bottoms')) { if (m.map) m.map = lighten(m.map, 228, 0.15); m.needsUpdate = true; }
+  for (const m of matsByName(vrm, 'Shoes')) { if (m.map) m.map = lighten(m.map, 236, 0.12); if (m.shadeMultiplyTexture) m.shadeMultiplyTexture = lighten(m.shadeMultiplyTexture, 205, 0.12); m.needsUpdate = true; }
+}
 function restyleSundress(vrm) {
   // bare legs: the stock texture paints black tights on the legs -> repaint those regions with the skin tone
   const SKIN = [248, 218, 199];
@@ -265,12 +294,15 @@ export class Skirt {
     // hem shading: slightly translucent-looking lower edge via uv-based tint
     this.rimU = { value: new THREE.Color(0, 0, 0) };
     const mat = new THREE.MeshToonMaterial({ color: '#ffffff', gradientMap: grad, side: THREE.DoubleSide, transparent: true });
-    this.floral = OUTFIT === 'sundress';
+    this.floral = OUTFIT === 'sundress'; this.shirt = OUTFIT === 'shirt';
+    if (this.shirt) mat.color.set('#6fa6dc');
     if (this.floral) { const ft = new THREE.CanvasTexture(floralCanvas(1024, 512, 1.0, 5)); ft.colorSpace = THREE.SRGBColorSpace; ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.repeat.set(3, 1); ft.anisotropy = 4; mat.map = ft; }
     mat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <uv_pars_vertex>', '#include <uv_pars_vertex>\nvarying vec2 vSk;').replace('#include <uv_vertex>', '#include <uv_vertex>\nvSk = uv;');
       sh.uniforms.uRim = this.rimU; sh.fragmentShader = sh.fragmentShader.replace('#include <uv_pars_fragment>', '#include <uv_pars_fragment>\nvarying vec2 vSk;\nuniform vec3 uRim;')
-        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + (this.floral ?
+        .replace('#include <dithering_fragment>', '#include <dithering_fragment>\n' + (this.shirt ?
+          // shirt tail (pale blue linen, faint weave) over a short white pleated skirt that peeks out below the hem band
+          ' float wv = 0.97 + 0.03 * sin(vSk.x * 3.14159 * 220.0) * sin(vSk.y * 90.0); gl_FragColor.rgb *= wv; float sk = smoothstep(0.86, 0.89, vSk.y) + (gl_FrontFacing ? 0.0 : step(0.86, vSk.y)); sk = clamp(sk, 0., 1.); float pl = 0.86 + 0.14 * abs(sin(vSk.x * 3.14159 * 48.0)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.985, 0.98, 0.975) * pl, sk); gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * 0.82, (1. - sk) * smoothstep(0.82, 0.86, vSk.y));' : '') + (this.floral ?
           // sundress: inside (and the last band) is the white ruffled petticoat with a scalloped lace edge
           ' float pet = gl_FrontFacing ? 0.0 : 1.0; float sc = 0.955 + 0.03 * abs(sin(vSk.x * 3.14159 * 72.0)); pet = max(pet, step(sc, vSk.y)); gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.98, 0.97, 0.95) * (0.82 + 0.18 * abs(sin(vSk.x * 3.14159 * 144.0))) * (gl_FrontFacing ? 1.0 : 0.9), pet);' : '') + '\n float hem = smoothstep(0.78, 1.0, vSk.y); gl_FragColor.rgb = mix(gl_FragColor.rgb, min(vec3(1.), gl_FragColor.rgb*vec3(1.02,1.02,1.05)+0.04), hem); gl_FragColor.a = mix(0.97, 0.72, hem); vec3 vd = normalize(vViewPosition); float fr = pow(1.0 - abs(dot(normalize(vNormal), vd)), 2.5); gl_FragColor.rgb += uRim * (fr * 0.9 + hem * 0.35);');
     };
@@ -289,6 +321,7 @@ export class Skirt {
     for (let i = 0; i < N; i++) { this.pinWorld(i, v); this.p.set([v.x, v.y, v.z], i * 3); this.q.set([v.x, v.y, v.z], i * 3); }
     this.inited = true;
   }
+  setBoard(obj, on) { if (!on) { this.boardBox = null; return; } obj.updateMatrixWorld(true); const m = obj.matrixWorld.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.07, 0)); this.boardBox = { m, inv: m.clone().invert(), hx: 0.125, hy: 0.06, hz: 0.5 }; }
   colliders() {
     const B = this.bones, w = (b) => b.getWorldPosition(new THREE.Vector3());
     const hip = w(B.hips), sp = w(B.spine);
@@ -361,6 +394,14 @@ export class Skirt {
         }
       }
       if (groundY) for (let i = C; i < N; i++) { const k = i * 3, gy = groundY(p[k], p[k + 2]) + 0.01; if (p[k + 1] < gy) p[k + 1] = gy; }
+      // the board (when carried / near her): oriented box, particles inside are pushed out through the nearest face
+      const BB = this.boardBox;
+      if (BB) for (let i = C; i < N; i++) {
+        const k = i * 3; v.set(p[k], p[k + 1], p[k + 2]).applyMatrix4(BB.inv);
+        const ex = BB.hx + 0.015 - Math.abs(v.x), ey = BB.hy + 0.02 - Math.abs(v.y), ez = BB.hz + 0.015 - Math.abs(v.z);
+        if (ex > 0 && ey > 0 && ez > 0) { if (ey <= ex && ey <= ez) v.y = Math.sign(v.y || 1) * (BB.hy + 0.02); else if (ex <= ez) v.x = Math.sign(v.x || 1) * (BB.hx + 0.015); else v.z = Math.sign(v.z || 1) * (BB.hz + 0.015);
+          v.applyMatrix4(BB.m); p[k] = v.x; p[k + 1] = v.y; p[k + 2] = v.z; }
+      }
     }
     // write mesh (seam duplicate)
     const vp = this.vpos, vC = this.vC;

@@ -14,6 +14,10 @@
   #cap small{display:block;font-weight:400;font-size:12px;opacity:.6;text-align:center}
   body.rec #ui{display:none}
   #stam{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 70px);width:min(62vw,300px);pointer-events:none}
+  #stam .bar{height:10px;border-radius:6px;background:rgba(255,250,240,.75);box-shadow:0 1px 6px rgba(0,0,0,.12);overflow:hidden;margin-top:4px}
+  #stam .fill{height:100%;border-radius:6px;transition:width .2s}
+  #spdF{background:linear-gradient(90deg,#a9c8ee,#6d9fe0)}
+  #stam .bt{font-size:11px;text-align:center;opacity:.75;margin-top:2px;font-weight:600}
   #stamB{height:12px;border-radius:7px;background:rgba(255,250,240,.75);box-shadow:0 1px 6px rgba(0,0,0,.12);overflow:hidden}
   #stamF{height:100%;width:70%;border-radius:7px;transition:width .2s}
   #stamT{font-size:11px;text-align:center;opacity:.7;margin-top:3px;font-weight:600}
@@ -39,7 +43,7 @@
   <button id="slow">慢放</button>
   <button id="tod">☀️ 正午</button>
 </div>
-<div id="stam"><div id="stamB"><div id="stamF"></div></div><div id="stamT">🪶</div></div>
+<div id="stam"><div class="bar"><div id="spdF" class="fill"></div></div><div id="spdT" class="bt">💨</div><div class="bar" id="stamB"><div id="stamF" class="fill"></div></div><div id="stamT" class="bt">🪶</div></div>
 <div id="corner"><button id="snd">🔇</button><button id="dbg">debug</button></div>
 <div id="load">加载女孩模型（10MB）…</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
