@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadGirl, setupHair, Skirt, Hat, OUTFIT, addWristGuards } from './girl.js';
+import { loadGirl, setupHair, Skirt, Hat, OUTFIT, addWristGuards, flutterUpdate } from './girl.js';
 import { Rider, EMAX } from './rider.js';
 
 const Q = new URLSearchParams(location.search);
@@ -349,7 +349,7 @@ async function init() {
 let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.pump = null; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
-  lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
+  lookIdx = 0; simT = 0; drone.t = 0; drone.on = false; drone.next = 8; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
   rider.update(1 / 60, (s) => track.at(s), ctx);
   if (!rider.ankleCal) { rider.calibrateFeet(); rider.ankleCal = true; }
   skirt.inited = false; if (skirt2) skirt2.inited = false; vrm.springBoneManager?.reset?.();
@@ -394,6 +394,7 @@ function stamHUD() {
 }
 // ---------------- camera ----------------
 let camMode = Q.get('cam') || 'chase', camInit = false;
+const drone = { t: 0, next: 8, on: false, side: 1, u: 0 };
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 const orbit = { yaw: Math.PI, pitch: 0.18, dist: 3.2, drag: null, pinch: null };
 // DRONE anchor: a point on the path that glides along with her progress (critically damped), never the board itself,
@@ -450,6 +451,18 @@ function updateCamera(dt) {
     look = base.clone().addScaledVector(rider.__vd, 6).add(new THREE.Vector3(0, 0.2, 0));
   }
   else { const ahead = track.at(anc.s + 2.5).p; const side = -0.55 - 0.7 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.1 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.08 - rider.w.look * 0.1, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
+  // AERIAL MOVES (chase only): every ~30 s on a calm stretch the drone slowly swings out to her side-front, rises, holds
+  // while she glances at it, then returns behind her. Smooth in/out, ~11 s, alternating sides.
+  if (camMode === 'chase' && Q.get('drone') !== '0') {
+    const D = drone; D.t += dt;
+    const calm = rider.mode === 'ride' && !rider.ollie && !rider.dance && rider.v > 1.5;
+    if (!D.on && D.t > D.next && calm) { D.on = true; D.u = 0; D.side = -D.side; D.T = 13 + Math.random() * 4; D.amp = 2.0 + Math.random() * 0.5; D.up = 0.6 + Math.random() * 0.8; D.glance = false; }
+    if (D.on) { D.u += dt / D.T; const u = Math.min(1, D.u), e = sstep(0, 0.38, u) * (1 - sstep(0.66, 1, u));
+      const off = want.clone().sub(base), ang = D.side * D.amp * e; off.applyAxisAngle(new THREE.Vector3(0, 1, 0), ang); off.multiplyScalar(1 + 0.25 * e); off.y += D.up * e;
+      want = base.clone().add(off); look = look.clone().lerp(base.clone().add(new THREE.Vector3(0, 0.9, 0)), e);
+      if (!D.glance && u > 0.42 && !rider.look) { D.glance = true; rider.nextLook = 0; }
+      if (u >= 1) { D.on = false; D.t = 0; D.next = 14 + Math.random() * 10; } }
+  }
   if (RD && track.terrainH) {
     // keep the camera (and the sight line to her) above the real terrain: lift it, and pull it in on steep hillsides
     const gh = (v) => track.terrainH(v.x, -v.z);
@@ -505,7 +518,7 @@ function step(dt) {
   rider.gust = puff;
   ctx.wind = windGust;
   rider.update(dt, (s) => track.at(s), ctx);
-  hair.update(rider.airRel, simT);
+  hair.update(rider.airRel, simT); flutterUpdate(rider.airRel, simT);
   const nearBoard = !!rider.hold || rider.mode === 'off' || rider.mode === 'on';
   skirt.setBoard(rider.board, nearBoard); skirt.step(dt, windGust, simT);
   if (skirt2) { skirt2.setBoard(rider.board, nearBoard); skirt2.step(dt, windGust, simT); }
@@ -604,6 +617,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 // deterministic recording hooks
 window.LAB = {
   scene, THREE, rider: () => rider, track, skirt: () => skirt, skirt2: () => skirt2, vrm: () => vrm, camera,
+  drone: () => drone,
   setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },

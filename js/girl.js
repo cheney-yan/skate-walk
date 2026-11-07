@@ -139,6 +139,57 @@ function restyle(vrm) {
 // 'breeze' (Cheney's reference photo): powder-blue oversized open shirt + matching puffy mini skirt, white bra top,
 // black shorts-length leggings to the hips, bare legs, white socks + sneakers. Built on VRoid AvatarSample_B, whose open
 // jacket and skirt already carry cloth spring bones; we re-dye them and lighten the cloth so it flies.
+const sstepG = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// thin-fabric flutter: vertices with aFlut>0 ripple and lean with the RELATIVE air (wind minus her own motion), on top of
+// the spring bones. Uniforms are shared and updated once per frame by flutterUpdate().
+export const FLUTTER = { wind: new THREE.Vector3(), t: { value: 0 } }; const FLUTTER_MESHES = [];
+function addFlutter(m, amp) {
+  const uW = { value: new THREE.Vector3() }; m.userData.uWind = uW;
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => { prev?.call(m, sh, r);
+    sh.uniforms.uWindL = uW; sh.uniforms.uTime = FLUTTER.t; sh.uniforms.uFlAmp = { value: amp };
+    const hasCuff = !!m.userData.cuff;
+    if (hasCuff) sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+      { // chiffon: denser (more opaque, slightly darker) where you look along the cloth (folds, silhouette), thinner face-on,
+        // plus a soft back-light glow when the sun is behind the fabric — reads as thin fabric from far away
+        vec3 nV = normalize(vNormal); vec3 vD = normalize(vViewPosition); float ndv = abs(dot(nV, vD));
+        gl_FragColor.rgb = max(gl_FragColor.rgb, vec3(0.55, 0.66, 0.8));      // thin cloth is never black: light passes through
+        gl_FragColor.a = mix(0.8, 0.34, smoothstep(0.15, 0.85, ndv)) * (gl_FrontFacing ? 1.0 : 0.75);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb * 0.94, gl_FragColor.rgb * 1.05 + vec3(0.03, 0.03, 0.02), smoothstep(0.2, 0.9, ndv)); }`);
+    if (hasCuff) sh.fragmentShader = 'varying float vCuff;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.93, 0.96, 1.0) * (0.92 + 0.08 * sin(vCuff * 40.0)), smoothstep(0.15, 0.6, vCuff) * 0.85);
+      gl_FragColor.a = mix(gl_FragColor.a, 0.92, smoothstep(0.15, 0.6, vCuff));`);   // the rolled band is several layers thick
+    m.userData.cuffOK = !hasCuff || sh.fragmentShader.includes('vCuff * 40.0');
+    sh.vertexShader = 'uniform vec3 uWindL; uniform float uTime; uniform float uFlAmp; attribute float aFlut;\n' + (hasCuff ? 'attribute float aCuff; varying float vCuff;\n' : '') + sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>
+      ${hasCuff ? 'vCuff = aCuff; transformed += objectNormal * aCuff * 0.006;' : ''}
+      { float f = aFlut * uFlAmp; float sp = length(uWindL); float ph = dot(position, vec3(23.0, 17.0, 11.0));
+        float rip = 0.6 * sin(uTime * 8.0 + ph) + 0.4 * sin(uTime * 13.0 + ph * 1.7);
+        float sw = 0.75 + 0.25 * sin(uTime * 2.7 + ph * 0.31);
+        transformed += f * (uWindL * 0.011 * sw + objectNormal * rip * 0.011 * clamp(sp / 5.0, 0.15, 1.2)); }`);
+    m.userData.flutterOK = sh.vertexShader.includes('aFlut * uFlAmp'); };
+  m.customProgramCacheKey = () => 'flutter' + amp;
+}
+export function flutterUpdate(airWorld, t) {
+  FLUTTER.t.value = t; const q = new THREE.Quaternion();
+  for (const o of FLUTTER_MESHES) { o.getWorldQuaternion(q).invert(); const wl = airWorld.clone().applyQuaternion(q);
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.userData.uWind?.value.copy(wl)); }
+}
+// leg form: soft darkening toward the silhouette and a gentle front highlight (shin, knee cap, thigh) so the legs read as
+// rounded forms in flat toon light. Only below the hips (bind-pose y < 0.9).
+function legForm(m) {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (sh, r) => { prev?.call(m, sh, r);
+    sh.vertexShader = 'varying float vLeg; varying vec3 vNv; varying vec3 vVd;\n' + sh.vertexShader.replace(/(void main\(\) \{[\s\S]*?)(\n\})(?![\s\S]*void main)/, (all, body, end) => body + `
+      vLeg = 1.0 - smoothstep(0.82, 0.92, position.y); vNv = normalize(normalMatrix * objectNormal); vVd = normalize(-mvPosition.xyz);` + end);
+    m.userData.legV = sh.vertexShader.includes('vLeg = 1.0');
+    sh.fragmentShader = 'varying float vLeg; varying vec3 vNv; varying vec3 vVd;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+      { float ndv = clamp(dot(normalize(vNv), normalize(vVd)), 0.0, 1.0);
+        gl_FragColor.rgb *= 1.0 - vLeg * 0.3 * pow(1.0 - ndv, 1.4);
+        gl_FragColor.rgb += vLeg * vec3(1.0, 0.93, 0.88) * 0.1 * pow(ndv, 5.0); }`);
+    m.userData.legOK = sh.fragmentShader.includes('vLeg * 0.3') && m.userData.legV; };
+  m.customProgramCacheKey = () => 'legform';
+}
+
 function restyleBreeze(vrm) {
   const flat = (m, k, rgb, lo, hi, keepLight) => { if (!m[k]) return; const c = texToCanvas(m[k]), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data;
     for (let i = 0; i < p.length; i += 4) { const r = p[i], gg = p[i + 1], b = p[i + 2], l = (r + gg + b) / 765, sat = Math.max(r, gg, b) - Math.min(r, gg, b);
@@ -146,7 +197,7 @@ function restyleBreeze(vrm) {
       const s = lo + (hi - lo) * Math.pow(l, 0.35);          // squash the varsity contrast: folds stay, stripes melt into the fabric
       for (let j = 0; j < 3; j++) p[i + j] = rgb[j] * s; }
     g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); m.needsUpdate = true; };
-  for (const m of matsByName(vrm, 'Tops')) { flat(m, 'map', [128, 178, 236], 0.86, 1.0, true); flat(m, 'shadeMultiplyTexture', [108, 146, 200], 0.8, 1.0, true); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
+  for (const m of matsByName(vrm, 'Tops')) { flat(m, 'map', [196, 222, 246], 0.9, 1.04, false); flat(m, 'shadeMultiplyTexture', [108, 146, 200], 0.8, 1.0, true); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
   for (const m of matsByName(vrm, 'Bottoms')) { flat(m, 'map', [168, 206, 246], 0.8, 1.0, false); flat(m, 'shadeMultiplyTexture', [120, 158, 208], 0.82, 1.0, false); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
   for (const m of matsByName(vrm, 'Shoes')) { if (m.map) m.map = lighten(m.map, 238, 0.35, [1, 1, 1]); m.needsUpdate = true; }
   // the stock sneakers have a ~6 cm platform: squash the sole band to ~2.5 cm (normal sneakers). The rider measures the
@@ -159,6 +210,33 @@ function restyleBreeze(vrm) {
   for (const o of meshesByMat(vrm, 'Tops')) { const P = o.geometry.attributes.position, Y0 = 1.0, K = 0.24;
     for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y0) { const u = (Y0 - y) / 0.8; P.setY(i, Y0 - 0.8 * K * Math.tanh(u * 1.6) / Math.tanh(1.6)); } }
     P.needsUpdate = true; o.geometry.computeBoundingSphere(); o.geometry.computeBoundingBox(); o.frustumCulled = false; }
+  // THIN SHIRT (Cheney's favourite): the jacket mesh keeps its tailoring (shoulders, collar, open front, tails on spring
+  // bones) but becomes sheer powder-blue chiffon: semi-transparent, no outline, sleeves rolled up to mid upper arm.
+  for (const o of meshesByMat(vrm, 'Tops')) {
+    const g = o.geometry, P = g.attributes.position, idx = g.index;
+    const keep = (i) => { const y = P.getY(i), ax = Math.abs(P.getX(i)); return !(y > 1.05 && ax > 0.265); };   // cut sleeves at mid upper arm
+    if (idx) { const a = idx.array, out = []; for (let q = 0; q < a.length; q += 3) if (keep(a[q]) && keep(a[q + 1]) && keep(a[q + 2])) out.push(a[q], a[q + 1], a[q + 2]); g.setIndex(out); }
+    const fl = new Float32Array(P.count);
+    for (let i = 0; i < P.count; i++) { const y = P.getY(i), ax = Math.abs(P.getX(i)), z = P.getZ(i);
+      const hem = sstepG(1.0, 0.82, y), sleeve = y > 1.05 ? sstepG(0.18, 0.265, ax) * 0.8 : 0, front = y < 1.2 && z > 0.02 && ax < 0.11 ? 0.35 * sstepG(1.2, 1.0, y) : 0;
+      fl[i] = Math.min(1, hem + sleeve + front); }
+    g.setAttribute('aFlut', new THREE.BufferAttribute(fl, 1));
+    const cuff = new Float32Array(P.count); for (let i = 0; i < P.count; i++) { const y = P.getY(i), ax = Math.abs(P.getX(i)); cuff[i] = y > 1.05 ? sstepG(0.215, 0.255, ax) : 0; }
+    g.setAttribute('aCuff', new THREE.BufferAttribute(cuff, 1));
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+      if (/Outline/.test(m.name)) { m.visible = false; return; }
+      m.transparent = true; m.depthWrite = false; m.alphaTest = 0; m.side = THREE.DoubleSide;
+      if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.78, 0.84, 0.95);   // no dark inner faces
+      if (m.uniforms?.opacity) m.uniforms.opacity.value = 0.5; m.opacity = 0.5;
+      m.userData.cuff = true; addFlutter(m, 1.0); m.needsUpdate = true; });
+    o.renderOrder = 2; FLUTTER_MESHES.push(o);
+  }
+  // the skirt hem flutters a little too (opaque, smaller so it never cuts the legs)
+  for (const o of meshesByMat(vrm, 'Bottoms')) { const P = o.geometry.attributes.position, fl = new Float32Array(P.count);
+    for (let i = 0; i < P.count; i++) fl[i] = sstepG(0.9, 0.72, P.getY(i)) * 0.45;
+    o.geometry.setAttribute('aFlut', new THREE.BufferAttribute(fl, 1));
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (!/Outline/.test(m.name)) { addFlutter(m, 0.6); m.needsUpdate = true; } });
+    FLUTTER_MESHES.push(o); }
   // black leggings to just below the hips: paint the body skin between the crotch line and mid-thigh
   const bodies = meshesByMat(vrm, 'Body');
   for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {
@@ -185,6 +263,7 @@ function restyleBreeze(vrm) {
     g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); m.needsUpdate = true;
   }
   // legs: softer toon terminator + warm rim so knees, calves and thighs read as rounded forms in any light
+  for (const m of matsByName(vrm, 'Body')) { if (!/Outline/.test(m.name)) legForm(m); }
   for (const m of matsByName(vrm, 'Body')) { const u = m.uniforms; if (!u) continue;
     if (u.shadingToonyFactor) u.shadingToonyFactor.value = 0.42; if (u.shadingShiftFactor) u.shadingShiftFactor.value = -0.05;
     if (u.shadeColorFactor) u.shadeColorFactor.value.set(0.86, 0.68, 0.64);
@@ -302,7 +381,7 @@ export function setupHair(vrm) {
       // into planks. So: ONE shared wind direction for all chains (the mass streams together), gentle shared sway,
       // and only the magnitude varies a little and smoothly around the head.
       const sway = 0.07 * Math.sin(t * 1.3) + 0.03 * Math.sin(t * 3.1);
-      const dir = tmp.set(0, -1.0, 0).addScaledVector(air, 0.13).addScaledVector(side, sway * sp * 0.2);
+      const dir = tmp.set(0, -1.0, 0).addScaledVector(air, 0.19).addScaledVector(side, sway * sp * 0.2);
       dir.y += (0.05 + 0.04 * Math.sin(t * 0.9)) * s01 * sp * 0.2;
       const mag = dir.length(); dir.divideScalar(mag || 1);
       // cohesion: chains rooted on the sides are pulled a little toward the back midline so the mass stays together
@@ -313,9 +392,9 @@ export function setupHair(vrm) {
         const gust = 1 + 0.12 * Math.sin(t * 2.1 - ph) + 0.04 * Math.sin(t * 5.3 - ph * 1.7);
         const lat = Math.sin(j._az);   // +: head's left/right side
         j.settings.gravityDir.copy(dir).addScaledVector(right, -lat * 0.55).normalize();
-        j.settings.gravityPower = Math.min(0.9, mag * 0.45 * gust);
+        j.settings.gravityPower = Math.min(1.1, mag * 0.5 * gust);
       }
-      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.8 + Math.random() * 0.5), fl = 1 + 0.3 * Math.sin(t * (4 + k * 3) + k * 9); tmp.set(0, -1, 0).addScaledVector(air, (NAT ? (/CoatSkirt/.test(j.bone.name) ? 0.42 : 0.3) : 0.1) * k * fl); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.4 : 0.2); }
+      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.8 + Math.random() * 0.5), fl = 1 + 0.3 * Math.sin(t * (4 + k * 3) + k * 9); tmp.set(0, -1, 0).addScaledVector(air, (NAT ? (/CoatSkirt/.test(j.bone.name) ? 0.6 : 0.36) : 0.1) * k * fl); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.4 : 0.2); }
     },
   };
 }
