@@ -445,12 +445,14 @@ function updateCamera(dt) {
       want.y += worst; if (want.y - base.y > 5) { want.lerp(look, 0.2); }
     }
   }
-  if (!camInit) { camPos.copy(want); camLook.copy(look); for (const k of ['px', 'py', 'pz', 'lx', 'ly', 'lz']) camS[k + 'v'] = 0; camInit = true; }
-  camS.px = camPos.x; camS.py = camPos.y; camS.pz = camPos.z; camS.lx = camLook.x; camS.ly = camLook.y; camS.lz = camLook.z;
+  // spring the camera's OFFSET from the anchor (the anchor already moves smoothly with her), so there is no
+  // speed-proportional lag: framing composition stays put, only changes of composition are eased
+  const oP = want.clone().sub(base), oL = look.clone().sub(base);
+  if (!camInit) { camS.px = oP.x; camS.py = oP.y; camS.pz = oP.z; camS.lx = oL.x; camS.ly = oL.y; camS.lz = oL.z; for (const k of ['px', 'py', 'pz', 'lx', 'ly', 'lz']) camS[k + 'v'] = 0; camInit = true; }
   const W = 2.2, WL = 2.6;
-  spring(camS, 'px', want.x, W, dt); spring(camS, 'py', want.y, W * 0.8, dt); spring(camS, 'pz', want.z, W, dt);
-  spring(camS, 'lx', look.x, WL, dt); spring(camS, 'ly', look.y, WL * 0.8, dt); spring(camS, 'lz', look.z, WL, dt);
-  camPos.set(camS.px, camS.py, camS.pz); camLook.set(camS.lx, camS.ly, camS.lz);
+  spring(camS, 'px', oP.x, W, dt); spring(camS, 'py', oP.y, W * 0.8, dt); spring(camS, 'pz', oP.z, W, dt);
+  spring(camS, 'lx', oL.x, WL, dt); spring(camS, 'ly', oL.y, WL * 0.8, dt); spring(camS, 'lz', oL.z, WL, dt);
+  camPos.set(camS.px, camS.py, camS.pz).add(base); camLook.set(camS.lx, camS.ly, camS.lz).add(base);
   camera.position.copy(camPos); camera.lookAt(camLook);
   if (BLD.length) { const a = camera.position, b = rider.board.position.clone().add(new THREE.Vector3(0, 1, 0)), ab = b.clone().sub(a), l2 = ab.lengthSq();
     // hide blocks that sit on the sight line camera -> her -> ~14 m beyond her (they would wall off the view she rides into)
