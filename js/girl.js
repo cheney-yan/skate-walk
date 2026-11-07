@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '../vendor/three-vrm.module.min.js';
 
-export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'sundress';
+export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'breeze';
 export async function loadGirl(url) {
   const loader = new GLTFLoader();
   loader.register((p) => new VRMLoaderPlugin(p));
@@ -19,7 +19,7 @@ export async function loadGirl(url) {
   if (vrm.userData.vrm0) VRMUtils.rotateVRM0(vrm);
   vrm.scene.traverse((o) => { o.frustumCulled = false; });
   restyle(vrm);
-  if (OUTFIT === 'shirt' || OUTFIT === 'native') proportions(vrm);
+  if (OUTFIT === 'shirt' || OUTFIT === 'native' || OUTFIT === 'breeze') proportions(vrm);
   return vrm;
 }
 
@@ -108,6 +108,7 @@ function matsByName(vrm, key) {
 export const STOCKING_TOP = 0.80; // metres in bind pose (thigh-high)
 function restyle(vrm) {
   if (OUTFIT === 'native') return;   // keep the model's own designed clothes (and its own cloth spring bones)
+  if (OUTFIT === 'breeze') return restyleBreeze(vrm);
   if (OUTFIT === 'sundress') return restyleSundress(vrm);
   if (OUTFIT === 'shirt') return restyleShirt(vrm);
   // white stockings: every body triangle fully below the stocking top
@@ -135,6 +136,51 @@ function restyle(vrm) {
 }
 
 // long pale-blue linen shirt worn loose over a short white pleated skirt; bare legs, white sneakers
+// 'breeze' (Cheney's reference photo): powder-blue oversized open shirt + matching puffy mini skirt, white bra top,
+// black shorts-length leggings to the hips, bare legs, white socks + sneakers. Built on VRoid AvatarSample_B, whose open
+// jacket and skirt already carry cloth spring bones; we re-dye them and lighten the cloth so it flies.
+function restyleBreeze(vrm) {
+  const flat = (m, k, rgb, lo, hi, keepLight) => { if (!m[k]) return; const c = texToCanvas(m[k]), g = c.getContext('2d'), d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    for (let i = 0; i < p.length; i += 4) { const r = p[i], gg = p[i + 1], b = p[i + 2], l = (r + gg + b) / 765, sat = Math.max(r, gg, b) - Math.min(r, gg, b);
+      if (keepLight && l > 0.78 && sat < 40) { for (let j = 0; j < 3; j++) p[i + j] = 250 - j * 2; continue; }   // pale inner top -> white bra top
+      const s = lo + (hi - lo) * Math.pow(l, 0.5);          // squash the varsity contrast: folds stay, stripes melt into the fabric
+      for (let j = 0; j < 3; j++) p[i + j] = rgb[j] * s; }
+    g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); m.needsUpdate = true; };
+  for (const m of matsByName(vrm, 'Tops')) { flat(m, 'map', [150, 192, 238], 0.78, 1.0, true); flat(m, 'shadeMultiplyTexture', [108, 146, 200], 0.8, 1.0, true); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
+  for (const m of matsByName(vrm, 'Bottoms')) { flat(m, 'map', [206, 226, 248], 0.8, 1.04, false); flat(m, 'shadeMultiplyTexture', [150, 178, 214], 0.82, 1.0, false); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
+  for (const m of matsByName(vrm, 'Shoes')) { if (m.map) m.map = lighten(m.map, 238, 0.35, [1, 1, 1]); m.needsUpdate = true; }
+  // black leggings to just below the hips: paint the body skin between the crotch line and mid-thigh
+  const bodies = meshesByMat(vrm, 'Body');
+  for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {
+    const c = texToCanvas(m[k]), g = c.getContext('2d'), W = c.width, H = c.height; g.lineWidth = 2.5; g.lineJoin = 'round'; g.fillStyle = g.strokeStyle = k === 'map' ? '#22232b' : '#15161c';
+    for (const body of bodies) { const P = body.geometry.attributes.position, uv = body.geometry.attributes.uv, idx = body.geometry.index; if (!uv) continue; const n = idx ? idx.count : P.count;
+      for (let q = 0; q < n; q += 3) { const a = idx ? idx.getX(q) : q, b = idx ? idx.getX(q + 1) : q + 1, cc = idx ? idx.getX(q + 2) : q + 2; const y = (P.getY(a) + P.getY(b) + P.getY(cc)) / 3, ax = Math.abs((P.getX(a) + P.getX(b) + P.getX(cc)) / 3);
+        if (y < 0.7 || y > 0.98 || ax > 0.2) continue;
+        g.beginPath(); g.moveTo(uv.getX(a) * W, uv.getY(a) * H); g.lineTo(uv.getX(b) * W, uv.getY(b) * H); g.lineTo(uv.getX(cc) * W, uv.getY(cc) * H); g.closePath(); g.fill(); g.stroke(); } }
+    m[k] = canvasTex(c, m[k]); m.needsUpdate = true;
+  }
+  // inner top (painted on the body texture: black graphic crop) -> plain white bra top. Mask the chest triangles, then
+  // recolour only the garment pixels inside the mask (dark or saturated), keeping skin.
+  for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {
+    const c = texToCanvas(m[k]), g = c.getContext('2d'), W = c.width, H = c.height;
+    const mk = document.createElement('canvas'); mk.width = W; mk.height = H; const mg = mk.getContext('2d'); mg.fillStyle = mg.strokeStyle = '#fff'; mg.lineWidth = 3;
+    for (const body of bodies) { const P = body.geometry.attributes.position, uv = body.geometry.attributes.uv, idx = body.geometry.index; if (!uv) continue; const n = idx ? idx.count : P.count;
+      for (let q = 0; q < n; q += 3) { const a = idx ? idx.getX(q) : q, b = idx ? idx.getX(q + 1) : q + 1, cc = idx ? idx.getX(q + 2) : q + 2; const y = (P.getY(a) + P.getY(b) + P.getY(cc)) / 3, ax = Math.abs((P.getX(a) + P.getX(b) + P.getX(cc)) / 3);
+        if (y < 1.0 || y > 1.34 || ax > 0.2) continue;
+        mg.beginPath(); mg.moveTo(uv.getX(a) * W, uv.getY(a) * H); mg.lineTo(uv.getX(b) * W, uv.getY(b) * H); mg.lineTo(uv.getX(cc) * W, uv.getY(cc) * H); mg.closePath(); mg.fill(); mg.stroke(); } }
+    const d = g.getImageData(0, 0, W, H), p = d.data, mm = mg.getImageData(0, 0, W, H).data, wt = k === 'map' ? [250, 248, 246] : [214, 210, 214];
+    for (let i = 0; i < p.length; i += 4) { if (!mm[i]) continue; const r = p[i], gg = p[i + 1], b = p[i + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), l = (r + gg + b) / 3;
+      const skin = r > gg && gg > b && r - b > 25 && r - b < 90 && l > 150;
+      if (!skin && (l < 140 || mx - mn > 90 || (b > r && l < 200))) { const s = 0.86 + 0.14 * Math.min(1, l / 120); for (let j = 0; j < 3; j++) p[i + j] = wt[j] * s; } }
+    g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); m.needsUpdate = true;
+  }
+  // legs: softer toon terminator + warm rim so knees, calves and thighs read as rounded forms in any light
+  for (const m of matsByName(vrm, 'Body')) { const u = m.uniforms; if (!u) continue;
+    if (u.shadingToonyFactor) u.shadingToonyFactor.value = 0.42; if (u.shadingShiftFactor) u.shadingShiftFactor.value = -0.05;
+    if (u.shadeColorFactor) u.shadeColorFactor.value.set(0.86, 0.68, 0.64);
+    if (u.parametricRimColorFactor) u.parametricRimColorFactor.value.set(0.55, 0.42, 0.36); if (u.parametricRimFresnelPowerFactor) u.parametricRimFresnelPowerFactor.value = 3.2; if (u.parametricRimLiftFactor) u.parametricRimLiftFactor.value = 0.05; }
+}
+
 function restyleShirt(vrm) {
   const SKIN = [248, 218, 199];
   for (const m of matsByName(vrm, 'Body')) for (const k of ['map', 'shadeMultiplyTexture']) if (m[k]) {   // bare legs (stock texture has black tights)
@@ -221,7 +267,8 @@ export function setupHair(vrm) {
   const joints = [...(vrm.springBoneManager?.joints || [])];
   const hair = joints.filter((j) => /Hair/i.test(j.bone.name));
   const cloth = joints.filter((j) => /Tops|Skirt|Bust|Coat|Jacket|Cloth|Bottoms/i.test(j.bone.name) && !/Bust/i.test(j.bone.name));
-  if (OUTFIT === 'native') cloth.forEach((j) => { j.settings.stiffness *= 0.55; j.settings.dragForce = Math.min(j.settings.dragForce, 0.3); });
+  const NAT = OUTFIT === 'native' || OUTFIT === 'breeze';
+  if (NAT) cloth.forEach((j) => { j.settings.stiffness *= /CoatSkirt/.test(j.bone.name) ? 0.3 : 0.5; j.settings.dragForce = Math.min(j.settings.dragForce, 0.22); });
   // softer, lighter strands: low stiffness near the tips, a little drag so they swing instead of snapping
   hair.forEach((j, i) => { j.settings.stiffness = Math.min(j.settings.stiffness, 0.35) * 0.6; j.settings.dragForce = 0.22; j._ph = i * 2.399; j._k = 0.8 + ((i * 37) % 10) / 25; });
   const tmp = new THREE.Vector3(), side = new THREE.Vector3();
@@ -241,7 +288,7 @@ export function setupHair(vrm) {
         j.settings.gravityDir.copy(tmp).divideScalar(mag || 1);
         j.settings.gravityPower = mag * 0.8;
       }
-      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.8 + Math.random() * 0.5), fl = 1 + 0.3 * Math.sin(t * (4 + k * 3) + k * 9); tmp.set(0, -1, 0).addScaledVector(air, (OUTFIT === 'native' ? 0.28 : 0.1) * k * fl); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (OUTFIT === 'native' ? 0.35 : 0.2); }
+      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.8 + Math.random() * 0.5), fl = 1 + 0.3 * Math.sin(t * (4 + k * 3) + k * 9); tmp.set(0, -1, 0).addScaledVector(air, (NAT ? (/CoatSkirt/.test(j.bone.name) ? 0.42 : 0.3) : 0.1) * k * fl); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.4 : 0.2); }
     },
   };
 }

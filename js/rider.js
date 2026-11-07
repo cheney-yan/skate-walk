@@ -182,10 +182,10 @@ export class Rider {
     const riding = this.mode === 'ride' || (this.mode === 'off' && this.seq?.ph === 'brake');
     // lean from turning physics (only on the board)
     const pw = this.pump && riding ? this.pump.A : 0, pph = this.pump ? 2 * Math.PI * this.pump.f * this.pump.t : 0;
-    this.pumpYaw = pw * 0.2 * Math.sin(pph);                   // board heading weaves ±11°
-    this.pumpLat = pw * 0.22 * -Math.cos(pph) / (2 * Math.PI * (this.pump?.f || 1)) * 2.2;   // ∫ of heading: S-line on the path (~±0.24 m)
-    this.pumpDrop = pw * 0.07 * (0.5 - 0.5 * Math.cos(2 * pph));   // compress into each turn, extend through the transition
-    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + pw * 0.27 * Math.sin(pph + 0.6), -30 * D, 30 * D) : 0;
+    this.pumpYaw = pw * 0.3 * Math.sin(pph);                   // board heading weaves ±11°
+    this.pumpLat = pw * 0.34 * -Math.cos(pph) / (2 * Math.PI * (this.pump?.f || 1)) * 2.2;   // ∫ of heading: S-line on the path (~±0.24 m)
+    this.pumpDrop = pw * 0.1 * (0.5 - 0.5 * Math.cos(2 * pph));   // compress into each turn, extend through the transition
+    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + pw * 0.4 * Math.sin(pph + 0.6), -30 * D, 30 * D) : 0;
     this.lean = damp(this.lean, leanT, this.pump ? 10 : 6, dt);
     this.tilt = clamp(this.lean * 0.8, -19 * D, 19 * D);
     this.steer = damp(this.steer, riding ? clamp(Math.atan(kappa * HALF_WB) + this.tilt * 0.35, -0.32, 0.32) : 0, 10, dt);
@@ -486,7 +486,7 @@ export class Rider {
     const dn = this.dance ? sstep(0.2, 0.9, this.dance.t) * (1 - sstep(5.5, 6.3, this.dance.t)) : 0, DF = this.dance ? this.danceFeet() : null;
     this.dn = dn;
     const M = this.m, F = this.face, bob = Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
-    const hipDrop = lerp(0.06 + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.035 - bob + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);
+    const hipDrop = lerp(0.028 + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.035 - bob + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);
     const hipZ = 0.015 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
     b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
@@ -517,7 +517,8 @@ export class Rider {
     if (need > this.armUp) this.armUp = damp(this.armUp, need, 9, dt);           // quick rise
     else { this.armHold = (this.armHold ?? 0) + dt; if (this.armHold > 0.6) this.armUp = damp(this.armUp, need, 1.3, dt); } // linger, then lower
     if (need > this.armUp - 0.02) this.armHold = 0;
-    const up = this.armForce ?? this.armUp;
+    const glide = M < 0.5 && !this.push ? 0.38 + 0.18 * Math.sin(t * 0.45) + (this.pump ? 0.35 * this.pump.A : 0) : 0;
+    const up = this.armForce ?? Math.max(this.armUp, glide);
     const brz = Math.sin(t * 0.73) * 0.05, brz2 = Math.sin(t * 0.57 + 1.3) * 0.06;
     const bodySw = Math.sin(t * 1.6) * 0.04 + this.lean * 0.4;   // passive pendulum with the body
     const A = this.armT || (this.armT = {});
@@ -695,9 +696,11 @@ export class Rider {
     for (const [side, target, yaw, pitch] of [['left', lf, lYaw, 0], ['right', rf, rYaw, rPitch]]) {
       const up = B[side + 'UpperLeg'], lo = B[side + 'LowerLeg'], ft = B[side + 'Foot'];
       const hip = bw(up);
-      const pole = hip.clone().addScaledVector(fwdModel, 1.0).add(new V(0, -0.4 + (this.oTuck || 0) * 0.5, 0));
-      // splay knees slightly outward over their feet
-      const along = target.clone().sub(hip); pole.addScaledVector(along.setY(0).normalize(), 0.25);
+      // knee points the same way as the toes (knee over the second toe), so the leg reads straight and relaxed, not twisted
+      const qbP = this.deck.getWorldQuaternion(new Q()).slerp(this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 1, 0), 90 * D)), this.m);
+      const toeDir = new V(0, 0, this.flip).applyQuaternion(qbP.clone().multiply(new Q().setFromEuler(new THREE.Euler(0, yaw + this.yaw0, 0, 'YXZ')))).setY(0).normalize();
+      const kdir = fwdModel.clone().setY(0).normalize().lerp(toeDir, 0.75).normalize();
+      const pole = hip.clone().addScaledVector(kdir, 1.0).add(new V(0, -0.4 + (this.oTuck || 0) * 0.5, 0));
       twoBoneIK(up, lo, ft, target, pole);
       // foot flat on deck, toes angled
       const qb = this.deck.getWorldQuaternion(new Q()).slerp(this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 1, 0), 90 * D)), this.m);
