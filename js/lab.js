@@ -9,6 +9,7 @@ const RD = Q.get('route') ? await (await fetch('./data/route.json')).json() : nu
 if (REC) document.body.classList.add('rec');
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const damp1 = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // ---------------- test track ----------------
@@ -78,6 +79,16 @@ function routeTrack(R) {
   const segAt = (s) => ({ g: [0, at(s).kappa, at(s).grade, nameAt(s)], a: 0 });
   return { pts, at, total: Math.floor(total), segAt, terrainH: tH };
 }
+let SHORE = null; const BLD = [];
+if (RD && RD.shore) {
+  // sea mask + distance-to-shore, baked offline from the OSM coastline (tools/shore.py): 0 = land, else metres*4
+  const T = RD.terrain, raw = atob(RD.shore.b64), N = raw.length, tex = new Uint8Array(N);
+  for (let k = 0; k < N; k++) tex[k] = raw.charCodeAt(k);
+  T.hSea = T.h.map((v, k) => tex[k] ? Math.min(v, -10 - Math.min(tex[k] / 4, 60) * 2.5) : v);   // seabed shelves down (decimetres)
+  const st = new THREE.DataTexture(tex, T.nx, T.ny, THREE.RedFormat, THREE.UnsignedByteType); st.minFilter = st.magFilter = THREE.LinearFilter; st.needsUpdate = true;
+  SHORE = { tex: st, x0: T.x0, y0: T.y0, w: (T.nx - 1) * T.step, h: (T.ny - 1) * T.step };
+  window.__coast = { sea: tex.reduce((a, b) => a + (b ? 1 : 0), 0) };
+}
 // height of ground anywhere: nearest track point's height (road + verge)
 function groundY(x, z) {
   let best = 1e9, y = 0;
@@ -92,8 +103,8 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.fog = RD ? new THREE.Fog('#d6ebf5', 160, 1100) : new THREE.Fog('#d6ebf5', 40, 260);
-const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 1500);
+scene.fog = RD ? new THREE.Fog('#d6ebf5', 650, 2600) : new THREE.Fog('#d6ebf5', 40, 260);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.05, RD ? 3200 : 1500);
 const hemi = new THREE.HemisphereLight('#eef6ff', '#d8c49a', 1.4); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe9c8', 2.5);
 let TOD = Q.get('tod') || 'golden';
@@ -111,7 +122,7 @@ scene.add(sun, sun.target);
     void main(){float y=max(p.y,0.);vec3 c=mix(vec3(.85,.93,.97),vec3(.33,.6,.88),pow(y,.5));
     vec3 warmHor=vec3(1.,.78,.55),warmTop=vec3(.45,.62,.86);vec3 cw=mix(warmHor,warmTop,pow(y,.6));float sd=max(dot(normalize(p),normalize(uSun)),0.);cw+=vec3(1.,.75,.45)*pow(sd,24.)*.9+vec3(1.,.6,.3)*pow(sd,4.)*.25;c=mix(c,cw,uWarm);
     vec2 q=p.xz/(p.y+.15)*1.3;float cl=smoothstep(.5,.78,fbm(q+2.));vec3 cc=mix(vec3(1.),vec3(1.,.86,.72),uWarm);c=mix(c,cc,cl*smoothstep(.03,.2,p.y)*.95);gl_FragColor=vec4(c,1.);}` });
-  window.__sky = m; scene.add(new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), m));
+  window.__sky = m; const skyM = new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), m); skyM.onBeforeRender = (r, s, cam) => { skyM.position.copy(cam.position); skyM.updateMatrixWorld(); }; skyM.frustumCulled = false; scene.add(skyM);   // follows the camera (route is 1.4 km from origin)
 }
 // road + verge ribbons
 function ribbon(w0, w1, yOff, color, rough = 0.9) {
@@ -140,8 +151,71 @@ const pathTex = (() => {
 })();
 { const r = ribbon(-1.6, 1.6, 0.0, '#ffffff', 0.85); r.material.map = pathTex; r.material.needsUpdate = true; }
 if (!RD) { ribbon(1.6, 40, -0.03, '#93bd6c'); ribbon(-1.6, -12, -0.03, '#e8d6a6'); }  // test-track verges      // sand on the right
-{ // sea
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshStandardMaterial({ color: '#3f9fc2', roughness: 0.25, metalness: 0.1 }));
+const seaU = { uT: { value: 0 }, uSun: { value: new THREE.Vector3(0.8, 0.25, 0.2).normalize() }, uSunCol: { value: new THREE.Color('#ffd8a8') }, uSky: { value: new THREE.Color('#bcd9ee') },
+  uShore: { value: SHORE?.tex || null }, uSB: { value: new THREE.Vector4(SHORE?.x0 || 0, SHORE?.y0 || 0, SHORE?.w || 1, SHORE?.h || 1) }, uFog: { value: new THREE.Color('#d6ebf5') } };
+if (RD) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000, 1, 1), new THREE.ShaderMaterial({ uniforms: seaU, transparent: false,
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: `uniform float uT; uniform vec3 uSun, uSunCol, uSky, uFog; uniform sampler2D uShore; uniform vec4 uSB; varying vec3 vW;
+    float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f); return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+1.), f.x), f.y); }
+    // sum of directional swells -> height gradient (normal); a few scales so it holds up near and far
+    vec2 grad(vec2 p, float t){ vec2 g = vec2(0.);
+      vec2 D[6]; D[0]=normalize(vec2(-1.,.15)); D[1]=normalize(vec2(-1.,-.35)); D[2]=normalize(vec2(-.6,.8)); D[3]=normalize(vec2(-1.,.6)); D[4]=normalize(vec2(.3,1.)); D[5]=normalize(vec2(-.8,-.9));
+      float L[6]; L[0]=38.; L[1]=21.; L[2]=9.; L[3]=5.3; L[4]=2.7; L[5]=1.6;
+      for (int i = 0; i < 6; i++) { float k = 6.2831/L[i], a = L[i]*0.012, w = sqrt(9.8*k); g += D[i] * a * k * cos(dot(D[i], p) * k - w * t + float(i)*1.7); }
+      return g; }
+    void main(){
+      vec3 V = cameraPosition - vW; float dist = length(V); V /= dist;
+      float fade = clamp(1. - dist / 900., 0.15, 1.);                     // calm the small ripples far away (no aliasing)
+      vec2 g = grad(vW.xz, uT) * vec2(1.) ; g *= mix(0.35, 1., fade);
+      vec3 N = normalize(vec3(-g.x, 1., -g.y));
+      float sw = sin(dot(vW.xz, normalize(vec2(-1., .15))) * 0.165 - uT * 1.27) * 0.5 + sin(dot(vW.xz, normalize(vec2(-1., -.35))) * 0.3 - uT * 1.7) * 0.5;
+      // shore distance (metres) from the baked field
+      vec2 uv = vec2((vW.x - uSB.x) / uSB.z, ((-vW.z) - uSB.y) / uSB.w);
+      float inB = step(0., uv.x) * step(uv.x, 1.) * step(0., uv.y) * step(uv.y, 1.);
+      float sd = mix(80., texture2D(uShore, uv).r * 255. / 4., inB); if (inB > 0.5 && texture2D(uShore, uv).r < 0.002) sd = 0.;
+      // water colour: turquoise over the sand shelf, deep blue offshore
+      vec3 deep = vec3(0.05, 0.27, 0.42), mid = vec3(0.10, 0.45, 0.58), shallow = vec3(0.30, 0.72, 0.70);
+      vec3 col = mix(shallow, mid, smoothstep(2., 22., sd)); col = mix(col, deep, smoothstep(25., 70., sd));
+      col *= 0.9 + 0.12 * sw;
+      // fresnel sky reflection
+      float fr = 0.02 + 0.98 * pow(1. - max(dot(N, V), 0.), 5.);
+      col = mix(col, mix(uSky, vec3(0.42, 0.62, 0.80), 0.55), clamp(fr, 0., 0.55));
+      // sun: broad sheen + tight glints = the glittering path toward the sun
+      vec3 H = normalize(uSun + V); float nh = max(dot(N, H), 0.);
+      col += uSunCol * (pow(nh, 80.) * 0.18 + pow(nh, 1400.) * 4.);
+      // sun path: the band of water whose mirror direction is near the sun (wide at the horizon), broken into sparkles
+      vec3 Rf = reflect(-V, vec3(0., 1., 0.)); float rs = max(dot(normalize(Rf), uSun), 0.);
+      float path = pow(rs, 18.) * 0.9 + pow(rs, 120.) * 1.6;
+      float tw = vn(vW.xz * vec2(0.9, 2.6) + uT * vec2(1.3, -0.8)) * vn(vW.xz * vec2(3.1, 1.2) - uT * vec2(0.6, 1.7)) * vn(vW.xz * 6.0 + uT * 2.2);
+      col += uSunCol * path * smoothstep(0.12, 0.42, tw) * 3.2 + uSunCol * path * 0.12;
+      float sp = vn(vW.xz * 1.9 + uT * vec2(0.7, -0.4)) * vn(vW.xz * 3.7 - uT * vec2(0.5, 0.9));
+      col += uSunCol * smoothstep(0.55, 0.75, sp) * pow(nh, 140.) * 9.;      // twinkles
+      // surf: 2-3 broken crests rolling in (bright leading edge + fading lace behind), then the wash on the sand
+      float n = vn(vW.xz * 0.06 + vec2(uT * 0.03, 0.)), n2 = vn(vW.xz * 0.55 + uT * 0.25), n3 = vn(vW.xz * 2.3 - uT * 0.4);
+      float band = 0.;
+      for (int i = 0; i < 3; i++) {                                              // three sets of breakers, out of step
+        float fi = float(i);
+        float ph = fract((sd + n * 9. + fi * 3.7 + vn(vW.xz * 0.2 + fi * 7.) * 4.) / 12. + uT * (0.10 + fi * 0.013) + fi * 0.31);
+        float crest = smoothstep(0.80, 0.92, ph) * (1. - smoothstep(0.92, 1., ph));
+        float lace = smoothstep(0.92, 0.55, ph) * step(ph, 0.92) * 0.6 * smoothstep(0.35, 0.7, n3 + 0.15 * fi);
+        float along = smoothstep(0.2, 0.6, vn(vW.xz * 0.5 + fi * 13. + uT * 0.2));
+        band = max(band, (crest + lace) * along);
+      }
+      band *= smoothstep(34., 12., sd) * smoothstep(0.3, 3., sd);
+      float wash = smoothstep(3.5, 0.4, sd + (sin(uT * 0.8 + n * 7.) * 0.5 + 0.5) * 2.2) * (0.55 + 0.45 * n3);
+      float foam = clamp(band + wash, 0., 1.);
+      col = mix(col, vec3(0.97, 0.98, 1.), foam * fade);
+      // distance haze
+      col = mix(col, uFog, smoothstep(900., 3000., dist) * 0.55);
+      gl_FragColor = vec4(col, 1.);
+      #include <colorspace_fragment>
+    }` }));
+  m.rotation.x = -Math.PI / 2; m.position.y = 0.0; scene.add(m); window.__sea = m;
+}
+if (!RD) { // sea
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: RD ? '#2f9fc4' : '#3f9fc2', roughness: 0.18, metalness: 0.15, fog: !RD }));
   m.rotation.x = -Math.PI / 2; m.position.y = RD ? 0.9 : -6; scene.add(m);
 }
 // trees + flags along the left verge
@@ -168,7 +242,7 @@ const flags = [];
 }
 // ---------------- real-world blocks (Apple-Maps style): terrain, OSM building footprints as clean extruded boxes ----------------
 if (RD) {
-  const T = RD.terrain, tH = track.terrainH;
+  const T = RD.terrain, tH = terrainFn({ ...T, h: T.hSea || T.h });
   const geo = new THREE.PlaneGeometry((T.nx - 1) * T.step, (T.ny - 1) * T.step, T.nx - 1, T.ny - 1); geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
   const cx = T.x0 + (T.nx - 1) * T.step / 2, cy = T.y0 + (T.ny - 1) * T.step / 2;
@@ -183,15 +257,43 @@ if (RD) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
   const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })); ground.receiveShadow = true; scene.add(ground);
+  const skirtG = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshStandardMaterial({ color: '#bfd3a0', roughness: 1 }));   // land beyond the data edge
+  skirtG.rotation.x = -Math.PI / 2; skirtG.position.y = -0.5; scene.add(skirtG);
   // buildings: soft off-white blocks, slightly lighter roofs, the way Apple Maps draws a city before photo-3D loads
-  const side = new THREE.MeshStandardMaterial({ color: '#ecebe7', roughness: 0.95 }), top = new THREE.MeshStandardMaterial({ color: '#fbfaf8', roughness: 0.9 });
-  const sideAlt = new THREE.MeshStandardMaterial({ color: '#e4e6ea', roughness: 0.95 });
+  const side = new THREE.MeshStandardMaterial({ color: '#f4f2ee', roughness: 0.95 }), top = new THREE.MeshStandardMaterial({ color: '#fbfaf8', roughness: 0.9 });
+  const sideAlt = new THREE.MeshStandardMaterial({ color: '#eef0f3', roughness: 0.95 });
   for (const b of RD.buildings) {
     if (b.poly.length < 4) continue;
     const g = new THREE.ExtrudeGeometry(new THREE.Shape(b.poly.map(([x, y]) => new THREE.Vector2(x, y))), { depth: Math.max(3, b.h), bevelEnabled: false });
     g.rotateX(-Math.PI / 2);
     const m = new THREE.Mesh(g, [top, b.poly.length % 3 ? side : sideAlt]); m.position.y = b.base - 0.6; m.castShadow = m.receiveShadow = true; scene.add(m);
+    g.computeBoundingSphere(); BLD.push({ m, c: g.boundingSphere.center.clone().add(m.position), r: g.boundingSphere.radius });
   }
+}
+if (RD) {
+  const tH = track.terrainH, polys = RD.buildings.map((b) => b.poly);
+  const inPoly = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; return c; };
+  const spots = []; let seed = 3; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let s = 0; s < track.total; s += 3) {
+    const q = track.at(s), l = new THREE.Vector3(Math.cos(q.yaw), 0, -Math.sin(q.yaw));
+    for (const sd of [-1, 1]) {
+      if (rnd() < 0.55) continue;
+      const off = sd * (7 + rnd() * 24), X = q.p.x + l.x * off, Z = q.p.z + l.z * off, x = X, y = -Z, h = tH(x, y);
+      if (h < 4) continue;                                    // sand / sea
+      const sl = Math.hypot(tH(x + 3, y) - tH(x - 3, y), tH(x, y + 3) - tH(x, y - 3)) / 6; if (sl > 0.5) continue;  // cliffs
+      let onPath = false; for (let k = -12; k <= 12 && !onPath; k += 2) { const r = track.at(s + k).p; if ((r.x - X) ** 2 + (r.z - Z) ** 2 < 36) onPath = true; } if (onPath) continue;
+      if (polys.some((P) => inPoly(x, y, P))) continue;
+      spots.push([X, h - 0.2, Z, 0.7 + rnd() * 0.7, rnd() * 6]);
+    }
+  }
+  const trunkG = new THREE.CylinderGeometry(0.12, 0.18, 2.2, 6); trunkG.translate(0, 1.1, 0);
+  const crownG = new THREE.IcosahedronGeometry(1.3, 1); crownG.translate(0, 3.0, 0);
+  const trunks = new THREE.InstancedMesh(trunkG, new THREE.MeshStandardMaterial({ color: '#9a7a5a', roughness: 1 }), spots.length);
+  const crowns = new THREE.InstancedMesh(crownG, new THREE.MeshStandardMaterial({ color: '#8fbf72', roughness: 1, flatShading: true }), spots.length);
+  const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), cc = new THREE.Color();
+  spots.forEach(([x, y, z, s, r], i) => { qq.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r); m4.compose(new THREE.Vector3(x, y, z), qq, new THREE.Vector3(s, s * (0.9 + (r % 1) * 0.3), s)); trunks.setMatrixAt(i, m4); crowns.setMatrixAt(i, m4); crowns.setColorAt(i, cc.set('#8fbf72').offsetHSL((r % 1) * 0.04 - 0.02, 0, (r % 0.5) * 0.12 - 0.03)); });
+  trunks.castShadow = crowns.castShadow = true; scene.add(trunks, crowns);
+  window.__trees = spots.length;
 }
 // potholes (dark, slightly sunk) + a little cone so the eye reads them
 for (const h of HOLES) {
@@ -274,32 +376,67 @@ function updateCamera(dt) {
   let want, look;
   if (camMode === 'side') { want = base.clone().addScaledVector(left, 3.6).add(new THREE.Vector3(0, 1.1, 0)).addScaledVector(p.dir, 0.3); look = base.clone().add(new THREE.Vector3(0, 0.85, 0)); }
   else if (camMode === 'front') { want = base.clone().addScaledVector(p.dir, 4.2).addScaledVector(left, 0.9).add(new THREE.Vector3(0, 1.3, 0)); look = base.clone().add(new THREE.Vector3(0, 0.9, 0)); }
+  else if (RD && rider.w.look < 0.05) {
+    // view direction = along the path, swung toward the sea (east, +X): she rides in the lower third, ocean fills the far frame
+    const fwd = track.at(rider.s + 6).p.clone().sub(track.at(rider.s - 4).p).setY(0).normalize();
+    // pick the heading (path direction swung up to ~60° either way) with the most open sea / least terrain in the way
+    if (!rider.__vdT || simT - (rider.__vdAt || -9) > 0.5) {
+      rider.__vdAt = simT; let best = -1e9, bestV = fwd;
+      const shoreAt = (x, z) => { if (!SHORE) return 0; const T = RD.terrain, i = Math.round((x - T.x0) / T.step), j = Math.round((-z - T.y0) / T.step); return (i >= 0 && j >= 0 && i < T.nx && j < T.ny && RD.terrain.hSea && RD.terrain.hSea[j * T.nx + i] < -5) ? 1 : 0; };
+      for (const ang of [-1.05, -0.7, -0.35, 0, 0.35, 0.7, 1.05]) {
+        const v = fwd.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), ang); let block = 0, sea = 0;
+        for (let d = 10; d <= 160; d += 10) { const q = base.clone().addScaledVector(v, d); const gq = track.terrainH(q.x, -q.z); block = Math.max(block, (gq - base.y - 2.2) / d); sea += shoreAt(q.x, q.z); }
+        const score = sea * 1.0 - Math.max(0, block) * 60 - Math.abs(ang) * 1.5;
+        if (score > best) { best = score; bestV = v; }
+      }
+      rider.__vdT = bestV;
+    }
+    const vd = rider.__vdT.clone();
+    rider.__vd = rider.__vd ? rider.__vd.lerp(vd, 1 - Math.exp(-dt * 0.7)).normalize() : vd.clone();
+    want = base.clone().addScaledVector(rider.__vd, -(window.__cd ?? 5.0)).add(new THREE.Vector3(0, window.__ch ?? 2.9, 0));
+    look = base.clone().addScaledVector(rider.__vd, 6).add(new THREE.Vector3(0, 0.2, 0));
+  }
   else { const ahead = track.at(rider.s + 2.5).p; const side = -0.55 - 0.7 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.1 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.08 - rider.w.look * 0.1, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
+  if (RD && track.terrainH) {
+    // keep the camera (and the sight line to her) above the real terrain: lift it, and pull it in on steep hillsides
+    const gh = (v) => track.terrainH(v.x, -v.z);
+    for (let it = 0; it < 6; it++) {
+      let worst = 0; for (let k = 0; k <= 8; k++) { const q = want.clone().lerp(look, k / 8 * 0.8); worst = Math.max(worst, gh(q) + 0.9 - q.y); }
+      if (worst <= 0) break;
+      want.y += worst; if (want.y - base.y > 5) { want.lerp(look, 0.2); }
+    }
+  }
   if (!camInit) { camPos.copy(want); camLook.copy(look); camInit = true; }
   const k = 1 - Math.exp(-dt * 4.5);
   camPos.lerp(want, k); camLook.lerp(look, 1 - Math.exp(-dt * 8));
   camera.position.copy(camPos); camera.lookAt(camLook);
+  if (BLD.length) { const a = camera.position, b = rider.board.position.clone().add(new THREE.Vector3(0, 1, 0)), ab = b.clone().sub(a), l2 = ab.lengthSq();
+    // hide blocks that sit on the sight line camera -> her -> ~14 m beyond her (they would wall off the view she rides into)
+    const far = a.clone().addScaledVector(ab, 1 + 14 / Math.sqrt(l2)), af = far.clone().sub(a), lf = af.lengthSq();
+    for (const o of BLD) { const u = clamp(o.c.clone().sub(a).dot(af) / lf, 0, 1), d = o.c.distanceTo(a.clone().addScaledVector(af, u)); o.m.visible = d > o.r * 0.8 + 2; } }
   sunFollow(base);
 }
 function sunFollow(base) {
   if (TOD === 'golden') {
-    const ahead = track.at(rider.s + 30).dir; const sdir = new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
+    const ahead = track.at(rider.s + 30).dir; const sdir = RD ? (() => { const v = (rider.__vd || new THREE.Vector3(1, 0, 0)).clone(); v.y = 0; v.normalize(); return new THREE.Vector3(v.x * 0.9 + 0.35, 0.16, v.z * 0.9).normalize(); })() : new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
     sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
     sun.color.set('#ffc98a'); sun.intensity = 2.9; hemi.color.set('#ffe2c4'); hemi.groundColor.set('#b89a72'); hemi.intensity = 1.25;
     scene.fog.color.set('#f4d9bd'); renderer.toneMappingExposure = 1.05; window.__sky.uniforms.uWarm.value = 1; window.__sky.uniforms.uSun.value.copy(sdir).setY(0.06);
     if (skirt) skirt.rimU.value.set(0.75, 0.52, 0.3);
+    seaU.uSun.value.copy(sdir); seaU.uSunCol.value.set('#ffcf98'); seaU.uSky.value.set('#c9d6e0'); seaU.uFog.value.copy(scene.fog.color);
     rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2;
   } else {
     sun.position.copy(base).add(new THREE.Vector3(-6, 12, -4)); sun.target.position.copy(base);
     sun.color.set('#ffe9c8'); sun.intensity = 2.5; hemi.color.set('#eef6ff'); hemi.groundColor.set('#d8c49a'); hemi.intensity = 1.4;
-    scene.fog.color.set('#d6ebf5'); renderer.toneMappingExposure = 1.12; window.__sky.uniforms.uWarm.value = 0; if (skirt) skirt.rimU.value.set(0, 0, 0); rimLight.intensity = 0;
+    seaU.uSun.value.set(0.55, 0.75, -0.2).normalize(); seaU.uSunCol.value.set('#fff3dc'); seaU.uSky.value.set('#a8cdea');
+    scene.fog.color.set('#d6ebf5'); seaU.uFog.value.set('#d6ebf5'); renderer.toneMappingExposure = 1.12; window.__sky.uniforms.uWarm.value = 0; if (skirt) skirt.rimU.value.set(0, 0, 0); rimLight.intensity = 0;
   }
 }
 
 // ---------------- loop ----------------
 let slow = 1;
 function step(dt) {
-  simT += dt;
+  simT += dt; seaU.uT.value = simT;
   // events by position
   if (lookIdx < LOOKS.length && rider.s > LOOKS[lookIdx]) { rider.nextLook = 0; lookIdx++; }
   windNow.lerp(windTarget(rider.s), 1 - Math.exp(-dt * 1.2));
@@ -372,7 +509,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 
 // deterministic recording hooks
 window.LAB = {
-  rider: () => rider, track, skirt: () => skirt, vrm: () => vrm, camera,
+  scene, THREE, rider: () => rider, track, skirt: () => skirt, vrm: () => vrm, camera,
   setCam(m) { camMode = m; camInit = false; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
