@@ -120,7 +120,7 @@ export class Rider {
     this.camAnchor = new V();
     this.ev = [];
     this.mode = 'ride'; this.modeT = 0; this.seq = null; this.m = 0; this.face = 0; this.carry = 0; this.lat = 0; this.phi = 0;
-    this.stam = 0.7; this.pump = null; this.pumpYaw = 0; this.pumpLat = 0; this.pumpDrop = 0; this.spin = 0; this.bend = 0; this.armIKw = 0; this.armIKt = new V(); this.footTap = 0; this.tapPt = new V(); this.drag = 0;
+    this.stam = 0.7; this.pump = null; this.pumpHipYaw = 0; this.pumpYaw = 0; this.pumpLat = 0; this.pumpDrop = 0; this.spin = 0; this.bend = 0; this.armIKw = 0; this.armIKt = new V(); this.footTap = 0; this.tapPt = new V(); this.drag = 0;
   }
 
   // track: (s) -> {p:V3 ground point, dir:V3 unit forward, up:V3, grade, kappa}
@@ -193,17 +193,20 @@ export class Rider {
     const riding = this.mode === 'ride' || (this.mode === 'off' && this.seq?.ph === 'brake');
     // lean from turning physics (only on the board)
     const PI_ = this.pump?.I ?? 0, pw = this.pump && riding ? this.pump.A * (0.45 + 0.55 * PI_) : 0, ph0 = this.pump ? this.pump.ph : 0;
-    // sequence: shoulders (ph0) -> hips/centre of mass (ph0-0.55) -> board heading & roll (ph0-1.1)
-    const sh = Math.sin(ph0), hp = Math.sin(ph0 - 0.55), bd = Math.sin(ph0 - 1.1), turn = Math.abs(bd);
-    this.pumpTwist = pw * 0.36 * sh;                            // 1. shoulders turn into the next carve (~20°)
-    this.pumpCs = pw * hp;                                      // 2. hips / CoM shift over the toe or heel edge
-    this.pumpYaw = pw * 0.22 * bd + pw * 0.025 * Math.sin(2 * (ph0 - 1.1)) * Math.sign(bd);   // 3. board follows: ±13° at full power
+    // kinetic chain (she cannot just sway): 1. twist at the waist turns the shoulders -> 2. the hips are wound after them
+    // -> 3. the wind-up tips the whole body into a diagonal lean over the edge -> 4. the board, loaded on that edge, turns.
+    const pa0 = this.pump && riding ? this.pump.A : 0;
+    const sh = Math.sin(ph0), hy = Math.sin(ph0 - 0.75), hp = Math.sin(ph0 - 1.25), bd = Math.sin(ph0 - 1.7), turn = Math.abs(bd);
+    this.pumpTwist = pa0 * (0.5 + 0.25 * PI_) * sh;             // 1. waist twist -> shoulders ±29° (elegant) .. ±43° (power)
+    this.pumpHipYaw = pa0 * (0.16 + 0.1 * PI_) * hy;            // 2. hips follow the shoulders, smaller
+    this.pumpCs = pw * hp;                                      // 3. body tips diagonally over the toe / heel edge
+    this.pumpYaw = pw * 0.22 * bd + pw * 0.025 * Math.sin(2 * (ph0 - 1.7)) * Math.sign(bd);   // 4. board follows: ±7° .. ±13°
     this.pumpTurn = pw * turn;
-    this.pumpFA = pw * Math.sin(2 * (ph0 - 0.55) - 0.6);        // weight onto the front foot entering each carve, back foot leaving it
+    this.pumpFA = pw * Math.sin(2 * (ph0 - 1.25) - 0.6);        // weight onto the front foot entering each carve, back foot leaving it
     const fq = 0.42 + 0.5 * PI_;
-    this.pumpLat = pw * 0.45 * -Math.cos(ph0 - 1.1) / (2 * Math.PI * fq) * 2.2;   // ∫ of heading: the S-line on the path
-    this.pumpDrop = pw * (0.008 + 0.055 * PI_ * (0.5 - 0.5 * Math.cos(2 * (ph0 - 0.55))));   // elegant: stands tall; power: a soft settle into each carve
-    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + pw * 0.3 * hp, -30 * D, 30 * D) : 0;
+    this.pumpLat = pw * 0.45 * -Math.cos(ph0 - 1.7) / (2 * Math.PI * fq) * 2.2;   // ∫ of heading: the S-line on the path
+    this.pumpDrop = pw * (0.008 + 0.055 * PI_ * (0.5 - 0.5 * Math.cos(2 * (ph0 - 1.25))));   // elegant: stands tall; power: a soft settle into each carve
+    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + (pw * 0.26 + pa0 * 0.08) * hp, -30 * D, 30 * D) : 0;
     this.lean = damp(this.lean, leanT, this.pump ? 10 : 6, dt);
     { const onB = riding && this.air <= 0 && this.m < 0.5, dyn = (this.pumpTurn || 0) * 0.02 + (this.landFlex || 0);
       const tgt = onB ? 0.016 + dyn * 1.3 : 0; this.flexV = (this.flexV || 0) + ((tgt - (this.flex || 0)) * 230 - (this.flexV || 0) * 6.5) * dt; this.flex = (this.flex || 0) + this.flexV * dt;   // springy deck: under-damped
@@ -520,13 +523,13 @@ export class Rider {
     const leanIn = -this.windSideLean() ;
     const tw = this.gazeTwist || 0;   // extra torso twist the head could not reach last frame (look-back toward camera)
     const tall = 1 - 0.6 * (this.pump?.A || 0);
-    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15, leanIn * 0.3);
+    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0), leanIn * 0.3);
     const walkLean = M * (0.06 + Math.max(0, this.gradeNow || 0) * 2.2) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
     const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     const ptw = this.pumpTwist || 0;
-    this.rot('spine', fwd * 0.45 * tall + breathe, open * 0.2 + tw * 0.25 + ptw * 0.35, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
-    this.rot('chest', fwd * 0.35 * tall - breathe * 0.5, open * 0.2 + tw * 0.35 + ptw * 0.45, leanIn * 0.3);
-    this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25, 0);
+    this.rot('spine', fwd * 0.45 * tall + breathe, open * 0.2 + tw * 0.25 + ptw * 0.3, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
+    this.rot('chest', fwd * 0.35 * tall - breathe * 0.5, open * 0.2 + tw * 0.35 + ptw * 0.4, leanIn * 0.3);
+    this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25 + ptw * 0.3, 0);
     // head: GAZE solver. Riding = eyes on the road a few metres ahead (follows the curve).
     // Look-back = she turns to look into the lens (the player), wherever the camera is.
     this.solveGaze(dt, ctx, lb, fwd, w);
@@ -572,7 +575,7 @@ export class Rider {
     act.lz += (-8 * D) * load + (34 * D) * sweep; act.rz += (8 * D) * load - (34 * D) * sweep;
     act.ly += 0.25 * load - 0.15 * sweep; act.ry += -0.25 * load + 0.15 * sweep;
     act.le *= 1 - 0.45 * sweep; act.re *= 1 - 0.45 * sweep;
-    { const ps = (this.pumpTwist || 0), pa = this.pump?.A || 0; act.ly += ps * 0.35; act.ry += ps * 0.35; act.lz -= pa * 14 * D; act.rz += pa * 14 * D; }   // pumping: arms calm and low, a soft swing with the shoulders
+    { const ps = (this.pumpTwist || 0), pa = this.pump?.A || 0; act.ly += ps * 0.12; act.ry += ps * 0.12; act.lz -= pa * 14 * D; act.rz += pa * 14 * D; }   // pumping: arms calm and low, a soft swing with the shoulders
     const hair = { rx: -0.2, ry: 1.25, rz: 20 * D, re: 2.3, rw: -0.2 };
     const tgt = {};
     for (const k in rest) { tgt[k] = lerp(rest[k], act[k], up); if (k[0] === 'r' && hair[k] !== undefined) tgt[k] = lerp(tgt[k], hair[k], hh); }
