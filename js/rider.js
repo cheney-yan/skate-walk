@@ -21,11 +21,13 @@ const DANCE_K = [[0, 0.2, -0.21, 0, 0, 0.015, -0.01], [0.5, 0.2, -0.21, 0, 0, 0.
   [5.3, 0.2, 0.22, 0, 0, 0.015, 0.0], [5.9, 0.2, -0.21, 0, 0, 0.015, -0.01], [6.4, 0.2, -0.21, 0, 0, 0.015, -0.01]];
 const DANCE_T = 6.4;   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
 const EFF = 0.25, P_AERO = 230, CRR = 0.0045, CDA = 0.3;   // slicker than reality on purpose: long glides   // W: what her aerobic system refills continuously; above it she spends the bar, below it she refills          // deck top above ground (m)
-const WHEEL_R = 0.035, HALF_WB = 0.31;
+const WHEEL_R = 0.035, HALF_WB = 0.36, DECK_L = 1.12;
 
+// deck flex profile: deflection (m, +down) at z for a centre sag f (simply supported beam with overhangs)
+export function flexAt(z, f) { const u = z / HALF_WB; return Math.abs(u) <= 1 ? f * (1 - u * u) * (1 - 0.25 * u * u) / 1 : -f * 0.9 * (Math.abs(u) - 1) * 1.2; }
 export function buildLongboard() {
   const g = new THREE.Group();
-  const L = 0.98, W = 0.235;
+  const L = DECK_L, W = 0.235;
   const sh = new THREE.Shape();
   // pintail-ish cruiser outline (x = width, y = length)
   sh.moveTo(0, -L / 2);
@@ -35,11 +37,11 @@ export function buildLongboard() {
   sh.bezierCurveTo(-W * 0.36, L / 2, -W / 2, L * 0.38, -W / 2, L * 0.18);
   sh.lineTo(-W / 2, -L * 0.1);
   sh.bezierCurveTo(-W / 2, -L * 0.3, -W * 0.42, -L / 2, 0, -L / 2);
-  const deckGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.011, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.003, bevelSegments: 2, curveSegments: 24 });
+  const deckGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.011, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.003, bevelSegments: 2, curveSegments: 40, steps: 1 });
   deckGeo.rotateX(-Math.PI / 2);
   const wood = new THREE.MeshStandardMaterial({ color: '#e2c79c', roughness: 0.6 });
   const deck = new THREE.Mesh(deckGeo, wood); deck.position.y = DECK_Y - 0.013; deck.castShadow = true; g.add(deck);
-  const gripGeo = new THREE.ShapeGeometry(sh, 24); gripGeo.rotateX(-Math.PI / 2);
+  const gripGeo = new THREE.ShapeGeometry(sh, 40); gripGeo.rotateX(-Math.PI / 2);
   const grip = new THREE.Mesh(gripGeo, new THREE.MeshStandardMaterial({ color: '#3a3d42', roughness: 0.95 }));
   grip.position.y = DECK_Y + 0.0006; grip.scale.set(0.97, 1, 0.985); g.add(grip);
   // bottom graphic: soft wave stripe
@@ -72,7 +74,9 @@ export function buildLongboard() {
     const base = tk.t.children[0]; tk.t.remove(base); const bp = new THREE.Group(); bp.position.copy(tk.t.position); bp.add(base); deckG.add(bp);
   }
   g.add(chassis, deckG);
-  g.userData = { trucks, deck: deckG, chassis };
+  // flex: bendable deck meshes (CPU, ~1k verts): between the trucks it sags like a loaded beam, beyond them it rises
+  const flexMeshes = [deck, grip, art].map((m) => ({ m, base: m.geometry.attributes.position.array.slice() }));
+  g.userData = { trucks, deck: deckG, chassis, flexMeshes };
   return g;
 }
 
@@ -182,11 +186,18 @@ export class Rider {
     const riding = this.mode === 'ride' || (this.mode === 'off' && this.seq?.ph === 'brake');
     // lean from turning physics (only on the board)
     const pw = this.pump && riding ? this.pump.A : 0, pph = this.pump ? 2 * Math.PI * this.pump.f * this.pump.t : 0;
-    this.pumpYaw = pw * 0.3 * Math.sin(pph);                   // board heading weaves ±11°
-    this.pumpLat = pw * 0.34 * -Math.cos(pph) / (2 * Math.PI * (this.pump?.f || 1)) * 2.2;   // ∫ of heading: S-line on the path (~±0.24 m)
-    this.pumpDrop = pw * 0.1 * (0.5 - 0.5 * Math.cos(2 * pph));   // compress into each turn, extend through the transition
+    const cs = Math.sin(pph), turn = Math.abs(cs);              // cs>0 toe-side carve, <0 heel-side; |cs|=1 deepest point of the carve
+    this.pumpYaw = pw * 0.3 * cs + pw * 0.06 * Math.sin(2 * pph) * Math.sign(cs);   // board heading weaves ±17°; tail drifts a touch at the apex
+    this.pumpCs = pw * cs; this.pumpTurn = pw * turn;
+    this.pumpTwist = pw * 0.5 * Math.sin(pph + 0.9);          // shoulders lead the board by ~50°
+    this.pumpLat = pw * 0.6 * -Math.cos(pph) / (2 * Math.PI * (this.pump?.f || 1)) * 2.2;   // ∫ of heading: S-line on the path (~±0.24 m)
+    this.pumpDrop = pw * 0.13 * Math.pow(turn, 1.5) - pw * 0.02 * (1 - turn);   // dive & compress into each carve, float up through the transition
     const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + pw * 0.4 * Math.sin(pph + 0.6), -30 * D, 30 * D) : 0;
     this.lean = damp(this.lean, leanT, this.pump ? 10 : 6, dt);
+    { const onB = riding && this.air <= 0 && this.m < 0.5, dyn = (this.pumpTurn || 0) * 0.02 + (this.landFlex || 0);
+      const tgt = onB ? 0.018 + dyn * 2.0 : 0; this.flexV = (this.flexV || 0) + ((tgt - (this.flex || 0)) * 260 - (this.flexV || 0) * 14) * dt; this.flex = (this.flex || 0) + this.flexV * dt;   // springy deck: under-damped
+      this.landFlex = Math.max(0, (this.landFlex || 0) - dt * 0.12); }
+    if (this.air > 0) this.wasAir = true; else if (this.wasAir) { this.wasAir = false; this.landFlex = 0.03; }
     this.tilt = clamp(this.lean * 0.8, -19 * D, 19 * D);
     this.steer = damp(this.steer, riding ? clamp(Math.atan(kappa * HALF_WB) + this.tilt * 0.35, -0.32, 0.32) : 0, 10, dt);
     // ollie / shove-it ballistics
@@ -216,13 +227,15 @@ export class Rider {
       const qP = new Q().setFromAxisAngle(new V(1, 0, 0), -this.pitch - this.boardPitch);
       const qR = new Q().setFromAxisAngle(new V(0, 0, 1), -this.tilt);
       this.board.position.copy(this.pos);
-      const th = this.boardPitch, tailLift = Math.max(0, 0.49 * Math.sin(th) - 0.105 * (1 - Math.cos(th)) - 0.095);
+      const th = this.boardPitch, tailLift = Math.max(0, (DECK_L / 2) * Math.sin(th) - 0.105 * (1 - Math.cos(th)) - 0.095);
       this.board.position.y = tr.p.y + Math.max(this.air, tailLift);
       this.board.quaternion.copy(qY).multiply(qP);
       const PIV = new V(0, DECK_Y - 0.05, 0);
       this.deck.quaternion.copy(qR);
       this.deck.position.copy(PIV).sub(PIV.clone().applyQuaternion(qR));
     } else if (this.seq?.bPos && this.boardFixed && !(this.mode === 'off' && this.seq.ph === 'pick' && this.seq.pick === 'kick')) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); this.deck.quaternion.identity(); this.deck.position.set(0, 0, 0); }
+    { const f = this.flex || 0; if (Math.abs(f - (this.flexDrawn || 0)) > 0.0003) { this.flexDrawn = f;
+        for (const { m, base } of this.board.userData.flexMeshes) { const a = m.geometry.attributes.position, arr = a.array; for (let i = 0; i < arr.length; i += 3) arr[i + 1] = base[i + 1] - flexAt(base[i + 2], f) / (m.scale.y || 1); a.needsUpdate = true; } } }
     this.board.updateMatrixWorld(true);
     this.deck.getWorldPosition(this.deckF.position); this.deck.getWorldQuaternion(this.deckF.quaternion); this.deckF.updateMatrixWorld();
     if (this.spin) { this.board.quaternion.multiply(new Q().setFromAxisAngle(up, this.spin)); this.board.updateMatrixWorld(true); }
@@ -472,7 +485,7 @@ export class Rider {
     const extend = ol >= OP && ol < OP + 0.12 ? Math.sin(((ol - OP) / 0.12) * Math.PI) : 0; // explosive extension
     const tuckAir = ol >= OP + 0.08 && this.air > 0 ? sstep(OP + 0.08, OP + 0.2, ol) * (1 - sstep(0.75, 1, -this.airV / 2.75)) : 0;
     const landAbs = this.ollie && this.ollie.landT ? Math.sin(Math.min(1, (ol - this.ollie.landT) / 0.18) * Math.PI / 2) * (1 - sstep(0.18, 0.6, ol - this.ollie.landT)) : 0;
-    const carve = clamp(this.lean / 0.16, -1, 1), heel = Math.max(0, carve), toe = Math.max(0, -carve);
+    const carve = clamp(this.lean / 0.16 + (this.pumpCs || 0) * 0.3, -1, 1), heel = Math.max(0, carve), toe = Math.max(0, -carve);
     this.carve = carve;
     const S = this.seq, brk = this.mode === 'off' && S?.ph === 'brake' ? S : null;
     const crouchT = clamp((brk ? (brk.kind === 'slide' ? 0.7 : brk.kind === 'heel' ? 0.45 : 0.1) * sstep(0, 0.3, brk.t) : 0) + heel * 0.38 + toe * 0.3 + w.tuck * 1.05 + crouchO * 1.55 - extend * 0.2 + tuckAir * 1.15 + landAbs * 1.1 + w.effort * 0.25 + reach * 0.15, -0.35, 1.6);
@@ -498,8 +511,9 @@ export class Rider {
     this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15, leanIn * 0.3);
     const walkLean = M * (0.06 + Math.max(0, this.gradeNow || 0) * 2.2) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
     const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
-    this.rot('spine', fwd * 0.45 + breathe, open * 0.2 + tw * 0.25, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
-    this.rot('chest', fwd * 0.35 - breathe * 0.5, open * 0.2 + tw * 0.35, leanIn * 0.3);
+    const ptw = this.pumpTwist || 0;
+    this.rot('spine', fwd * 0.45 + breathe, open * 0.2 + tw * 0.25 + ptw * 0.35, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
+    this.rot('chest', fwd * 0.35 - breathe * 0.5, open * 0.2 + tw * 0.35 + ptw * 0.45, leanIn * 0.3);
     this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25, 0);
     // head: GAZE solver. Riding = eyes on the road a few metres ahead (follows the curve).
     // Look-back = she turns to look into the lens (the player), wherever the camera is.
@@ -642,7 +656,7 @@ export class Rider {
   // ---------------- IK ----------------
   solveLegs(dt) {
     const B = this.b, bw = (o) => o.getWorldPosition(new V());
-    const deck = (x, z, y = DECK_Y + 0.093) => this.deck.localToWorld(new V(x, y, z));
+    const deck = (x, z, y = DECK_Y + 0.093) => this.deck.localToWorld(new V(x, y - flexAt(z, this.flex || 0), z));
     // feet stance on deck (board frame: z forward): front (left) foot over front bolts, back (right) over tail
     const P = this.push ? this.push.t / this.push.T : 0;
     const pr = this.push ? sstep(0.0, 0.25, P) * (1 - sstep(0.78, 1.0, P)) : 0;
