@@ -143,12 +143,19 @@ export class Rider {
         // speed to work (~>7 km/h) and is less efficient than a push, but feet stay on the board: she prefers it on the flat
         // and on gentle climbs (<3.5°) when she already rolls; below that speed (or steeper) she pushes.
         const canPump = this.v > 1.9 && grade < 0.06 && Math.abs(kappa) < 0.06 && !this.push && !this.ollie && this.air <= 0 && !this.dance && this.stam > 0.05 && !holeSoon;
-        const wantPump = canPump && (needGo || (this.pump && this.v < cruise - 0.2));
-        if (wantPump && !this.pump) this.pump = { t: 0, f: 0.8 + Math.random() * 0.15, A: 0 };
-        if (this.pump) { const P = this.pump; P.t += dt; P.A = damp(P.A, wantPump ? 1 : 0, 2.2, dt); if (!wantPump && P.A < 0.05) this.pump = null; }
-        if (!this.push && !this.pump && needGo && this.pushCool <= 0) this.startPush(grade);
-        if (this.pump) { const P = this.pump, ph = Math.sin(2 * Math.PI * P.f * P.t) ** 2;   // propulsion peaks mid-turn, twice per S cycle
-          const pa = P.A * (0.18 + 0.32 * ph) * clamp((this.v - 1.2) / 1.2, 0, 1); a += pa; spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
+        // The body steers the board: shoulders turn first, the hips follow, the board follows the hips. Intensity I sets the
+        // style: elegant = slow, small, upright, rhythmic (gliding on the flat / downhill, I≈0.15); power = faster & bigger
+        // when she needs speed (I→1). Steep climbs are never elegant: she pushes or walks.
+        const pumpGo = canPump && (needGo || (this.pump && this.pump.I > 0.4 && this.v < cruise - 0.2));
+        const glideOK = canPump && !pumpGo && grade < 0.015 && this.v > 2.3;
+        const wantPump = pumpGo || glideOK;
+        const Itgt = pumpGo ? clamp(0.45 + (cruise - this.v) * 0.35 + Math.max(0, grade) * 8, 0.45, 1) : 0.15;
+        if (wantPump && !this.pump) this.pump = { t: 0, ph: 0, I: Itgt, A: 0 };
+        if (this.pump) { const P = this.pump; P.t += dt; P.I = damp(P.I, Itgt, 0.8, dt); P.ph += 2 * Math.PI * (0.42 + 0.5 * P.I) * dt;
+          P.A = damp(P.A, wantPump ? 1 : 0, 1.6, dt); if (!wantPump && P.A < 0.05) this.pump = null; }
+        if (!this.push && !(this.pump && pumpGo) && needGo && this.pushCool <= 0) { this.pump = null; this.startPush(grade); }
+        if (this.pump) { const P = this.pump, ph = Math.sin(P.ph - 1.1) ** 2;   // propulsion peaks as the board loads mid-carve, twice per S
+          const pa = P.A * P.I * P.I * (0.2 + 0.36 * ph) * clamp((this.v - 1.2) / 1.2, 0, 1); a += pa; spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
         const BASE = 110;   // W metabolic just standing balanced on a rolling board
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
         spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0)) * dt;   // rolling downhill is the best rest: the bar fills fastest there
@@ -185,15 +192,18 @@ export class Rider {
     this.stepSeq(dt, track);
     const riding = this.mode === 'ride' || (this.mode === 'off' && this.seq?.ph === 'brake');
     // lean from turning physics (only on the board)
-    const pw = this.pump && riding ? this.pump.A : 0, pph = this.pump ? 2 * Math.PI * this.pump.f * this.pump.t : 0;
-    const cs = Math.sin(pph), turn = Math.abs(cs);              // cs>0 toe-side carve, <0 heel-side; |cs|=1 deepest point of the carve
-    this.pumpYaw = pw * 0.22 * cs + pw * 0.025 * Math.sin(2 * pph) * Math.sign(cs);   // heading weaves ±13°; tail drifts a touch at the apex
-    this.pumpCs = pw * cs; this.pumpTurn = pw * turn;
-    this.pumpTwist = pw * 0.36 * Math.sin(pph + 0.9);         // shoulders lead the board (~20° counter-rotation)
-    this.pumpFA = pw * Math.sin(2 * pph - 0.6);                // fore/aft: weight onto the front foot entering each carve, back foot leaving it
-    this.pumpLat = pw * 0.45 * -Math.cos(pph) / (2 * Math.PI * (this.pump?.f || 1)) * 2.2;   // ∫ of heading: S-line on the path (~±0.24 m)
-    this.pumpDrop = pw * (0.012 + 0.03 * (0.5 - 0.5 * Math.cos(2 * pph)));   // soft knees: ~6 cm settle into each carve, float through the transition
-    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + pw * 0.3 * Math.sin(pph + 0.6), -30 * D, 30 * D) : 0;
+    const PI_ = this.pump?.I ?? 0, pw = this.pump && riding ? this.pump.A * (0.45 + 0.55 * PI_) : 0, ph0 = this.pump ? this.pump.ph : 0;
+    // sequence: shoulders (ph0) -> hips/centre of mass (ph0-0.55) -> board heading & roll (ph0-1.1)
+    const sh = Math.sin(ph0), hp = Math.sin(ph0 - 0.55), bd = Math.sin(ph0 - 1.1), turn = Math.abs(bd);
+    this.pumpTwist = pw * 0.36 * sh;                            // 1. shoulders turn into the next carve (~20°)
+    this.pumpCs = pw * hp;                                      // 2. hips / CoM shift over the toe or heel edge
+    this.pumpYaw = pw * 0.22 * bd + pw * 0.025 * Math.sin(2 * (ph0 - 1.1)) * Math.sign(bd);   // 3. board follows: ±13° at full power
+    this.pumpTurn = pw * turn;
+    this.pumpFA = pw * Math.sin(2 * (ph0 - 0.55) - 0.6);        // weight onto the front foot entering each carve, back foot leaving it
+    const fq = 0.42 + 0.5 * PI_;
+    this.pumpLat = pw * 0.45 * -Math.cos(ph0 - 1.1) / (2 * Math.PI * fq) * 2.2;   // ∫ of heading: the S-line on the path
+    this.pumpDrop = pw * (0.008 + 0.055 * PI_ * (0.5 - 0.5 * Math.cos(2 * (ph0 - 0.55))));   // elegant: stands tall; power: a soft settle into each carve
+    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + pw * 0.3 * hp, -30 * D, 30 * D) : 0;
     this.lean = damp(this.lean, leanT, this.pump ? 10 : 6, dt);
     { const onB = riding && this.air <= 0 && this.m < 0.5, dyn = (this.pumpTurn || 0) * 0.02 + (this.landFlex || 0);
       const tgt = onB ? 0.016 + dyn * 1.3 : 0; this.flexV = (this.flexV || 0) + ((tgt - (this.flex || 0)) * 230 - (this.flexV || 0) * 6.5) * dt; this.flex = (this.flex || 0) + this.flexV * dt;   // springy deck: under-damped
@@ -446,7 +456,7 @@ export class Rider {
       }
     }
     w.push = damp(w.push, this.push ? 1 : 0, 7, dt);
-    w.tuck = damp(w.tuck, sstep(-0.02, -0.06, grade) * sstep(2.6, 4.2, this.v), 2.5, dt);
+    w.tuck = damp(w.tuck, sstep(-0.02, -0.06, grade) * sstep(2.6, 4.2, this.v) * (1 - (this.pump?.A || 0)), 2.5, dt);
     w.effort = damp(w.effort, sstep(0.02, 0.055, grade) * (this.mode === 'ride' ? 1 : 0.5) + (this.stam < 0.15 ? 0.3 : 0), 2, dt); this.gradeNow = grade;
     const wl = this.windLocal; const ws = Math.hypot(wl.x, wl.z);
     w.wind = damp(w.wind, sstep(1.5, 6, ws), 1.5, dt);
@@ -521,7 +531,7 @@ export class Rider {
     // Look-back = she turns to look into the lens (the player), wherever the camera is.
     this.solveGaze(dt, ctx, lb, fwd, w);
     // ---- arms: relaxed, swinging; balance out on tuck/landing; right hand to hair in wind
-    const bal = clamp(w.tuck * 0.9 + crouchO * 0.5 + tuckAir * 1.2 + landAbs * 0.8 + Math.abs(this.lean) * 1.2, 0, 1);
+    const bal = clamp(w.tuck * 0.9 + crouchO * 0.5 + tuckAir * 1.2 + landAbs * 0.8 + Math.abs(this.lean) * 1.2 * (1 - 0.8 * (this.pump?.A || 0)), 0, 1);
     const swing = this.push ? Math.sin(P * Math.PI * 2) * 0.45 * w.push : Math.sin(t * 1.1) * 0.03;
     // ARMS — two poses + an envelope.
     //  rest: hang relaxed by the sides (soft elbows, tiny swing from the body), like someone just riding along;
@@ -533,7 +543,7 @@ export class Rider {
     if (need > this.armUp) this.armUp = damp(this.armUp, need, 9, dt);           // quick rise
     else { this.armHold = (this.armHold ?? 0) + dt; if (this.armHold > 0.6) this.armUp = damp(this.armUp, need, 1.3, dt); } // linger, then lower
     if (need > this.armUp - 0.02) this.armHold = 0;
-    const glide = M < 0.5 && !this.push ? (0.38 + 0.18 * Math.sin(t * 0.45)) * (1 - 0.3 * (this.pump?.A || 0)) : 0;
+    const glide = M < 0.5 && !this.push ? (0.38 + 0.18 * Math.sin(t * 0.45)) * (1 - 0.55 * (this.pump?.A || 0)) : 0;
     const up = this.armForce ?? Math.max(this.armUp, glide);
     const brz = Math.sin(t * 0.73) * 0.05, brz2 = Math.sin(t * 0.57 + 1.3) * 0.06;
     const bodySw = Math.sin(t * 1.6) * 0.04 + this.lean * 0.4;   // passive pendulum with the body
