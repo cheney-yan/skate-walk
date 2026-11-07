@@ -1,3 +1,4 @@
 data/cache/
 data/osm_raw.json
 node_modules/
+models/cand/
