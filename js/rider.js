@@ -250,7 +250,12 @@ export class Rider {
       this.deck.position.copy(PIV).sub(PIV.clone().applyQuaternion(qR));
     } else if (this.seq?.bPos && this.boardFixed && !(this.mode === 'off' && this.seq.ph === 'pick' && this.seq.pick === 'kick')) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); this.deck.quaternion.identity(); this.deck.position.set(0, 0, 0); }
     { const f = this.flex || 0; if (Math.abs(f - (this.flexDrawn || 0)) > 0.0003) { this.flexDrawn = f;
-        for (const { m, base } of this.board.userData.flexMeshes) { const a = m.geometry.attributes.position, arr = a.array; for (let i = 0; i < arr.length; i += 3) arr[i + 1] = base[i + 1] - flexAt(base[i + 2], f) / (m.scale.y || 1); a.needsUpdate = true; } } }
+        // bend in the BOARD's frame: the bottom graphic is rotated 180° about x (its local y points down), so its sign flips —
+        // before, it bent the opposite way, poked up through the grip at the ends (wrong colour) and looked like the edges curling down.
+        // Normals are recomputed so the bent deck shades correctly.
+        for (const { m, base } of this.board.userData.flexMeshes) { const a = m.geometry.attributes.position, arr = a.array, sgn = Math.cos(m.rotation.x) < 0 ? -1 : 1;
+          for (let i = 0; i < arr.length; i += 3) arr[i + 1] = base[i + 1] - sgn * flexAt(base[i + 2], f) / (m.scale.y || 1);
+          a.needsUpdate = true; m.geometry.computeVertexNormals(); } } }
     this.board.updateMatrixWorld(true);
     this.deck.getWorldPosition(this.deckF.position); this.deck.getWorldQuaternion(this.deckF.quaternion); this.deckF.updateMatrixWorld();
     if (this.spin) { this.board.quaternion.multiply(new Q().setFromAxisAngle(up, this.spin)); this.board.updateMatrixWorld(true); }
