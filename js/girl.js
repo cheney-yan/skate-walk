@@ -147,7 +147,7 @@ function restyleBreeze(vrm) {
       for (let j = 0; j < 3; j++) p[i + j] = rgb[j] * s; }
     g.putImageData(d, 0, 0); m[k] = canvasTex(c, m[k]); m.needsUpdate = true; };
   for (const m of matsByName(vrm, 'Tops')) { flat(m, 'map', [150, 192, 238], 0.78, 1.0, true); flat(m, 'shadeMultiplyTexture', [108, 146, 200], 0.8, 1.0, true); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
-  for (const m of matsByName(vrm, 'Bottoms')) { flat(m, 'map', [206, 226, 248], 0.8, 1.04, false); flat(m, 'shadeMultiplyTexture', [150, 178, 214], 0.82, 1.0, false); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
+  for (const m of matsByName(vrm, 'Bottoms')) { flat(m, 'map', [168, 206, 246], 0.8, 1.0, false); flat(m, 'shadeMultiplyTexture', [120, 158, 208], 0.82, 1.0, false); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
   for (const m of matsByName(vrm, 'Shoes')) { if (m.map) m.map = lighten(m.map, 238, 0.35, [1, 1, 1]); m.needsUpdate = true; }
   // black leggings to just below the hips: paint the body skin between the crotch line and mid-thigh
   const bodies = meshesByMat(vrm, 'Body');
