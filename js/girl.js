@@ -149,6 +149,11 @@ function restyleBreeze(vrm) {
   for (const m of matsByName(vrm, 'Tops')) { flat(m, 'map', [128, 178, 236], 0.86, 1.0, true); flat(m, 'shadeMultiplyTexture', [108, 146, 200], 0.8, 1.0, true); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
   for (const m of matsByName(vrm, 'Bottoms')) { flat(m, 'map', [168, 206, 246], 0.8, 1.0, false); flat(m, 'shadeMultiplyTexture', [120, 158, 208], 0.82, 1.0, false); if (m.uniforms?.litFactor) m.uniforms.litFactor.value.set(0.86, 0.92, 1.0); if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.62, 0.72, 0.9); m.needsUpdate = true; }
   for (const m of matsByName(vrm, 'Shoes')) { if (m.map) m.map = lighten(m.map, 238, 0.35, [1, 1, 1]); m.needsUpdate = true; }
+  // the stock sneakers have a ~6 cm platform: squash the sole band to ~2.5 cm (normal sneakers). The rider measures the
+  // ankle-to-sole height from the mesh afterwards, so feet sit ON the deck instead of sinking through it.
+  for (const o of [...meshesByMat(vrm, 'Shoes'), ...meshesByMat(vrm, 'Body')]) { const P = o.geometry.attributes.position, Y = 0.058, K = 0.42;
+    for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y) P.setY(i, Y - (Y - y) * K); }
+    P.needsUpdate = true; o.geometry.computeBoundingSphere(); }
   // the stock coat tails hang to the knees (y 0.2 m in bind pose) and hide the skirt: shorten them to a shirt hem at the
   // upper thigh (~0.8 m) by compressing the bind-pose geometry below the waist; skin weights stay, so it still swings
   for (const o of meshesByMat(vrm, 'Tops')) { const P = o.geometry.attributes.position, Y0 = 1.0, K = 0.24;

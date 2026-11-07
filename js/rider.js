@@ -22,6 +22,7 @@ const DANCE_K = [[0, 0.2, -0.21, 0, 0, 0.015, -0.01], [0.5, 0.2, -0.21, 0, 0, 0.
 const DANCE_T = 6.4;   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
 const EFF = 0.25, P_AERO = 230, CRR = 0.0045, CDA = 0.3;   // slicker than reality on purpose: long glides   // W: what her aerobic system refills continuously; above it she spends the bar, below it she refills          // deck top above ground (m)
 const WHEEL_R = 0.035, HALF_WB = 0.36, DECK_L = 1.12;
+let ANK = 0.093;   // ankle (foot bone) height above the shoe sole — measured per model in the Rider constructor
 
 // deck flex profile: deflection (m, +down) at z for a centre sag f (simply supported beam with overhangs)
 export function flexAt(z, f) { const u = z / HALF_WB; return Math.abs(u) <= 1 ? f * (1 - u * u) * (1 - 0.25 * u * u) / 1 : -f * 0.9 * (Math.abs(u) - 1) * 1.2; }
@@ -652,9 +653,11 @@ export class Rider {
     if (lb > 0.05 && Math.abs(yaw) > 150 * D && Math.sign(yaw) !== this.gazeSide) yaw += this.gazeSide * 2 * Math.PI;
     if (lb < 0.05) this.gazeSide = Math.sign(yaw) || 1;
     this.gazeDbg = { yaw: +(yaw / D).toFixed(0), side: this.gazeSide };
-    const NECK = 90 * D;                                   // neck+head comfortable range; the torso takes the rest
+    const NECK = 70 * D;                                   // neck+head comfortable range (~70°); torso adds a little; eyes do the rest
     const over = Math.sign(yaw) * Math.max(0, Math.abs(yaw) - NECK);
-    const twWant = lb > 0.05 ? clamp(this.gazeTwist + over, -100 * D, 100 * D) : 0;
+    const twWant = lb > 0.05 ? clamp(this.gazeTwist + over, -35 * D, 35 * D) : 0;
+    const reach = NECK + 35 * D + 25 * D;              // what head+torso+eyes can cover
+    if (this.look && Math.abs(yaw) > reach && !this.look.short) { this.look.short = true; this.look.T = Math.min(this.look.T, this.look.t + 0.6); }   // can't see the lens: a quick glance, then back
     this.gazeTwist = damp(this.gazeTwist, twWant * Math.min(1, lb * 1.4), 6, dt);
     yaw = clamp(yaw, -NECK, NECK); pitch = clamp(pitch, -35 * D, 40 * D);
     const tilt = -yaw * 0.12 * lb;                         // slight head tilt into the glance (cute, not robotic)
@@ -677,7 +680,7 @@ export class Rider {
   // ---------------- IK ----------------
   solveLegs(dt) {
     const B = this.b, bw = (o) => o.getWorldPosition(new V());
-    const deck = (x, z, y = DECK_Y + 0.093) => this.deck.localToWorld(new V(x, y - flexAt(z, this.flex || 0), z));
+    const deck = (x, z, y = DECK_Y + ANK) => this.deck.localToWorld(new V(x, y - flexAt(z, this.flex || 0), z));
     // feet stance on deck (board frame: z forward): front (left) foot over front bolts, back (right) over tail
     const P = this.push ? this.push.t / this.push.T : 0;
     const pr = this.push ? sstep(0.0, 0.25, P) * (1 - sstep(0.78, 1.0, P)) : 0;
@@ -686,14 +689,14 @@ export class Rider {
     let rPitch = 0;
     if (this.dance && this.m < 0.5) {
       const F = this.danceFeet();
-      lf = deck(F.lx, F.lz, DECK_Y + 0.093 + F.ly); rf = deck(F.rx, F.rz, DECK_Y + 0.093 + F.ry);
-      if (F.ry > 0.15) rf = deck(F.rx - 0.05, F.rz - 0.25, DECK_Y + 0.093 + F.ry);   // Peter Pan: back leg extends behind and up
+      lf = deck(F.lx, F.lz, DECK_Y + ANK + F.ly); rf = deck(F.rx, F.rz, DECK_Y + ANK + F.ry);
+      if (F.ry > 0.15) rf = deck(F.rx - 0.05, F.rz - 0.25, DECK_Y + ANK + F.ry);   // Peter Pan: back leg extends behind and up
       const fw = sstep(0.4, 1.0, this.dance.t) * (1 - sstep(5.4, 6.2, this.dance.t));
       lYaw = lerp(lYaw, -12 * D, fw); rYaw = lerp(rYaw, -20 * D, fw);   // toes point toward the nose while walking the board
     }
     if (this.ollie && this.m < 0.5) { // back foot to the tail during the crouch, front foot slides toward the nose after the pop
       const o = this.ollie.t; const tail = sstep(0.0, 0.3, o) * (1 - sstep(0.6, 0.9, o)), slide = sstep(0.36, 0.55, o) * (1 - sstep(0.75, 1.05, o));
-      rf = deck(-0.01, -0.21 - tail * 0.13); lf = deck(0.015, 0.2 + slide * 0.17, DECK_Y + 0.093 + slide * 0.008); rYaw = -80 * D; lYaw = -65 * D;
+      rf = deck(-0.01, -0.21 - tail * 0.13); lf = deck(0.015, 0.2 + slide * 0.17, DECK_Y + ANK + slide * 0.008); rYaw = -80 * D; lYaw = -65 * D;
     }
     if (this.push && !this.ollie && this.m < 0.5) {
       const p = this.push; const c0 = p.c0 ?? 0.3 * p.T, c1 = p.c1 ?? c0 + 0.3; const tt = p.t;
@@ -731,7 +734,7 @@ export class Rider {
         const lift = G ? G.lift : Math.max(0, Math.cos(ph + (side === 'left' ? 0 : Math.PI))) * 0.09 * (st > 0 ? 1 : 0);
         let z = G ? G.z : c * st, x = sg * 0.09; if (side === 'left' && kick) { z += kick * 0.25; }
         if (bend) { z += side === 'left' ? 0.12 * bend : -0.1 * bend; }
-        const p = this.walkF.localToWorld(new V(x, 0, z)); p.y = (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y) + 0.093 + lift + (side === 'left' ? kick * 0.04 : 0); return p; };
+        const p = this.walkF.localToWorld(new V(x, 0, z)); p.y = (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y) + ANK + lift + (side === 'left' ? kick * 0.04 : 0); return p; };
       const wl = wf('left'), wr = wf('right');
       lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); lYaw = lerp(lYaw, -90 * D, M); rYaw = lerp(rYaw, -90 * D, M);
       const gL = gaitOn ? gait(0).pitch : 0, gR = gaitOn ? gait(0.5).pitch : 0;   // + toes up (heel strike), - heel up (toe-off)
@@ -759,7 +762,17 @@ export class Rider {
       ft.updateMatrixWorld(true);
     }
   }
-  groundAt(x, z) { const p = this.board.localToWorld(new V(x, 0, z)); p.y = this.groundFn ? this.groundFn(p.x, p.z) + 0.093 : this.pos.y - this.air + 0.093; return p; }
+  // calibrate the ankle height from the skinned shoe: after a frame on the deck, lift/lower the feet so the lowest sole
+  // vertex sits on the grip tape (models differ; a squashed platform sole changes it too)
+  calibrateFeet() {
+    // ankle height = left foot bone minus the lowest skinned shoe vertex near that foot (independent of where the feet are)
+    let sh = null; this.vrm.scene.traverse((o) => { if (!sh && o.isMesh && (Array.isArray(o.material) ? o.material : [o.material]).some((m) => /Shoes/.test(m.name || ''))) sh = o; });
+    if (!sh) return 0; this.vrm.scene.updateMatrixWorld(true); sh.skeleton?.update();
+    const fp = this.b.leftFoot.getWorldPosition(new V()), v = new V(), P = sh.geometry.attributes.position; let mn = 9;
+    for (let i = 0; i < P.count; i++) { sh.getVertexPosition(i, v); sh.localToWorld(v); if (v.distanceTo(fp) < 0.2) mn = Math.min(mn, v.y); }
+    if (mn > 8) return 0; const a = clamp(fp.y - mn + 0.004, 0.03, 0.3), d = a - ANK; ANK = a; this.ankle = ANK; return d;
+  }
+  groundAt(x, z) { const p = this.board.localToWorld(new V(x, 0, z)); p.y = this.groundFn ? this.groundFn(p.x, p.z) + ANK : this.pos.y - this.air + ANK; return p; }
   groundY() { return 0; }
 
   events() {}

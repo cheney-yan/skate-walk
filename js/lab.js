@@ -351,6 +351,7 @@ function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.pump = null; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
   lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
   rider.update(1 / 60, (s) => track.at(s), ctx);
+  if (!rider.ankleCal) { rider.calibrateFeet(); rider.ankleCal = true; }
   skirt.inited = false; if (skirt2) skirt2.inited = false; vrm.springBoneManager?.reset?.();
 }
 function windTarget(s) {
