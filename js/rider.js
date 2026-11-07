@@ -530,7 +530,8 @@ export class Rider {
     const ptw = this.pumpTwist || 0;
     this.rot('spine', fwd * 0.45 * tall + breathe, open * 0.2 + tw * 0.25 + ptw * 0.3, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
     this.rot('chest', fwd * 0.35 * tall - breathe * 0.5, open * 0.2 + tw * 0.35 + ptw * 0.4, leanIn * 0.3);
-    this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25 + ptw * 0.3, 0);
+    const gaitTw = (this.mode === 'walk' ? 1 : 0) * M * Math.cos(this.phi * Math.PI * 2) * 0.07;   // shoulders counter the hips
+    this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25 + ptw * 0.3 + gaitTw, 0);
     // head: GAZE solver. Riding = eyes on the road a few metres ahead (follows the curve).
     // Look-back = she turns to look into the lens (the player), wherever the camera is.
     this.solveGaze(dt, ctx, lb, fwd, w);
@@ -554,7 +555,9 @@ export class Rider {
     const A = this.armT || (this.armT = {});
     // elbows soft and turned slightly IN toward the body (not winged out): upper-arm x-rotation rolls the elbow back/in,
     // forearm carries the hand forward of the hip, palms face the thighs.
-    const wsw = M * Math.sin(this.phi * Math.PI * 2) * 0.35;   // walking arm swing (opposite to legs)
+    // walking arm swing, OPPOSITE to the legs: the free (left) arm is furthest back when the left foot is furthest forward
+    // (gait: left foot forward-most at phase 0). Measured: +lx swings the arm back.
+    const wsw = M * Math.cos(this.phi * Math.PI * 2) * 0.35;
     const AT = this.armTwist ?? 0.2;
     const rest = { lx: AT + wsw, ly: -0.05 + bodySw * (1 - M), lz: -76 * D, le: -0.42, lw: -0.05 + brz2 * 0.5,
                    rx: AT - wsw, ry: 0.05 + bodySw * (1 - M), rz: 76 * D, re: 0.42, rw: 0.05 - brz * 0.5 };
