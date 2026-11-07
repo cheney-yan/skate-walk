@@ -274,24 +274,41 @@ export function setupHair(vrm) {
   const cloth = joints.filter((j) => /Tops|Skirt|Bust|Coat|Jacket|Cloth|Bottoms/i.test(j.bone.name) && !/Bust/i.test(j.bone.name));
   const NAT = OUTFIT === 'native' || OUTFIT === 'breeze';
   if (NAT) cloth.forEach((j) => { j.settings.stiffness *= /CoatSkirt/.test(j.bone.name) ? 0.3 : 0.5; j.settings.dragForce = Math.min(j.settings.dragForce, 0.22); });
-  // softer, lighter strands: low stiffness near the tips, a little drag so they swing instead of snapping
-  hair.forEach((j, i) => { j.settings.stiffness = Math.min(j.settings.stiffness, 0.35) * 0.6; j.settings.dragForce = 0.22; j._ph = i * 2.399; j._k = 0.8 + ((i * 37) % 10) / 25; });
+  // Hair reads as one soft mass only if NEIGHBOURING strands move together. Each strand gets a phase from its azimuth
+  // around the head (smooth across neighbours) and a depth along its chain; the wind field is coherent (one gust shape
+  // sweeping across the head) with only a little per-strand jitter. Roots are firmer, tips softer.
+  const head = vrm.humanoid.getNormalizedBoneNode('head'); vrm.scene.updateMatrixWorld(true);
+  const hc = head.getWorldPosition(new THREE.Vector3()), names = new Set(hair.map((j) => j.bone));
+  hair.forEach((j, i) => {
+    let d = 0, b = j.bone.parent; while (b && names.has(b)) { d++; b = b.parent; }
+    const p = j.bone.getWorldPosition(new THREE.Vector3()).sub(hc);
+    j._az = Math.atan2(p.x, p.z); j._depth = d; j._jit = ((i * 37) % 10) / 10;
+    const tip = Math.min(1, d / 3);
+    j.settings.stiffness = Math.min(j.settings.stiffness, 0.35) * (0.85 - 0.45 * tip);
+    j.settings.dragForce = 0.32 - 0.08 * tip;
+  });
   const tmp = new THREE.Vector3(), side = new THREE.Vector3();
   return {
     // air = relative air velocity (wind - body velocity), world space
     update(air, t) {
-      const sp = air.length();
+      const sp = air.length(), s01 = Math.min(1, sp / 5);
       side.set(-air.z, 0, air.x).normalize();
+      // only 8 spring chains drive ~77 hair cards on this model: if chains get different wind directions the mass splits
+      // into planks. So: ONE shared wind direction for all chains (the mass streams together), gentle shared sway,
+      // and only the magnitude varies a little and smoothly around the head.
+      const sway = 0.07 * Math.sin(t * 1.3) + 0.03 * Math.sin(t * 3.1);
+      const dir = tmp.set(0, -1.0, 0).addScaledVector(air, 0.13).addScaledVector(side, sway * sp * 0.2);
+      dir.y += (0.05 + 0.04 * Math.sin(t * 0.9)) * s01 * sp * 0.2;
+      const mag = dir.length(); dir.divideScalar(mag || 1);
+      // cohesion: chains rooted on the sides are pulled a little toward the back midline so the mass stays together
+      // instead of fanning out sideways (gaps showing sky between the cards)
+      const hq = head.getWorldQuaternion(new THREE.Quaternion()), right = new THREE.Vector3(1, 0, 0).applyQuaternion(hq);
       for (const j of hair) {
-        // each strand sees its own turbulent eddy: speed flicker + sideways and vertical lift
-        const a = t * (3.1 + j._k * 2.3) + j._ph, b = t * (7.7 + j._k * 3.1) + j._ph * 1.7;
-        const flick = 1 + 0.35 * Math.sin(a) + 0.2 * Math.sin(b);
-        const lift = (0.25 * Math.sin(a * 0.7 + 1) + 0.15 * Math.sin(b * 1.3)) * Math.min(1, sp / 4);
-        tmp.set(0, -0.6, 0).addScaledVector(air, 0.32 * j._k * flick).addScaledVector(side, Math.sin(a * 1.3) * 0.18 * sp * 0.25);
-        tmp.y += lift * sp * 0.25;
-        const mag = tmp.length();
-        j.settings.gravityDir.copy(tmp).divideScalar(mag || 1);
-        j.settings.gravityPower = mag * 0.8;
+        const ph = j._az * 0.8 + j._depth * 0.4;
+        const gust = 1 + 0.12 * Math.sin(t * 2.1 - ph) + 0.04 * Math.sin(t * 5.3 - ph * 1.7);
+        const lat = Math.sin(j._az);   // +: head's left/right side
+        j.settings.gravityDir.copy(dir).addScaledVector(right, -lat * 0.55).normalize();
+        j.settings.gravityPower = Math.min(0.9, mag * 0.45 * gust);
       }
       for (const j of cloth) { const k = j._ck ?? (j._ck = 0.8 + Math.random() * 0.5), fl = 1 + 0.3 * Math.sin(t * (4 + k * 3) + k * 9); tmp.set(0, -1, 0).addScaledVector(air, (NAT ? (/CoatSkirt/.test(j.bone.name) ? 0.42 : 0.3) : 0.1) * k * fl); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.4 : 0.2); }
     },
