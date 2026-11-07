@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '../vendor/three-vrm.module.min.js';
 
-export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'breeze';
+export const OUTFIT = new URLSearchParams(location.search).get('outfit') || 'native';   // Cheney 11/08: the model's own sporty jacket + long hair
 export async function loadGirl(url) {
   const loader = new GLTFLoader();
   loader.register((p) => new VRMLoaderPlugin(p));
@@ -107,7 +107,13 @@ function matsByName(vrm, key) {
 
 export const STOCKING_TOP = 0.80; // metres in bind pose (thigh-high)
 function restyle(vrm) {
-  if (OUTFIT === 'native') return;   // keep the model's own designed clothes (and its own cloth spring bones)
+  if (OUTFIT === 'native') {   // keep the model's own designed clothes (and its own cloth spring bones); only fix what was wrong
+    // the stock sneakers have a ~6 cm platform: squash the sole band to ~2.5 cm (feet then sit ON the deck)
+    for (const o of [...meshesByMat(vrm, 'Shoes'), ...meshesByMat(vrm, 'Body')]) { const P = o.geometry.attributes.position, Y = 0.058, K = 0.42;
+      for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y) P.setY(i, Y - (Y - y) * K); }
+      P.needsUpdate = true; o.geometry.computeBoundingSphere(); }
+    for (const m of matsByName(vrm, 'Body')) { if (!/Outline/.test(m.name)) legForm(m); }   // rounded knee / shin shading
+    return; }
   if (OUTFIT === 'breeze') return restyleBreeze(vrm);
   if (OUTFIT === 'sundress') return restyleSundress(vrm);
   if (OUTFIT === 'shirt') return restyleShirt(vrm);
@@ -231,7 +237,7 @@ function restyleBreeze(vrm) {
   // HAIR TIED UP: the long back curtain (cards reaching below the shoulders) is gathered at the nape into a low ponytail —
   // squeezed toward the back midline below the tie and shortened — so it swings as ONE soft tail on its spring chain,
   // while the short side locks and bangs stay loose and flutter. No more flat paper sheet.
-  { const long = meshesByMat(vrm, 'HAIR').filter((o) => { const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) if (P.getY(i) < 1.05) return true; return false; });
+  if (new URLSearchParams(location.search).get('tie') === '1') { const long = meshesByMat(vrm, 'HAIR').filter((o) => { const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) if (P.getY(i) < 1.05) return true; return false; });
     const TIE = 1.37, band = (y) => Math.round((TIE - y) * 25);
     const zs = {}; for (const o of long) { const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < TIE) { const b = band(y); (zs[b] = zs[b] || []).push(P.getZ(i)); } } }
     const zc = {}; for (const b in zs) { const a = zs[b].sort((p, q) => p - q); zc[b] = a[Math.floor(a.length / 2)]; }

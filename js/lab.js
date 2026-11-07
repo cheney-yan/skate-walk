@@ -321,7 +321,7 @@ let vrm, rider, skirt, skirt2 = null, hair, hat;
 const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: RD ? undefined : 999, camera };
 async function init() {
   const M = { shino: './models/shino.vrm', sample: './models/girl.vrm', a: './models/cand/AvatarSample_A.vrm', b: './models/sample_b.vrm', vita: './models/cand/Vita.vrm', vic: './models/cand/Victoria_Rubin.vrm' };
-  vrm = await loadGirl(M[Q.get('m') || (OUTFIT === 'breeze' ? 'b' : 'shino')] || M.shino);
+  vrm = await loadGirl(M[Q.get('m') || (OUTFIT === 'breeze' || OUTFIT === 'native' ? 'b' : 'shino')] || M.shino);
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
   const SD = OUTFIT === 'sundress' || OUTFIT === 'shirt';   // reference look: knee-length floral sundress, no hat, hair fully free
