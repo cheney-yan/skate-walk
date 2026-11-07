@@ -512,8 +512,9 @@ export class Rider {
     this.oDrop = damp(this.oDrop ?? 0, crouchO * 0.16 + tuckAir * 0.27 + landAbs * 0.12 + (this.pumpDrop || 0), 22, dt);
     const dn = this.dance ? sstep(0.2, 0.9, this.dance.t) * (1 - sstep(5.5, 6.3, this.dance.t)) : 0, DF = this.dance ? this.danceFeet() : null;
     this.dn = dn;
-    const M = this.m, F = this.face, bob = Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
-    const hipDrop = lerp(0.028 + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.035 - bob + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);
+    const runB = this.mode === 'on' && this.seq?.ph === 'run', gB = this.mode === 'walk' || runB, uB = ((this.phi % 1) + 1) % 1, SFB = runB ? 0.42 : 0.56;
+    const M = this.m, F = this.face, bob = gB ? (0.5 + 0.5 * Math.cos(4 * Math.PI * (uB - SFB / 2))) * (runB ? 0.05 : 0.045) * M : Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
+    const hipDrop = lerp(0.028 + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.062 - bob + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);
     const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
     b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
@@ -712,18 +713,32 @@ export class Rider {
       // walking: feet on the ground under the hips, alternating stride ~0.55 m; at a standstill side by side
       const ph = this.phi * Math.PI * 2, st = this.mode === 'walk' ? 0.27 : (this.mode === 'on' && this.seq?.ph === 'run') ? 0.42 : (this.mode === 'on' && this.seq?.ph === 'step') ? 0.2 : 0.0;
       const kick = this.kickStep || 0, bend = this.bend;
+      // gait: per foot cycle u∈[0,1): STANCE (u<SF) the foot is planted — it moves back in the body frame at exactly the
+      // walking speed, so it never slides on the ground; SWING it lifts, travels forward fast and sets down heel first.
+      // stance length = SF·L (L = metres per foot cycle; phi advances v/L per second) => z runs +SF·L/2 .. -SF·L/2.
+      const runPh = this.mode === 'on' && this.seq?.ph === 'run', gaitOn = this.mode === 'walk' || runPh;
+      const L = runPh ? 1.25 : 1.1, SF = runPh ? 0.42 : 0.56, half = SF * L / 2;
+      const gait = (off) => { const u = ((this.phi + off) % 1 + 1) % 1;
+        if (u < SF) { const k = u / SF; return { z: half * (1 - 2 * k), lift: 0, pitch: 0.42 * Math.max(0, 1 - k / 0.2) ** 2 - 0.5 * Math.max(0, (k - 0.72) / 0.28) ** 2 }; }   // heel strike → flat → heel rises (toe-off)
+        const w = (u - SF) / (1 - SF), e = 0.5 - 0.5 * Math.cos(Math.PI * w);
+        return { z: -half + 2 * half * e, lift: Math.sin(Math.PI * w) * (runPh ? 0.11 : 0.07), pitch: lerp(-0.5, 0.42, sstep(0.1, 0.95, w)) }; };
       const wf = (side, s) => { const sg = side === 'left' ? 1 : -1, c = Math.sin(ph + (side === 'left' ? 0 : Math.PI));
-        const lift = Math.max(0, Math.cos(ph + (side === 'left' ? 0 : Math.PI))) * 0.09 * (st > 0 ? 1 : 0);
-        let z = c * st, x = sg * 0.09; if (side === 'left' && kick) { z += kick * 0.25; }
+        const G = gaitOn ? gait(side === 'left' ? 0 : 0.5) : null;
+        const lift = G ? G.lift : Math.max(0, Math.cos(ph + (side === 'left' ? 0 : Math.PI))) * 0.09 * (st > 0 ? 1 : 0);
+        let z = G ? G.z : c * st, x = sg * 0.09; if (side === 'left' && kick) { z += kick * 0.25; }
         if (bend) { z += side === 'left' ? 0.12 * bend : -0.1 * bend; }
         const p = this.walkF.localToWorld(new V(x, 0, z)); p.y = (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y) + 0.093 + lift + (side === 'left' ? kick * 0.04 : 0); return p; };
       const wl = wf('left'), wr = wf('right');
-      lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); lYaw = lerp(lYaw, -90 * D, M); rYaw = lerp(rYaw, -90 * D, M); rPitch = lerp(rPitch, 0, M);
+      lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); lYaw = lerp(lYaw, -90 * D, M); rYaw = lerp(rYaw, -90 * D, M);
+      const gL = gaitOn ? gait(0).pitch : 0, gR = gaitOn ? gait(0.5).pitch : 0;   // + toes up (heel strike), - heel up (toe-off)
+      rPitch = lerp(rPitch, -gR, M); this.lPitch = -gL * M;   // foot-bone pitch sign is the opposite (measured)
+      // heel strike / toe-off: lifting the heel raises the ankle (pivot on the toes), toes-up keeps the heel on the ground
+      const ank = (pt) => (pt < 0 ? -pt * 0.12 : pt * 0.03); lf.y += ank(gL) * M; rf.y += ank(gR) * M;
     }
     if (this.drag > 0) { const dp = this.groundAt(-0.02, -0.5); rf = rf.lerp(dp, this.drag * 0.8); rPitch = -0.5 * this.drag; }
     if (this.footLift) { lf.y += this.footLift; rf.y += this.footLift; }
     const fwdModel = new V(0, 0, this.flip).applyQuaternion(this.vrm.scene.getWorldQuaternion(new Q()));
-    for (const [side, target, yaw, pitch] of [['left', lf, lYaw, 0], ['right', rf, rYaw, rPitch]]) {
+    for (const [side, target, yaw, pitch] of [['left', lf, lYaw, this.m > 0.01 ? (this.lPitch || 0) : 0], ['right', rf, rYaw, rPitch]]) {
       const up = B[side + 'UpperLeg'], lo = B[side + 'LowerLeg'], ft = B[side + 'Foot'];
       const hip = bw(up);
       // knee points the same way as the toes (knee over the second toe), so the leg reads straight and relaxed, not twisted
