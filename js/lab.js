@@ -337,7 +337,7 @@ async function init() {
 let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
-  lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined;
+  lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
   rider.update(1 / 60, (s) => track.at(s), ctx);
   skirt.inited = false; vrm.springBoneManager?.reset?.();
 }
@@ -384,9 +384,12 @@ const orbit = { yaw: Math.PI, pitch: 0.18, dist: 3.2, drag: null, pinch: null };
 const anc = { s: 0, v: 0, p: new THREE.Vector3(), init: false };
 const spring = (st, key, target, w, dt) => { const x = st[key], v = st[key + 'v'] || 0; const a = w * w * (target - x) - 2 * w * v; st[key + 'v'] = v + a * dt; st[key] = x + st[key + 'v'] * dt; };
 const camS = {};
+window.__ancS = () => anc.s;
 function anchorStep(dt) {
   if (!anc.init) { anc.s = rider.s; anc.v = 0; anc.init = true; }
-  const a = 1.2 * 1.2 * (rider.s - anc.s) - 2 * 1.2 * anc.v; anc.v += a * dt; anc.s += anc.v * dt;
+  // track her progress with velocity feed-forward: no steady lag at speed, but sudden starts/stops and gait surges are smoothed
+  anc.vr = anc.vr === undefined ? rider.v : anc.vr + (rider.v - anc.vr) * (1 - Math.exp(-dt * 2.5));
+  const W = 1.6, a = W * W * (rider.s - anc.s) + 2 * W * (anc.vr - anc.v); anc.v += a * dt; anc.s += anc.v * dt;
   anc.p.copy(track.at(anc.s).p);
   // vertical: low-pass the path height so steps / bumps don't bounce the frame
   anc.y = anc.y === undefined ? anc.p.y : anc.y + (anc.p.y - anc.y) * (1 - Math.exp(-dt * 1.5)); anc.p.y = anc.y;
@@ -579,7 +582,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 // deterministic recording hooks
 window.LAB = {
   scene, THREE, rider: () => rider, track, skirt: () => skirt, vrm: () => vrm, camera,
-  setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; },
+  setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
   restart, jumpTo(s) { restart(); for (let i = 0; i < 4000 && rider.s < s; i++) step(1 / 30); },
