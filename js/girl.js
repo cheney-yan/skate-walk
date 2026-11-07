@@ -419,8 +419,8 @@ export function setupHair(vrm) {
       const w1 = sstepG(3, 8, kmh), w2 = sstepG(22, 32, kmh);
       const pitchDeg = kmh < 5 ? 0 : kmh < 25 ? 35 * (kmh - 5) / 20 : 35 + (78 - 35) * Math.min(1, (kmh - 25) / 35);   // lift from hanging toward horizontal
       const s01 = Math.min(1, kmh / 30);
-      const damping = 0.5 - 0.1 * s01;                 // moderate, nearly constant: amplitude stays in a small range
-      const stiffMul = 0.9 + 2.6 * s01 * s01;            // Cheney: faster speed = FASTER swing (stiffer spring -> higher frequency), not bigger
+      const damping = 0.3 - 0.06 * s01;                // soft like 317daff (the version where the hair visibly lifted)
+      const stiffMul = 1.0;                              // stiffening with speed pinned the hair to the head (lift 18-23° vs 24-43° before)
       // ---- direction matrix in the character frame (yaw of the air relative to her forward)
       fwd.copy(o.fwd || tmp.set(0, 0, 1)).setY(0).normalize(); side.crossVectors(up, fwd);   // side = her left
       const aH = tmp.copy(air).setY(0), aHl = aH.length() || 1e-6, ad = aH.divideScalar(aHl).clone();   // downwind (horizontal)
@@ -442,6 +442,18 @@ export function setupHair(vrm) {
         const want = err > 0.08 ? 1 : -1;
         c.gain = Math.max(0.6, Math.min(4.5, c.gain * Math.exp(want * dt * 1.4 * Math.min(1, err * 2))));
         c.err = err; }
+      if (NAT && !this.tiered) {
+        // 317daff wind (Cheney: that version visibly lifted): one shared downwind direction, sway, power ∝ |air| — plus a small
+        // flutter toward the tips whose frequency rises with speed (faster, not bigger)
+        const sway = 0.07 * Math.sin(t * 1.3) + 0.03 * Math.sin(t * 3.1);
+        const dir0 = new THREE.Vector3(0, -1, 0).addScaledVector(air, 0.13).addScaledVector(side, sway * sp * 0.2);
+        dir0.y += (0.05 + 0.04 * Math.sin(t * 0.9)) * Math.min(1, sp / 5) * sp * 0.2; const mag = dir0.length(); dir0.divideScalar(mag || 1);
+        for (const j of hair) { const tip = j._tip, ph = j._az * 0.8 + j._depth * 0.4;
+          const gust = 1 + 0.12 * Math.sin(t * 2.1 - ph) + 0.04 * Math.sin(t * 5.3 - ph * 1.7);
+          const fq = 1.6 + sp * 0.95, fa = (0.02 + 0.03 * s01) * (0.3 + tip);
+          j.settings.gravityDir.copy(dir0).addScaledVector(right, -Math.sin(j._az) * 0.55).addScaledVector(side, fa * vn(t, fq, ph)).addScaledVector(lagLat, -0.05 * (0.5 + tip)).normalize();
+          j.settings.gravityPower = Math.min(0.9, mag * 0.45 * gust); j.settings.stiffness = j._k0; j.settings.dragForce = 0.32 - 0.08 * Math.min(1, j._depth / 3); }
+      } else
       for (const j of hair) {
         const tip = j._tip, ph = j._az * 0.8 + j._depth * 0.4;
         // base: down, rotated toward downwind by the tier pitch; roots lift less than tips (stiff root → curve)
