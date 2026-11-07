@@ -387,34 +387,80 @@ export function setupHair(vrm) {
     j.settings.stiffness = Math.min(j.settings.stiffness, 0.35) * (0.85 - 0.45 * tip);
     j.settings.dragForce = 0.32 - 0.08 * tip;
   });
-  const tmp = new THREE.Vector3(), side = new THREE.Vector3();
+  // per-joint constants for the tiered rig: tip = 0 at the root .. 1 at the last joint of its chain
+  hair.forEach((j) => { j._tip = j._chainLen > 1 ? j._depth / (j._chainLen - 1) : 1; j._k0 = j.settings.stiffness; });
+  // chains (root joint → tip joint) for closed-loop control: the spring bones' rest pull fights the wind, so instead of
+  // guessing powers we measure each chain's real direction and steer its gain until it reaches the target direction
+  const chains = hair.filter((j) => !names.has(j.bone.parent)).map((r) => { const js = [r]; let c = r; while ((c = hair.find((k) => k.bone.parent === c.bone))) js.push(c); return { js, gain: 1, root: r.bone, tipB: js[js.length - 1].bone }; })
+    .filter((c) => c.js.length >= 2);
+  for (const c of chains) for (const j of c.js) j._chain = c;
+  const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _tgt = new THREE.Vector3();
+  const tmp = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), fwd = new THREE.Vector3(), lagLat = new THREE.Vector3(), lagV = { y: 0 };
+  const hq = new THREE.Quaternion(), right = new THREE.Vector3(), hfwd = new THREE.Vector3();
+  const vn = (t, f, s) => Math.sin(t * f * 6.283 + s) * 0.6 + Math.sin(t * f * 6.283 * 2.13 + s * 1.7) * 0.4;   // cheap smooth noise
   return {
-    // air = relative air velocity (wind - body velocity), world space
-    update(air, t) {
-      const sp = air.length(), s01 = Math.min(1, sp / 5);
-      side.set(-air.z, 0, air.x).normalize();
-      // only 8 spring chains drive ~77 hair cards on this model: if chains get different wind directions the mass splits
-      // into planks. So: ONE shared wind direction for all chains (the mass streams together), gentle shared sway,
-      // and only the magnitude varies a little and smoothly around the head.
-      const sway = 0.07 * Math.sin(t * 1.3) + 0.03 * Math.sin(t * 3.1);
-      const dir = tmp.set(0, -1.0, 0).addScaledVector(air, 0.19).addScaledVector(side, sway * sp * 0.2);
-      dir.y += (0.05 + 0.04 * Math.sin(t * 0.9)) * s01 * sp * 0.2;
-      const mag = dir.length(); dir.divideScalar(mag || 1);
-      // cohesion: chains rooted on the sides are pulled a little toward the back midline so the mass stays together
-      // instead of fanning out sideways (gaps showing sky between the cards)
-      const hq = head.getWorldQuaternion(new THREE.Quaternion()), right = new THREE.Vector3(1, 0, 0).applyQuaternion(hq);
+    // air = relative air velocity (wind − body velocity), world space. Spec writes V_rel = V_char − V_wind = −air.
+    // o = { dt, fwd: travel direction (world), latAcc: lateral acceleration vector (v²κ toward the turn centre), vAcc: vertical accel }
+    update(air, t, o = {}) {
+      const dt = o.dt || 1 / 60, sp = air.length(), kmh = sp * 3.6;
+      // ---- velocity tiers (smoothly blended): T0 idle 0-5, T1 cruise 5-25, T2 high speed 25-60+
+      const w1 = sstepG(3, 8, kmh), w2 = sstepG(22, 32, kmh);
+      const pitchDeg = kmh < 5 ? 0 : kmh < 25 ? 35 * (kmh - 5) / 20 : 35 + (78 - 35) * Math.min(1, (kmh - 25) / 35);   // lift from hanging toward horizontal
+      const damping = 0.75 - 0.15 * w1 - 0.35 * w2;     // T0 ~0.75, T1 0.6, T2 0.25 (three-vrm dragForce)
+      const stiffMul = 1 - 0.0 * w1 - 0.3 * w2;         // T1 root/tip ratio as set up; T2 a little looser so the tail straightens
+      // ---- direction matrix in the character frame (yaw of the air relative to her forward)
+      fwd.copy(o.fwd || tmp.set(0, 0, 1)).setY(0).normalize(); side.crossVectors(up, fwd);   // side = her left
+      const aH = tmp.copy(air).setY(0), aHl = aH.length() || 1e-6, ad = aH.divideScalar(aHl).clone();   // downwind (horizontal)
+      const along = ad.dot(fwd);                        // −1 headwind (blows backward), +1 tailwind (blows forward)
+      const tail = Math.max(0, along);                  // tailwind → hair goes forward/up over the head: cap the pitch (face colliders are coarse)
+      const pitch = THREE.MathUtils.degToRad(Math.min(70, pitchDeg * (1 + 0.4 * tail)));   // tailwind: lighter drag needed to lift it forward; cap at 70° (keep it off the face)
+      // ---- carving: lateral (centrifugal) and vertical load act on the hair as pseudo-forces with a first-order lag,
+      // so the tail swings to the outside of the turn a beat late and whips back (S-shaped because roots are stiffer)
+      const tau = 0.22 + 0.15 * (1 - w2);               // softer lag at cruise, quicker at speed
+      const lA = o.latAcc ? tmp.copy(o.latAcc) : tmp.set(0, 0, 0);
+      lagLat.lerp(lA, 1 - Math.exp(-dt / tau)); lagV.y += ((o.vAcc || 0) - lagV.y) * (1 - Math.exp(-dt / 0.12));
+      head.getWorldQuaternion(hq); right.set(1, 0, 0).applyQuaternion(hq); hfwd.set(0, 0, 1).applyQuaternion(hq);
+      // target direction for long chains: hang (down), lifted toward downwind by the tier pitch (side chains share it so the
+      // mass stays one tail). Measure → integrate gain (bounded) so stiffness can't eat the wind.
+      const pitchR = pitch, crossK = Math.abs(ad.dot(side));
+      _tgt.copy(up).multiplyScalar(-Math.cos(pitchR)).addScaledVector(ad, Math.sin(pitchR)).normalize();
+      for (const c of chains) { c.root.getWorldPosition(_a); c.tipB.getWorldPosition(_b); const cur = _b.sub(_a).normalize();
+        const err = Math.acos(Math.max(-1, Math.min(1, cur.dot(_tgt))));   // radians off target
+        const want = err > 0.08 ? 1 : -1;
+        c.gain = Math.max(0.6, Math.min(4.5, c.gain * Math.exp(want * dt * 1.4 * Math.min(1, err * 2))));
+        c.err = err; }
       for (const j of hair) {
-        const ph = j._az * 0.8 + j._depth * 0.4;
-        const gust = 1 + 0.12 * Math.sin(t * 2.1 - ph) + 0.04 * Math.sin(t * 5.3 - ph * 1.7) + (j._short ? 0.25 * Math.sin(t * 9 + j._jit * 7) : 0);   // short locks flicker
-        const lat = Math.sin(j._az);   // +: head's left/right side
-        j.settings.gravityDir.copy(dir).addScaledVector(right, -lat * 0.55).normalize();
-        j.settings.gravityPower = Math.min(1.1, mag * 0.5 * gust);
+        const tip = j._tip, ph = j._az * 0.8 + j._depth * 0.4;
+        // base: down, rotated toward downwind by the tier pitch; roots lift less than tips (stiff root → curve)
+        const pj = pitch * (0.75 + 0.35 * tip);
+        const d = j.settings.gravityDir.copy(up).multiplyScalar(-Math.cos(pj)).addScaledVector(ad, Math.sin(pj));
+        // T0 breathing sway: 0.5 Hz, ±2°
+        d.addScaledVector(side, (1 - w1) * 0.035 * vn(t, 0.5, ph));
+        // T1 soft wave along the strands (travelling toward the tips)
+        d.addScaledVector(side, w1 * (1 - w2) * 0.08 * tip * Math.sin(t * 2.4 - j._depth * 1.3 + j._jit));
+        // T2 turbulence: 8-15 Hz tip tearing
+        if (w2 > 0) { const a = w2 * 0.22 * tip * tip; d.addScaledVector(side, a * vn(t, 8 + 7 * j._jit, ph)).addScaledVector(up, a * 0.7 * vn(t, 11 + 4 * j._jit, ph + 2)); }
+        // carve pseudo-force (outward = −latAcc) and vertical bumps/downhill unloading
+        d.addScaledVector(lagLat, -0.06 * (0.5 + tip)).addScaledVector(up, -0.03 * lagV.y * tip);
+        // bangs (chains in front of the head): headwind presses them back onto the forehead, tailwind flips them forward
+        const front = j._front ?? (j._front = (() => { const p = j.bone.getWorldPosition(new THREE.Vector3()).sub(hc); return p.dot(hfwd) > 0.03; })());
+        if (front) d.addScaledVector(hfwd, -(1 - tail * 2) * 0.35 * w1);
+        // cohesion: side chains pulled toward the back midline (crosswind: the whole mass leans downwind together)
+        d.addScaledVector(right, -Math.sin(j._az) * 0.4 * (1 - 0.6 * crossK));
+        d.normalize();
+        // power: gravity + air drag ∝ v²; the short locks flicker
+        const gust = 1 + 0.1 * Math.sin(t * 2.1 - ph) + (j._short ? 0.2 * Math.sin(t * 9 + j._jit * 7) * w1 : 0);
+        j.settings.gravityPower = Math.min(3.5, (0.5 + 0.9 * w1 * (kmh / 25) * (1 - 0.5 * w2) + 0.5 * w2) * gust * (j._chain ? j._chain.gain : 1));
+        j.settings.dragForce = damping * (1 - 0.15 * tip);
+        j.settings.stiffness = j._k0 * stiffMul;
       }
-      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.85 + Math.random() * 0.3), fl = 1 + 0.25 * Math.sin(t * (3 + k * 2) + k * 9) + 0.12 * Math.sin(t * 7.3 + k * 4);
-        // cloth drag grows with the square of the air speed: at a walk it hangs by its weight, riding it trails ~30°, in gusts it lifts
+      // ---- clothing spring bones (coat sleeves/front): drag ∝ v², same direction logic, lighter than hair
+      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.85 + Math.random() * 0.3), fl = 1 + 0.25 * Math.sin(t * (3 + k * 2) + k * 9) + (0.12 + 0.3 * w2) * Math.sin(t * (7.3 + 6 * w2) + k * 4);
         const coat = /CoatSkirt/.test(j.bone.name), cd = (coat ? 0.03 : 0.018) * k * fl, sp2 = Math.min(1.8, cd * sp);
         tmp.set(0, -1, 0); if (sp > 0.05) tmp.addScaledVector(air, sp2 / sp * (NAT ? 1 : 0.3));
+        tmp.addScaledVector(lagLat, -0.03);
         const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.55 : 0.2); }
+      this.state = { kmh, tier: w2 > 0.5 ? 2 : w1 > 0.5 ? 1 : 0, pitchDeg: THREE.MathUtils.radToDeg(pitch), along, damping, err: chains.map((c) => Math.round(c.err * 57.3)), gain: chains.map((c) => +c.gain.toFixed(2)) };
     },
   };
 }

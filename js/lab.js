@@ -352,7 +352,7 @@ async function init() {
   restart();
   $('load').style.display = 'none';
 }
-const _sw = new THREE.Vector3(); let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
+const LAB_WIND = { v: null }; const _sw = new THREE.Vector3(), _hk = { ay: 0 }; let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.pump = null; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
   lookIdx = 0; simT = 0; drone.t = 0; drone.on = false; drone.next = 8; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
@@ -516,7 +516,7 @@ function step(dt) {
   simT += dt; seaU.uT.value = simT;
   // events by position
   if (lookIdx < LOOKS.length && rider.s > LOOKS[lookIdx]) { rider.nextLook = 0; lookIdx++; }
-  windNow.lerp(windTarget(rider.s), 1 - Math.exp(-dt * 1.2));
+  windNow.lerp(LAB_WIND.v || windTarget(rider.s), 1 - Math.exp(-dt * 1.2));   // LAB_WIND.v: test override (world m/s)
   // gusts: slow swell + occasional puffs, so cloth/hair never settle into a frozen pose
   const gust = 0.5 + 0.5 * Math.sin(simT * 0.37) * Math.sin(simT * 0.83 + 1.1);
   const puff = Math.pow(Math.max(0, Math.sin(simT * 0.21 + 0.4)), 12);
@@ -524,7 +524,12 @@ function step(dt) {
   rider.gust = puff;
   ctx.wind = windGust;
   rider.update(dt, (s) => track.at(s), ctx);
-  hair.update(rider.airRel, simT); flutterUpdate(rider.airRel, simT);
+  { // body kinematics for the hair/cloth rig: travel direction, lateral (centripetal) accel v²κ, vertical accel
+    const tr = track.at(rider.s), hp = vrm.scene.position; const vy = (hp.y - (_hk.y0 ?? hp.y)) / dt; _hk.y0 = hp.y;
+    const ay = (vy - (_hk.vy ?? vy)) / dt; _hk.vy = vy; _hk.ay += (Math.max(-20, Math.min(20, ay)) - _hk.ay) * 0.2;
+    const lat = new THREE.Vector3(-tr.dir.z, 0, tr.dir.x).multiplyScalar((rider.mode === 'ride' ? rider.v * rider.v * (tr.kappa || 0) : 0) + (rider.pump?.A ? rider.pump.A * 1.2 * Math.sin(rider.pump.ph || 0) : 0));
+    hair.update(rider.airRel, simT, { dt, fwd: tr.dir, latAcc: lat, vAcc: _hk.ay }); }
+  flutterUpdate(rider.airRel, simT);
   const nearBoard = !!rider.hold || rider.mode === 'off' || rider.mode === 'on';
   skirt.setBoard(rider.board, nearBoard); skirt.step(dt, windGust, simT);
   if (skirt2) { skirt2.setBoard(rider.board, nearBoard);
@@ -625,7 +630,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 
 // deterministic recording hooks
 window.LAB = {
-  scene, THREE, rider: () => rider, track, skirt: () => skirt, skirt2: () => skirt2, vrm: () => vrm, camera,
+  scene, THREE, rider: () => rider, hairState: () => hair.state, setWind: (v) => { LAB_WIND.v = v; }, track, skirt: () => skirt, skirt2: () => skirt2, vrm: () => vrm, camera,
   drone: () => drone,
   setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
