@@ -149,23 +149,21 @@ function addFlutter(m, amp) {
   m.onBeforeCompile = (sh, r) => { prev?.call(m, sh, r);
     sh.uniforms.uWindL = uW; sh.uniforms.uTime = FLUTTER.t; sh.uniforms.uFlAmp = { value: amp };
     const hasCuff = !!m.userData.cuff;
-    if (hasCuff) sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
-      { // chiffon: denser (more opaque, slightly darker) where you look along the cloth (folds, silhouette), thinner face-on,
-        // plus a soft back-light glow when the sun is behind the fabric — reads as thin fabric from far away
-        vec3 nV = normalize(vNormal); vec3 vD = normalize(vViewPosition); float ndv = abs(dot(nV, vD));
-        gl_FragColor.rgb = max(gl_FragColor.rgb, vec3(0.55, 0.66, 0.8));      // thin cloth is never black: light passes through
-        gl_FragColor.a = mix(0.8, 0.34, smoothstep(0.15, 0.85, ndv)) * (gl_FrontFacing ? 1.0 : 0.75);
-        gl_FragColor.rgb = mix(gl_FragColor.rgb * 0.94, gl_FragColor.rgb * 1.05 + vec3(0.03, 0.03, 0.02), smoothstep(0.2, 0.9, ndv)); }`);
     if (hasCuff) sh.fragmentShader = 'varying float vCuff;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
       gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.93, 0.96, 1.0) * (0.92 + 0.08 * sin(vCuff * 40.0)), smoothstep(0.15, 0.6, vCuff) * 0.85);
-      gl_FragColor.a = mix(gl_FragColor.a, 0.92, smoothstep(0.15, 0.6, vCuff));`);   // the rolled band is several layers thick
+`);
     m.userData.cuffOK = !hasCuff || sh.fragmentShader.includes('vCuff * 40.0');
     sh.vertexShader = 'uniform vec3 uWindL; uniform float uTime; uniform float uFlAmp; attribute float aFlut;\n' + (hasCuff ? 'attribute float aCuff; varying float vCuff;\n' : '') + sh.vertexShader.replace('#include <skinning_vertex>', `#include <skinning_vertex>
       ${hasCuff ? 'vCuff = aCuff; transformed += objectNormal * aCuff * 0.006;' : ''}
       { float f = aFlut * uFlAmp; float sp = length(uWindL); float ph = dot(position, vec3(23.0, 17.0, 11.0));
         float rip = 0.6 * sin(uTime * 8.0 + ph) + 0.4 * sin(uTime * 13.0 + ph * 1.7);
         float sw = 0.75 + 0.25 * sin(uTime * 2.7 + ph * 0.31);
-        transformed += f * (uWindL * 0.011 * sw + objectNormal * rip * 0.011 * clamp(sp / 5.0, 0.15, 1.2)); }`);
+        vec3 wd = sp > 0.05 ? uWindL / sp : vec3(0.0); vec3 up = vec3(0.0, 1.0, 0.0); vec3 sd = normalize(cross(up, wd) + vec3(1e-4));
+        float drag = min(sp * sp * 0.00085, 0.034);                 // metres at the hem: ~0 walking, ~2 cm at 5 m/s, 3.4 cm in a gale
+        float along = dot(position, wd) * 9.0 + (1.2 - position.y) * 11.0;   // distance from the pinned edge, downwind
+        float flap = sin(uTime * 9.5 - along) * 0.55 + sin(uTime * 15.0 - along * 1.6 + 1.3) * 0.25;   // waves run toward the hem
+        float lift = 0.5 + 0.5 * sin(uTime * 1.9 + position.x * 3.0);   // gusts lift the hem now and then
+        transformed += f * (wd * drag * (0.8 + 0.2 * sw) + sd * drag * 0.45 * flap + up * drag * 0.35 * lift * f); }`);
     m.userData.flutterOK = sh.vertexShader.includes('aFlut * uFlAmp'); };
   m.customProgramCacheKey = () => 'flutter' + amp;
 }
@@ -205,11 +203,11 @@ function restyleBreeze(vrm) {
   for (const o of [...meshesByMat(vrm, 'Shoes'), ...meshesByMat(vrm, 'Body')]) { const P = o.geometry.attributes.position, Y = 0.058, K = 0.42;
     for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y) P.setY(i, Y - (Y - y) * K); }
     P.needsUpdate = true; o.geometry.computeBoundingSphere(); }
-  // the stock coat tails hang to the knees (y 0.2 m in bind pose) and hide the skirt: shorten them to a shirt hem at the
-  // upper thigh (~0.8 m) by compressing the bind-pose geometry below the waist; skin weights stay, so it still swings
-  for (const o of meshesByMat(vrm, 'Tops')) { const P = o.geometry.attributes.position, Y0 = 1.0, K = 0.24;
-    for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < Y0) { const u = (Y0 - y) / 0.8; P.setY(i, Y0 - 0.8 * K * Math.tanh(u * 1.6) / Math.tanh(1.6)); } }
-    P.needsUpdate = true; o.geometry.computeBoundingSphere(); o.geometry.computeBoundingBox(); o.frustumCulled = false; }
+  // the stock coat tails (spring-bone planks) are cut at the waist; real cloth tails with per-triangle aerodynamics are
+  // sewn on there (lab.js: Skirt{aero}). Rigid planks on 6 bones could only ever 'float like plastic'.
+  for (const o of meshesByMat(vrm, 'Tops')) { const g = o.geometry, P = g.attributes.position, idx = g.index; if (!idx) continue;
+    const a = idx.array, out = []; for (let q = 0; q < a.length; q += 3) { if (P.getY(a[q]) < 1.0 && P.getY(a[q + 1]) < 1.0 && P.getY(a[q + 2]) < 1.0) continue; out.push(a[q], a[q + 1], a[q + 2]); }
+    g.setIndex(out); o.frustumCulled = false; }
   // THIN SHIRT (Cheney's favourite): the jacket mesh keeps its tailoring (shoulders, collar, open front, tails on spring
   // bones) but becomes sheer powder-blue chiffon: semi-transparent, no outline, sleeves rolled up to mid upper arm.
   for (const o of meshesByMat(vrm, 'Tops')) {
@@ -224,13 +222,30 @@ function restyleBreeze(vrm) {
     const cuff = new Float32Array(P.count); for (let i = 0; i < P.count; i++) { const y = P.getY(i), ax = Math.abs(P.getX(i)); cuff[i] = y > 1.05 ? sstepG(0.215, 0.255, ax) : 0; }
     g.setAttribute('aCuff', new THREE.BufferAttribute(cuff, 1));
     (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
-      if (/Outline/.test(m.name)) { m.visible = false; return; }
-      m.transparent = true; m.depthWrite = false; m.alphaTest = 0; m.side = THREE.DoubleSide;
-      if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.78, 0.84, 0.95);   // no dark inner faces
-      if (m.uniforms?.opacity) m.uniforms.opacity.value = 0.5; m.opacity = 0.5;
+      if (/Outline/.test(m.name)) { addFlutter(m, 1.0); m.needsUpdate = true; return; }   // outline follows the same flutter
+      m.side = THREE.DoubleSide;
+      if (m.uniforms?.shadeColorFactor) m.uniforms.shadeColorFactor.value.set(0.74, 0.82, 0.94);   // soft, light cotton shade
       m.userData.cuff = true; addFlutter(m, 1.0); m.needsUpdate = true; });
-    o.renderOrder = 2; FLUTTER_MESHES.push(o);
+    FLUTTER_MESHES.push(o);
   }
+  // HAIR TIED UP: the long back curtain (cards reaching below the shoulders) is gathered at the nape into a low ponytail —
+  // squeezed toward the back midline below the tie and shortened — so it swings as ONE soft tail on its spring chain,
+  // while the short side locks and bangs stay loose and flutter. No more flat paper sheet.
+  { const long = meshesByMat(vrm, 'HAIR').filter((o) => { const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) if (P.getY(i) < 1.05) return true; return false; });
+    const TIE = 1.37, band = (y) => Math.round((TIE - y) * 25);
+    const zs = {}; for (const o of long) { const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y < TIE) { const b = band(y); (zs[b] = zs[b] || []).push(P.getZ(i)); } } }
+    const zc = {}; for (const b in zs) { const a = zs[b].sort((p, q) => p - q); zc[b] = a[Math.floor(a.length / 2)]; }
+    for (const o of long) { const P = o.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++) { const y = P.getY(i); if (y >= TIE + 0.03) continue;
+        const d = Math.max(0, TIE - y), g = y > TIE ? 1 - 0.7 * (TIE + 0.03 - y) / 0.03 : 0.3 - 0.12 * Math.min(1, d / 0.1) + 0.12 * Math.min(1, d / 0.45);   // pinched at the tie, a little fuller toward the ends
+        const c = zc[band(Math.min(y, TIE - 0.001))] ?? P.getZ(i);
+        P.setX(i, P.getX(i) * g); P.setZ(i, c + (P.getZ(i) - c) * g);
+        if (y < TIE) P.setY(i, TIE - d * 0.78); }   // a bit shorter: the tail ends at mid back
+      P.needsUpdate = true; o.geometry.computeVertexNormals(); o.geometry.computeBoundingSphere(); }
+    // hair tie: a small band at the gather point
+    const head = vrm.humanoid.getRawBoneNode('head'); if (head) { vrm.scene.updateMatrixWorld(true);
+      const tie = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.009, 8, 16), new THREE.MeshStandardMaterial({ color: '#8fb8e4', roughness: 0.6 }));
+      const zMid = zc[band(TIE - 0.01)] ?? -0.12, wp = new THREE.Vector3(0, TIE - 0.005, zMid); head.worldToLocal(wp); tie.position.copy(wp); tie.rotation.x = Math.PI / 2 - 0.5; head.add(tie); } }
   // the skirt hem flutters a little too (opaque, smaller so it never cuts the legs)
   for (const o of meshesByMat(vrm, 'Bottoms')) { const P = o.geometry.attributes.position, fl = new Float32Array(P.count);
     for (let i = 0; i < P.count; i++) fl[i] = sstepG(0.9, 0.72, P.getY(i)) * 0.45;
@@ -357,7 +372,7 @@ export function setupHair(vrm) {
   const hair = joints.filter((j) => /Hair/i.test(j.bone.name));
   const cloth = joints.filter((j) => /Tops|Skirt|Bust|Coat|Jacket|Cloth|Bottoms/i.test(j.bone.name) && !/Bust/i.test(j.bone.name));
   const NAT = OUTFIT === 'native' || OUTFIT === 'breeze';
-  if (NAT) cloth.forEach((j) => { j.settings.stiffness *= /CoatSkirt/.test(j.bone.name) ? 0.3 : 0.5; j.settings.dragForce = Math.min(j.settings.dragForce, 0.22); });
+  if (NAT) cloth.forEach((j) => { j.settings.stiffness *= /CoatSkirt/.test(j.bone.name) ? 0.22 : 0.5; j.settings.dragForce = /CoatSkirt/.test(j.bone.name) ? 0.34 : Math.min(j.settings.dragForce, 0.22); });   // light but with weight: swings, then settles
   // Hair reads as one soft mass only if NEIGHBOURING strands move together. Each strand gets a phase from its azimuth
   // around the head (smooth across neighbours) and a depth along its chain; the wind field is coherent (one gust shape
   // sweeping across the head) with only a little per-strand jitter. Roots are firmer, tips softer.
@@ -365,6 +380,7 @@ export function setupHair(vrm) {
   const hc = head.getWorldPosition(new THREE.Vector3()), names = new Set(hair.map((j) => j.bone));
   hair.forEach((j, i) => {
     let d = 0, b = j.bone.parent; while (b && names.has(b)) { d++; b = b.parent; }
+    { let n = 0, c = j; const kids = (x) => hair.find((k) => k.bone.parent === x.bone); while ((c = kids(c))) n++; j._chainLen = d + n + 1; j._short = j._chainLen <= 3; }
     const p = j.bone.getWorldPosition(new THREE.Vector3()).sub(hc);
     j._az = Math.atan2(p.x, p.z); j._depth = d; j._jit = ((i * 37) % 10) / 10;
     const tip = Math.min(1, d / 3);
@@ -389,12 +405,16 @@ export function setupHair(vrm) {
       const hq = head.getWorldQuaternion(new THREE.Quaternion()), right = new THREE.Vector3(1, 0, 0).applyQuaternion(hq);
       for (const j of hair) {
         const ph = j._az * 0.8 + j._depth * 0.4;
-        const gust = 1 + 0.12 * Math.sin(t * 2.1 - ph) + 0.04 * Math.sin(t * 5.3 - ph * 1.7);
+        const gust = 1 + 0.12 * Math.sin(t * 2.1 - ph) + 0.04 * Math.sin(t * 5.3 - ph * 1.7) + (j._short ? 0.25 * Math.sin(t * 9 + j._jit * 7) : 0);   // short locks flicker
         const lat = Math.sin(j._az);   // +: head's left/right side
         j.settings.gravityDir.copy(dir).addScaledVector(right, -lat * 0.55).normalize();
         j.settings.gravityPower = Math.min(1.1, mag * 0.5 * gust);
       }
-      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.8 + Math.random() * 0.5), fl = 1 + 0.3 * Math.sin(t * (4 + k * 3) + k * 9); tmp.set(0, -1, 0).addScaledVector(air, (NAT ? (/CoatSkirt/.test(j.bone.name) ? 0.6 : 0.36) : 0.1) * k * fl); const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.4 : 0.2); }
+      for (const j of cloth) { const k = j._ck ?? (j._ck = 0.85 + Math.random() * 0.3), fl = 1 + 0.25 * Math.sin(t * (3 + k * 2) + k * 9) + 0.12 * Math.sin(t * 7.3 + k * 4);
+        // cloth drag grows with the square of the air speed: at a walk it hangs by its weight, riding it trails ~30°, in gusts it lifts
+        const coat = /CoatSkirt/.test(j.bone.name), cd = (coat ? 0.03 : 0.018) * k * fl, sp2 = Math.min(1.8, cd * sp);
+        tmp.set(0, -1, 0); if (sp > 0.05) tmp.addScaledVector(air, sp2 / sp * (NAT ? 1 : 0.3));
+        const m = tmp.length(); j.settings.gravityDir.copy(tmp).divideScalar(m); j.settings.gravityPower = m * (NAT ? 0.55 : 0.2); }
     },
   };
 }
@@ -459,11 +479,11 @@ export class Skirt {
     const d = (a, b) => this.local[a].distanceTo(this.local[b]);
     for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) {
       const a = id(r, c);
-      const sb = opt.soft ?? 1, okR = !this.open || c < C - 1, okL = !this.open || c > 0, ok2 = !this.open || c < C - 2;
+      const sb = opt.soft ?? 1, okR = !this.open || c < C - 1, okL = !this.open || c > 0, ok2 = !this.open || c < C - 2, bend = opt.bend ?? 1;
       if (okR) cons.push([a, id(r, c + 1), d(a, id(r, c + 1)), 1]);
       if (r + 1 < R) { cons.push([a, id(r + 1, c), d(a, id(r + 1, c)), 1]); if (okR) cons.push([a, id(r + 1, c + 1), d(a, id(r + 1, c + 1)), 0.5 * sb]); if (okL) cons.push([a, id(r + 1, c - 1), d(a, id(r + 1, c - 1)), 0.5 * sb]); }
-      if (r + 2 < R) cons.push([a, id(r + 2, c), d(a, id(r + 2, c)), 0.25 * sb]);
-      if (c % 2 === 0 && ok2) cons.push([a, id(r, c + 2), d(a, id(r, c + 2)), 0.3 * sb]);
+      if (r + 2 < R && bend > 0) cons.push([a, id(r + 2, c), d(a, id(r + 2, c)), 0.25 * sb * bend]);
+      if (c % 2 === 0 && ok2 && bend > 0) cons.push([a, id(r, c + 2), d(a, id(r, c + 2)), 0.3 * sb * bend]);
     }
     this.cons = cons;
     this.maxDist = this.local.map((v, i) => v.distanceTo(this.local[i % C]) * 1.04);
@@ -503,7 +523,7 @@ export class Skirt {
     this.tmp = new THREE.Vector3(); this.m = new THREE.Matrix4();
     this.inited = false;
     this.caps = [];
-    this.windT = 0;
+    this.windT = 0; this.aero = opt.aero || null;
     this.cosMax = Math.cos((opt.maxSwing ?? 50) * Math.PI / 180);
     this.airGain = opt.airGain ?? 0.6;
   }
@@ -527,6 +547,40 @@ export class Skirt {
       ...(this.opt.extraCaps ? this.opt.extraCaps(w, B, mid, hip, sp) : []),
     ];
   }
+  // Per-triangle aerodynamics (after NVIDIA NvCloth SwSolverKernel::applyWind): for each triangle, relative air
+  // u = wind - v_triangle; with θ the angle between the triangle normal and u,
+  //   drag = Cd·|cosθ|·u·|u|   (pushes a face-on panel downwind, ∝ speed²)
+  //   lift = Cl·cosθ·sinθ·|u|² along the direction ⟂ u in the (u, n) plane  (what makes an edge-on panel flap)
+  // acceleration = ρ_air/σ_cloth · (drag + lift); σ = areal density. The wind itself is a coherent gusty field that
+  // travels downwind (a gust front sweeps over her), not per-particle noise.
+  clampBulge() {   // cloth stays near the body sideways: it trails BACK (downwind), never sticks out like wings
+    const p = this.p, C = this.C, R = this.R, A = this.aero, ax = this._axis; if (!ax) return;
+    for (let i = C; i < R * C; i++) { const k = i * 3, dx = p[k] - ax.x, dz = p[k + 2] - ax.z;
+      const sx = ax.sx, sz = ax.sz, lat = dx * sx + dz * sz;          // sideways component (her right)
+      const lim = A.bulge; if (Math.abs(lat) > lim) { const e = lat - Math.sign(lat) * lim; p[k] -= e * sx * 0.5; p[k + 2] -= e * sz * 0.5; } } }
+  applyAero(air, h, t) {
+    const p = this.p, q = this.q, C = this.C, R = this.R, A = this.aero, rs = A.rho / A.sigma, cols = this.open ? C - 1 : C;
+    const sp = Math.hypot(air.x, air.y, air.z) || 1e-6, wx = air.x / sp, wz = air.z / sp;
+    const acc = this.aacc || (this.aacc = new Float32Array(R * C * 3)); acc.fill(0);
+    const tri = (a, b, c) => {
+      const ka = a * 3, kb = b * 3, kc = c * 3;
+      const cx = (p[ka] + p[kb] + p[kc]) / 3, cy = (p[ka + 1] + p[kb + 1] + p[kc + 1]) / 3, cz = (p[ka + 2] + p[kb + 2] + p[kc + 2]) / 3;
+      const vx = (p[ka] + p[kb] + p[kc] - q[ka] - q[kb] - q[kc]) / (3 * h), vy = (p[ka + 1] + p[kb + 1] + p[kc + 1] - q[ka + 1] - q[kb + 1] - q[kc + 1]) / (3 * h), vz = (p[ka + 2] + p[kb + 2] + p[kc + 2] - q[ka + 2] - q[kb + 2] - q[kc + 2]) / (3 * h);
+      const ph = (cx * wx + cz * wz) * 1.7 - t * 2.4;            // gust fronts moving downwind (~1.4 m/s pattern speed)
+      const gst = 1 + A.gust * (0.6 * Math.sin(ph) + 0.4 * Math.sin(ph * 2.3 + 1.7 + cy * 4.0));
+      const ux = air.x * gst - vx, uy = air.y * gst - vy, uz = air.z * gst - vz, ul = Math.hypot(ux, uy, uz); if (ul < 1e-4) return;
+      const e1x = p[kb] - p[ka], e1y = p[kb + 1] - p[ka + 1], e1z = p[kb + 2] - p[ka + 2], e2x = p[kc] - p[ka], e2y = p[kc + 1] - p[ka + 1], e2z = p[kc + 2] - p[ka + 2];
+      let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x; const nl = Math.hypot(nx, ny, nz) || 1e-9; nx /= nl; ny /= nl; nz /= nl;
+      const cos = (nx * ux + ny * uy + nz * uz) / ul, sin = Math.sqrt(Math.max(0, 1 - cos * cos));
+      // lift direction: ⟂ u, in the plane of u and n  =  (u × n) × û
+      let lx = (uy * nz - uz * ny), ly = (uz * nx - ux * nz), lz = (ux * ny - uy * nx); const tx = ly * uz - lz * uy, ty = lz * ux - lx * uz, tz = lx * uy - ly * ux; const tl = Math.hypot(tx, ty, tz) || 1e-9;
+      const dk = A.cd * Math.abs(cos) * ul, lk = A.cl * cos * sin * ul * ul / tl;
+      const fx = rs * (dk * ux + lk * tx), fy = rs * (dk * uy + lk * ty), fz = rs * (dk * uz + lk * tz);
+      for (const k of [ka, kb, kc]) { acc[k] += fx / 3; acc[k + 1] += fy / 3; acc[k + 2] += fz / 3; } };
+    for (let r = 0; r < R - 1; r++) for (let c = 0; c < cols; c++) { const a = r * C + c, b = r * C + ((c + 1) % C), e = a + C, f = b + C; tri(a, e, b); tri(b, e, f); }
+    const lim = 0.02, h2 = h * h;
+    for (let i = C; i < R * C; i++) { const k = i * 3; let dx = acc[k] * h2 * 1.5, dy = acc[k + 1] * h2 * 1.5, dz = acc[k + 2] * h2 * 1.5; const dl = Math.hypot(dx, dy, dz); if (dl > lim) { const f = lim / dl; dx *= f; dy *= f; dz *= f; } p[k] += dx; p[k + 1] += dy; p[k + 2] += dz; }
+  }
   // air(world vec3): wind velocity in world; groundY(x,z) for floor collision
   step(dt, air0, t, groundY) {
     const air = this.airv || (this.airv = new THREE.Vector3()); air.copy(air0).multiplyScalar(this.airGain);
@@ -545,14 +599,18 @@ export class Skirt {
         const sp = Math.hypot(air.x, air.z);
         const gy = air.y + Math.sin(tt * 4.9 + c * 0.7 + r) * 0.45 * turb + Math.sin(tt * 13 + c * 1.9 - r * 0.8) * (0.4 + sp * 0.35) * hemF;
         const gz = air.z * (1 + 0.45 * Math.sin(tt * 5.3 + c * 1.1 - r * 0.4) * turb) + Math.cos(tt * 4.1 + c) * 0.5 * turb + Math.cos(tt * 12 + c * 2.1) * (0.3 + Math.abs(air.x) * 0.25) * hemF;
-        const dg = drag * (0.8 + 0.5 * rr);
-        const ax = dg * (gx - vx), ay = g * (1 - 0.25 * rr) + dg * (gy - vy), az = dg * (gz - vz);
+        const dg = this.aero ? 0.15 : drag * (0.8 + 0.5 * rr);   // aero cloth: only light damping here, air acts per triangle below
+        const ax = this.aero ? -dg * vx : dg * (gx - vx), ay = g * (1 - 0.25 * rr) + (this.aero ? -dg * vy : dg * (gy - vy)), az = this.aero ? -dg * vz : dg * (gz - vz);
         const nx = p[k] + (p[k] - q[k]) * 0.995 + ax * h * h, ny = p[k + 1] + (p[k + 1] - q[k + 1]) * 0.995 + ay * h * h, nz = p[k + 2] + (p[k + 2] - q[k + 2]) * 0.995 + az * h * h;
         q[k] = p[k]; q[k + 1] = p[k + 1]; q[k + 2] = p[k + 2];
         p[k] = nx; p[k + 1] = ny; p[k + 2] = nz;
       }
+      if (this.aero) this.applyAero(air, h, t + s * h);
+      if (this.aero && this.aero.bulge) { const e = this.hips.matrixWorld.elements, sl = Math.hypot(e[0], e[2]) || 1;
+        this._axis = { x: e[12], z: e[14], sx: e[0] / sl, sz: e[2] / sl }; }
       for (let i = 0; i < C; i++) { this.pinWorld(i, v); const k = i * 3; q[k] = p[k]; q[k + 1] = p[k + 1]; q[k + 2] = p[k + 2]; p[k] = v.x; p[k + 1] = v.y; p[k + 2] = v.z; }
       for (let it = 0; it < 5; it++) {
+        if (this._axis) this.clampBulge();
         for (const [a, b, L, st] of this.cons) {
           const ka = a * 3, kb = b * 3;
           const dx = p[kb] - p[ka], dy = p[kb + 1] - p[ka + 1], dz = p[kb + 2] - p[ka + 2];
@@ -568,7 +626,7 @@ export class Skirt {
           if (d > m) { const f = m / d; p[k] = p[kt] + dx * f; p[k + 1] = p[kt + 1] + dy * f; p[k + 2] = p[kt + 2] + dz * f; }
         }
         // modest skirt: a panel may swing out but never flips above ~50° from hanging (hem stays below the knee line)
-        for (let i = C; i < N; i++) {
+        if (!this.aero || this.cosMax > -0.5) for (let i = C; i < N; i++) {
           const k = i * 3, kt = (i % C) * 3, dx = p[k] - p[kt], dy = p[k + 1] - p[kt + 1], dz = p[k + 2] - p[kt + 2];
           const d = Math.hypot(dx, dy, dz) || 1e-6, minDrop = d * this.cosMax;
           if (-dy < minDrop) { const hz = Math.hypot(dx, dz) || 1e-6, want = Math.sqrt(Math.max(0, d * d - minDrop * minDrop)); p[k] = p[kt] + dx / hz * want; p[k + 2] = p[kt + 2] + dz / hz * want; p[k + 1] = p[kt + 1] - minDrop; }

@@ -325,6 +325,12 @@ async function init() {
   scene.add(vrm.scene);                 // temporarily at identity to build the skirt in model space
   vrm.scene.updateMatrixWorld(true);
   const SD = OUTFIT === 'sundress' || OUTFIT === 'shirt';   // reference look: knee-length floral sundress, no hat, hair fully free
+  if (OUTFIT === 'breeze') {
+    // shirt tails: light cotton (σ ≈ 0.11 kg/m²) with per-triangle drag/lift, sewn to the coat hem, open at the front
+    skirt2 = new Skirt(vrm, scene, { style: 'shirt', pin: 'spine', open: 0.62, top: 1.03, hem: 0.74, rows: 14, cols: 40, flare: 0.3, maxSwing: 105, airGain: 1.0, soft: 0.25, bend: 0.15,
+      aero: { cd: 1.0, cl: 0.55, rho: 1.2, sigma: 0.17, gust: 0.4, bulge: 0.2 }, extraCaps: (w, B, mid, hip, sp) => [[sp, mid.clone().lerp(hip, 0.4), 0.17]] });
+    skirt2.mesh.material.color.set('#c4def6');
+  }
   if (OUTFIT === 'shirt') {
     // the open shirt: tails sewn at the ribs, open at the front, flying free over a soft white pleated mini skirt (leggings underneath)
     skirt2 = new Skirt(vrm, scene, { style: 'shirt', pin: 'upperChest', open: 0.62, top: 1.2, hem: 0.66, rows: 16, cols: 34, flare: 0.22, maxSwing: 92, airGain: 1.3, soft: 0.45,
@@ -346,7 +352,7 @@ async function init() {
   restart();
   $('load').style.display = 'none';
 }
-let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
+const _sw = new THREE.Vector3(); let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.dance = null; rider.danceCool = 10; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.pump = null; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
   lookIdx = 0; simT = 0; drone.t = 0; drone.on = false; drone.next = 8; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined;
@@ -521,7 +527,10 @@ function step(dt) {
   hair.update(rider.airRel, simT); flutterUpdate(rider.airRel, simT);
   const nearBoard = !!rider.hold || rider.mode === 'off' || rider.mode === 'on';
   skirt.setBoard(rider.board, nearBoard); skirt.step(dt, windGust, simT);
-  if (skirt2) { skirt2.setBoard(rider.board, nearBoard); skirt2.step(dt, windGust, simT); }
+  if (skirt2) { skirt2.setBoard(rider.board, nearBoard);
+    // shirt tails: the world wind is softened (×0.55) so her own motion dominates — the tails stream BACK along her travel,
+    // and lift in gusts, instead of being flung sideways by a crosswind
+    skirt2.step(dt, skirt2.aero ? _sw.copy(windGust).multiplyScalar(0.55) : windGust, simT); }
   hat.step(dt, rider.airRel, simT);
   if (rider.s > track.total - 2) restart();
   // petals
