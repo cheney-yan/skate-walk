@@ -337,7 +337,7 @@ async function init() {
 let windNow = new THREE.Vector3(), windGust = new THREE.Vector3(), lookIdx = 0, simT = 0;
 function restart() {
   rider.s = 0; rider.v = 0; rider.t = 0; rider.push = null; rider.ollie = null; rider.air = 0; rider.look = null; rider.nextLook = RD ? 8 : 1e9; rider.ev.length = 0; rider.mode = 'ride'; rider.seq = null; rider.m = 0; rider.face = 0; rider.hold = null; rider.boardFixed = false; rider.carry = 0; rider.stam = 0.7; rider.lat = 0; rider.slideYaw = 0; rider.bend = 0; rider.armIKw = 0;
-  lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false;
+  lookIdx = 0; simT = 0; windNow.set(0, 0, 0); camInit = false; anc.init = false; anc.y = undefined;
   rider.update(1 / 60, (s) => track.at(s), ctx);
   skirt.inited = false; vrm.springBoneManager?.reset?.();
 }
@@ -353,8 +353,8 @@ function windTarget(s) {
 function caption() {
   const r = rider, { g } = track.segAt(r.s);
   let a = g[3] || '巡航';
-  if (r.mode === 'off') a = r.seq?.ph === 'brake' ? ({ slide: '板打横刹停', heel: '脚后跟蹭地刹车', roll: '慢慢滑停' })[r.seq.kind] + (r.offWhy === 'steep' ? '（坡太陡）' : '（没力气了）') : r.seq?.pick === 'kick' ? '踢板，转一圈接住' : '弯腰捡板';
-  else if (r.mode === 'walk') a = '拿着板走路' + (r.offWhy === 'steep' ? '（陡坡）' : '（歇一歇）');
+  if (r.mode === 'off') a = r.seq?.ph === 'brake' ? ({ slide: '板打横刹停', heel: '脚后跟蹭地刹车', roll: '慢慢滑停' })[r.seq.kind] + ({ steep: '（前面坡太陡）', long: '（坡太长，力气不够）', tired: '（没力气了）' })[r.offWhy] || '' : r.seq?.pick === 'kick' ? '踢板，转一圈接住' : '弯腰捡板';
+  else if (r.mode === 'walk') a = '拿着板走路' + ({ steep: '（陡坡）', long: '（长坡，走上去）', tired: '（歇一歇）' })[r.offWhy];
   else if (r.mode === 'on') a = '放板，上板';
   else if (r.ollie?.kind === 'shove') a = r.ollie.why === 'speed' ? '太快了，飞板耗点力减速' : '蓄力满了，飞板！';
   else if (r.ollie) a = 'Ollie 跳过坑';
@@ -373,31 +373,44 @@ function stamHUD() {
   const r = rider, f = r.stam;
   $('stamF').style.width = (f * 100).toFixed(1) + '%';
   $('stamF').style.background = f > 0.999 ? 'linear-gradient(90deg,#ffb36b,#ff7a59)' : f < 0.15 ? '#e8a0a0' : 'linear-gradient(90deg,#9fd8c8,#6cbfb0)';
-  $('stamT').textContent = `🪶 ${Math.round(f * EMAX / 1000 * 10) / 10} / ${EMAX / 1000} kJ`;
+  const pl = r.plan; $('stamT').textContent = `🪶 ${Math.round(f * EMAX / 1000 * 10) / 10} / ${EMAX / 1000} kJ` + (pl && pl.kind !== 'flat' && pl.start < 60 ? ` · 前方坡 ${Math.round(pl.L)}m 需 ${(pl.need / 1000).toFixed(1)}kJ` : '');
 }
 // ---------------- camera ----------------
 let camMode = Q.get('cam') || 'chase', camInit = false;
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 const orbit = { yaw: Math.PI, pitch: 0.18, dist: 3.2, drag: null, pinch: null };
+// DRONE anchor: a point on the path that glides along with her progress (critically damped), never the board itself,
+// so walking bob, carrying, ollies and dismounts move HER inside a calm frame instead of shaking the frame.
+const anc = { s: 0, v: 0, p: new THREE.Vector3(), init: false };
+const spring = (st, key, target, w, dt) => { const x = st[key], v = st[key + 'v'] || 0; const a = w * w * (target - x) - 2 * w * v; st[key + 'v'] = v + a * dt; st[key] = x + st[key + 'v'] * dt; };
+const camS = {};
+function anchorStep(dt) {
+  if (!anc.init) { anc.s = rider.s; anc.v = 0; anc.init = true; }
+  const a = 1.2 * 1.2 * (rider.s - anc.s) - 2 * 1.2 * anc.v; anc.v += a * dt; anc.s += anc.v * dt;
+  anc.p.copy(track.at(anc.s).p);
+  // vertical: low-pass the path height so steps / bumps don't bounce the frame
+  anc.y = anc.y === undefined ? anc.p.y : anc.y + (anc.p.y - anc.y) * (1 - Math.exp(-dt * 1.5)); anc.p.y = anc.y;
+}
 function updateCamera(dt) {
   if (camMode === 'none') return;
+  anchorStep(dt);
   if (camMode === 'orbit') {
-    const c = rider.board.position.clone().add(new THREE.Vector3(0, 0.95 - rider.air * 0.3, 0));
-    const p = track.at(rider.s), base = Math.atan2(p.dir.x, p.dir.z) + orbit.yaw;
+    const c = anc.p.clone().add(new THREE.Vector3(0, 0.95, 0));
+    const p = track.at(anc.s), base = Math.atan2(p.dir.x, p.dir.z) + orbit.yaw;
     const want = c.clone().add(new THREE.Vector3(Math.sin(base) * Math.cos(orbit.pitch), Math.sin(orbit.pitch), Math.cos(base) * Math.cos(orbit.pitch)).multiplyScalar(orbit.dist));
     if (!camInit) { camPos.copy(want); camInit = true; }
     camPos.lerp(want, 1 - Math.exp(-dt * 10)); camera.position.copy(camPos); camera.lookAt(c);
-    const b = rider.board.position; sunFollow(b);
+    sunFollow(anc.p);
     return;
   }
-  const p = track.at(rider.s), left = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
-  const base = rider.board.position.clone(); base.y -= rider.air * 0.95;   // camera stays level during jumps so the height reads
+  const p = track.at(anc.s), left = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
+  const base = anc.p.clone();   // drone anchor: path point, not the board
   let want, look;
   if (camMode === 'side') { want = base.clone().addScaledVector(left, 3.6).add(new THREE.Vector3(0, 1.1, 0)).addScaledVector(p.dir, 0.3); look = base.clone().add(new THREE.Vector3(0, 0.85, 0)); }
   else if (camMode === 'front') { want = base.clone().addScaledVector(p.dir, 4.2).addScaledVector(left, 0.9).add(new THREE.Vector3(0, 1.3, 0)); look = base.clone().add(new THREE.Vector3(0, 0.9, 0)); }
   else if (RD && rider.w.look < 0.05) {
     // view direction = along the path, swung toward the sea (east, +X): she rides in the lower third, ocean fills the far frame
-    const fwd = track.at(rider.s + 6).p.clone().sub(track.at(rider.s - 4).p).setY(0).normalize();
+    const fwd = track.at(anc.s + 10).p.clone().sub(track.at(anc.s - 10).p).setY(0).normalize();
     // pick the heading (path direction swung up to ~60° either way) with the most open sea / least terrain in the way
     if (!rider.__vdT || simT - (rider.__vdAt || -9) > 0.5) {
       rider.__vdAt = simT; let best = -1e9, bestV = fwd;
@@ -415,7 +428,7 @@ function updateCamera(dt) {
     want = base.clone().addScaledVector(rider.__vd, -(window.__cd ?? 5.0)).add(new THREE.Vector3(0, window.__ch ?? 2.9, 0));
     look = base.clone().addScaledVector(rider.__vd, 6).add(new THREE.Vector3(0, 0.2, 0));
   }
-  else { const ahead = track.at(rider.s + 2.5).p; const side = -0.55 - 0.7 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.1 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.08 - rider.w.look * 0.1, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
+  else { const ahead = track.at(anc.s + 2.5).p; const side = -0.55 - 0.7 * (rider.w.look > 0 ? Math.min(1, rider.w.look * 1.6) : 0); want = base.clone().addScaledVector(p.dir, -3.1 + rider.w.look * 0.6).addScaledVector(left, side).add(new THREE.Vector3(0, 1.08 - rider.w.look * 0.1, 0)); look = base.clone().lerp(ahead, 0.35).add(new THREE.Vector3(0, 0.95, 0)); }
   if (RD && track.terrainH) {
     // keep the camera (and the sight line to her) above the real terrain: lift it, and pull it in on steep hillsides
     const gh = (v) => track.terrainH(v.x, -v.z);
@@ -425,9 +438,12 @@ function updateCamera(dt) {
       want.y += worst; if (want.y - base.y > 5) { want.lerp(look, 0.2); }
     }
   }
-  if (!camInit) { camPos.copy(want); camLook.copy(look); camInit = true; }
-  const k = 1 - Math.exp(-dt * 4.5);
-  camPos.lerp(want, k); camLook.lerp(look, 1 - Math.exp(-dt * 8));
+  if (!camInit) { camPos.copy(want); camLook.copy(look); for (const k of ['px', 'py', 'pz', 'lx', 'ly', 'lz']) camS[k + 'v'] = 0; camInit = true; }
+  camS.px = camPos.x; camS.py = camPos.y; camS.pz = camPos.z; camS.lx = camLook.x; camS.ly = camLook.y; camS.lz = camLook.z;
+  const W = 2.2, WL = 2.6;
+  spring(camS, 'px', want.x, W, dt); spring(camS, 'py', want.y, W * 0.8, dt); spring(camS, 'pz', want.z, W, dt);
+  spring(camS, 'lx', look.x, WL, dt); spring(camS, 'ly', look.y, WL * 0.8, dt); spring(camS, 'lz', look.z, WL, dt);
+  camPos.set(camS.px, camS.py, camS.pz); camLook.set(camS.lx, camS.ly, camS.lz);
   camera.position.copy(camPos); camera.lookAt(camLook);
   if (BLD.length) { const a = camera.position, b = rider.board.position.clone().add(new THREE.Vector3(0, 1, 0)), ab = b.clone().sub(a), l2 = ab.lengthSq();
     // hide blocks that sit on the sight line camera -> her -> ~14 m beyond her (they would wall off the view she rides into)
@@ -563,7 +579,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 // deterministic recording hooks
 window.LAB = {
   scene, THREE, rider: () => rider, track, skirt: () => skirt, vrm: () => vrm, camera,
-  setCam(m) { camMode = m; camInit = false; },
+  setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
   restart, jumpTo(s) { restart(); for (let i = 0; i < 4000 && rider.s < s; i++) step(1 / 30); },
