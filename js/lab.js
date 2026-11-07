@@ -335,7 +335,13 @@ async function init() {
   hat = SD || OUTFIT === 'native' || OUTFIT === 'breeze' ? { step() {} } : new Hat(vrm, scene);
   addWristGuards(vrm);
   rider = new Rider(vrm, scene); rider.track = track;
-  rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS); let best = 1e9, y = 0; for (let i = Math.max(0, c - 30); i < Math.min(track.pts.length, c + 30); i++) { const p = track.pts[i], d = (p.x - x) ** 2 + (p.z - z) ** 2; if (d < best) { best = d; y = p.y; } } return y; };
+  // ground height under (x,z): project onto the nearest track SEGMENT and interpolate (snapping to the nearest sample
+  // made the walking body hop ~3.5 cm at every sample on slopes)
+  rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS), P = track.pts; let best = 1e9, y = 0;
+    for (let i = Math.max(0, c - 30); i < Math.min(P.length - 1, c + 30); i++) { const a = P[i], b = P[i + 1], ex = b.x - a.x, ez = b.z - a.z, L2 = ex * ex + ez * ez || 1e-9;
+      const u = Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / L2)), px = a.x + ex * u, pz = a.z + ez * u, d = (px - x) ** 2 + (pz - z) ** 2;
+      if (d < best) { best = d; y = a.y + (b.y - a.y) * u; } }
+    return y; };
   hair = setupHair(vrm);
   restart();
   $('load').style.display = 'none';
