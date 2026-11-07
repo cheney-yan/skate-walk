@@ -201,20 +201,39 @@ export class Rider {
     this.pumpTwist = pa0 * (0.5 + 0.25 * PI_) * sh;             // 1. waist twist -> shoulders ±29° (elegant) .. ±43° (power)
     this.pumpHipYaw = pa0 * (0.16 + 0.1 * PI_) * hy;            // 2. hips follow the shoulders, smaller
     this.pumpCs = pw * hp;                                      // 3. body tips diagonally over the toe / heel edge
-    this.pumpYaw = pw * 0.22 * bd + pw * 0.025 * Math.sin(2 * (ph0 - 1.7)) * Math.sign(bd);   // 4. board follows: ±7° .. ±13°
     this.pumpTurn = pw * turn;
     this.pumpFA = pw * Math.sin(2 * (ph0 - 1.25) - 0.6);        // weight onto the front foot entering each carve, back foot leaving it
     const fq = 0.42 + 0.5 * PI_;
-    this.pumpLat = pw * 0.45 * -Math.cos(ph0 - 1.7) / (2 * Math.PI * fq) * 2.2;   // ∫ of heading: the S-line on the path
     this.pumpDrop = pw * (0.008 + 0.055 * PI_ * (0.5 - 0.5 * Math.cos(2 * (ph0 - 1.25))));   // elegant: stands tall; power: a soft settle into each carve
-    const leanT = riding ? clamp(Math.atan((this.v * this.v * kappa) / g) * 1.6 + (pw * 0.26 + pa0 * 0.08) * hp, -30 * D, 30 * D) : 0;
-    this.lean = damp(this.lean, leanT, this.pump ? 10 : 6, dt);
+    // ---- CENTRE OF MASS DRIVES THE BOARD (one physical chain, no separately animated parts):
+    //  1. she leans her CoM sideways by λ (pumping: the lean is wound up by the shoulder->hip twist, phase hp);
+    //  2. a lean is only balanced by a lateral acceleration a = g·tanλ  -> the path must curve with κ = a / v²;
+    //  3. the board makes that curve by rolling onto its edge: per-truck steer δ = atan(κ·WB/2), deck roll φ = δ / KT
+    //     (longboard trucks steer ~0.6 rad per rad of roll);
+    //  4. heading ψ' = v·κ, sideways drift y' = v·sinψ: the S-line on the road follows from the lean, a quarter cycle later.
+    // She also steers back to her line (lean feedback on drift & heading), slower than the pump so it doesn't cancel it.
+    { const vv = Math.max(this.v, 0.8), w0 = 2 * Math.PI * fq, KT = 0.62;
+      const psiAmp = (0.12 + 0.11 * PI_) * clamp((this.v - 1.2) / 1.5, 0, 1);         // heading swing: ±7° elegant .. ±13° power
+      const lamAmp = Math.atan(Math.min(Math.tan(20 * D), psiAmp * vv * w0 / 9.81));   // the lean that produces that swing at this speed
+      const lamP = riding ? pa0 * lamAmp * hp : 0;
+      if (!riding) { this.pPsi = 0; this.pLat = 0; }
+      const psi = this.pPsi || 0, y = this.pLat || 0;
+      const aFb = riding ? -(1.1 * y + 1.5 * vv * Math.sin(psi)) : 0;                   // steer back to the line
+      const aP = 9.81 * Math.tan(lamP) + aFb, kP = aP / (vv * vv);
+      if (riding) { this.pPsi = clamp(psi + this.v * kP * dt, -0.45, 0.45); this.pLat = clamp(y + this.v * Math.sin(this.pPsi) * dt, -0.6, 0.6); }
+      this.pumpYaw = this.pPsi || 0; this.pumpLat = this.pLat || 0;
+      const aLat = riding ? this.v * this.v * kappa + aP : 0;                                 // total sideways acceleration
+      this.aLat = aLat;
+      const leanT = clamp(Math.atan(aLat / 9.81), -30 * D, 30 * D);                           // the CoM lean that balances it
+      this.lean = damp(this.lean, leanT, 14, dt);
+      const kTot = riding ? kappa + kP : 0;
+      this.steerT = Math.atan(kTot * HALF_WB); this.tiltT = clamp(this.steerT / KT, -19 * D, 19 * D); }
     { const onB = riding && this.air <= 0 && this.m < 0.5, dyn = (this.pumpTurn || 0) * 0.02 + (this.landFlex || 0);
       const tgt = onB ? 0.016 + dyn * 1.3 : 0; this.flexV = (this.flexV || 0) + ((tgt - (this.flex || 0)) * 230 - (this.flexV || 0) * 6.5) * dt; this.flex = (this.flex || 0) + this.flexV * dt;   // springy deck: under-damped
       this.landFlex = Math.max(0, (this.landFlex || 0) - dt * 0.12); }
     if (this.air > 0) this.wasAir = true; else if (this.wasAir) { this.wasAir = false; this.landFlex = 0.03; }
-    this.tilt = clamp(this.lean * (0.8 - 0.22 * pw), -19 * D, 19 * D);
-    this.steer = damp(this.steer, riding ? clamp(Math.atan(kappa * HALF_WB) + this.tilt * 0.35, -0.32, 0.32) : 0, 10, dt);
+    this.tilt = damp(this.tilt, this.tiltT || 0, 16, dt);          // deck roll = what the trucks need for this curve
+    this.steer = damp(this.steer, riding ? clamp(this.steerT || 0, -0.32, 0.32) : 0, 16, dt);
     // ollie / shove-it ballistics
     let popPitch = 0; this.spin = 0; this.footLift = 0;
     if (this.ollie) {

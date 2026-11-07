@@ -527,7 +527,7 @@ function step(dt) {
   { // body kinematics for the hair/cloth rig: travel direction, lateral (centripetal) accel v²κ, vertical accel
     const tr = track.at(rider.s), hp = vrm.scene.position; const vy = (hp.y - (_hk.y0 ?? hp.y)) / dt; _hk.y0 = hp.y;
     const ay = (vy - (_hk.vy ?? vy)) / dt; _hk.vy = vy; _hk.ay += (Math.max(-20, Math.min(20, ay)) - _hk.ay) * 0.2;
-    const lat = new THREE.Vector3(-tr.dir.z, 0, tr.dir.x).multiplyScalar((rider.mode === 'ride' ? rider.v * rider.v * (tr.kappa || 0) : 0) + (rider.pump?.A ? rider.pump.A * 1.2 * Math.sin(rider.pump.ph || 0) : 0));
+    const lat = new THREE.Vector3(-tr.dir.z, 0, tr.dir.x).multiplyScalar(rider.aLat || 0);   // the rider's real sideways acceleration (CoM physics)
     hair.update(rider.airRel, simT, { dt, fwd: tr.dir, latAcc: lat, vAcc: _hk.ay }); }
   flutterUpdate(rider.airRel, simT);
   const nearBoard = !!rider.hold || rider.mode === 'off' || rider.mode === 'on';
