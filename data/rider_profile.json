@@ -56,7 +56,16 @@
   "carving": 0.7,
   "pumping": 0.6,
   "walkInsteadOfPush": 0.4,
-  "tricks": 0.5
+  "tricks": 0.5,
+  "_moves": "random move set while riding calmly: each weight 0..1 = how often she picks it (armStyling, crossStep, pirouette, dance, lookBack, hairTouch); moveGapS = pause between moves [min,max] s; playerTrick = what Enter/tap fires: alternate | pirouette | shove",
+  "armStyling": 0.6,
+  "crossStep": 0.4,
+  "pirouette": 0.3,
+  "moveGapS": [
+   8,
+   20
+  ],
+  "playerTrick": "alternate"
  },
  "mind": {
   "_doc": "lookAheadM: how far she reads the road; planEveryS: how often she re-plans; foresight 0..1: 0 = reacts at the last moment, 1 = plans the whole hill (uses momentum, charges speed early); caution 0..1: margin she keeps for energy/speed",

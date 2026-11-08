@@ -359,6 +359,7 @@ async function init() {
   rider = new Rider(vrm, scene); rider.track = track;
   try { rider.applyProfile(await (await fetch('./data/rider_profile.json')).json()); } catch (e) { console.warn('rider profile', e); }   // who she is & what she likes (tunable)
   try { const td = await (await fetch('./data/moves/throwdown.json')).json(); for (const k in td.game) if (typeof td.game[k] === 'number') rider.TD[k] = td.game[k]; } catch (e) { console.warn('throwdown.json', e); }   /* throwdown mount params */
+  for (const mv of ['push', 'pirouette', 'arm_styling', 'cross_step']) { try { rider.applyMoves(mv, await (await fetch('./data/moves/' + mv + '.json')).json()); } catch (e) { console.warn(mv + '.json', e); } }   /* reference moves -> rider.MV */
   // ground height under (x,z): project onto the nearest track SEGMENT and interpolate (snapping to the nearest sample
   // made the walking body hop ~3.5 cm at every sample on slopes)
   rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS), P = track.pts; let best = 1e9, y = 0;

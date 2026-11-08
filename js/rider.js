@@ -15,11 +15,15 @@ const D = Math.PI / 180;
 
 export const DECK_Y = 0.118;
 export const EMAX = 15000;
-// cross-step to the nose, Peter Pan (back leg floats behind), cross-step back — after the Terri O reference
-const DANCE_K = [[0, 0.2, -0.21, 0, 0, 0.015, -0.01], [0.5, 0.2, -0.21, 0, 0, 0.015, -0.01], [1.1, 0.2, 0.31, 0, 0, 0.015, 0.03], [1.7, 0.42, 0.31, 0, 0, -0.01, 0.03],
-  [2.2, 0.42, 0.31, 0, 0, -0.01, 0.03], [2.7, 0.42, 0.02, 0, 0.24, -0.01, -0.02], [4.2, 0.42, 0.0, 0, 0.26, -0.01, -0.02], [4.7, 0.42, 0.22, 0, 0, -0.01, 0.0],
-  [5.3, 0.2, 0.22, 0, 0, 0.015, 0.0], [5.9, 0.2, -0.21, 0, 0, 0.015, -0.01], [6.4, 0.2, -0.21, 0, 0, 0.015, -0.01]];
-const DANCE_T = 6.4;
+// cross-step to the nose, Peter Pan (back leg floats behind), cross-step back — after the Terri O reference.
+// Times are REAL seconds. Each cross-step takes XS (data/moves/cross_step.json game.stepT = 0.47 s, ref pro_ARCk35WWnbk_38).
+const XS = 0.47;
+const danceKeys = (st, pp) => { const k = [[0, 0.2, -0.21, 0, 0, 0.015, -0.01], [0.6, 0.2, -0.21, 0, 0, 0.015, -0.01]]; let t = 0.6;
+  k.push([t += st, 0.2, 0.31, 0, 0, 0.015, 0.03]); k.push([t += st, 0.42, 0.31, 0, 0, -0.01, 0.03]); k.push([t += pp ? 0.6 : 0.9, 0.42, 0.31, 0, 0, -0.01, 0.03]);
+  if (pp) { k.push([t += 0.7, 0.42, 0.02, 0, 0.24, -0.01, -0.02]); k.push([t += 2.0, 0.42, 0.0, 0, 0.26, -0.01, -0.02]); k.push([t += st, 0.42, 0.22, 0, 0, -0.01, 0.0]); }
+  else k.push([t += st, 0.42, 0.22, 0, 0, -0.01, 0.0]);
+  k.push([t += st, 0.2, 0.22, 0, 0, 0.015, 0.0]); k.push([t += st, 0.2, -0.21, 0, 0, 0.015, -0.01]); k.push([t += 0.7, 0.2, -0.21, 0, 0, 0.015, -0.01]); return k; };
+let DANCE_K = danceKeys(XS, true), DANCE_X = danceKeys(XS, false);
 const PUSH_F = 165;   // N, a strong but unhurried kick
 export const MASS = 60;   // Cheney (corrected): more INERTIA — each push takes real force, but once rolling she keeps her speed (same friction/drag force, more mass -> slower decay)   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
 const EFF = 0.25, P_AERO = 230, CRR = 0.0030, CDA = 0.25;   // slicker than reality on purpose: long glides   // W: what her aerobic system refills continuously; above it she spends the bar, below it she refills          // deck top above ground (m)
@@ -143,9 +147,12 @@ const FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Little'];
 
 // RIDER PROFILE (Cheney): who she is & what she prefers — data/rider_profile.json, loaded by lab.js -> rider.applyProfile()
 export const PROFILE = { energy: { barJ: 24000, walkCostMul: 1, sitRestW: 4800, getUpAt: 0.6, restGradeDeg: 6, walkRestW: 1200, rideRestW: 1200, restFullKmh: 20, noRestKmh: 30, minSitS: 6 }, skill: { pumpGain: 1, pushForceN: 165, pushBelowKmh: 10 },
-  preference: { speedFloorKmh: 20, chargeBeforeClimbKmh: 31, vmaxKmh: 30, trickMinStamina: 0.7, trickMinKmh: 9.4, autoDance: false, lookBack: 0.6, hairTouch: 0.5, carving: 0.7 },
+  preference: { speedFloorKmh: 20, chargeBeforeClimbKmh: 31, vmaxKmh: 30, trickMinStamina: 0.7, trickMinKmh: 9.4, autoDance: false, lookBack: 0.6, hairTouch: 0.5, carving: 0.7,
+    armStyling: 0.6, crossStep: 0.4, pirouette: 0.3, dance: 0.2, moveGapS: [8, 20], playerTrick: 'alternate' },
   mind: { lookAheadM: 150, planEveryS: 0.5, foresight: 0.8, caution: 0.5 } };
 export class Rider {
+  applyMoves(name, json) { const G = json?.game, M = this.MV[name]; if (!G || !M) return; for (const k in G) { const v = G[k]?.v ?? G[k]; if (typeof v === 'number') M[k] = v; }
+    Object.assign(M, this.MVSTYLE[name] || {}); if (name === 'cross_step' && M.stepT) { DANCE_K = danceKeys(M.stepT, true); DANCE_X = danceKeys(M.stepT, false); } }
   applyProfile(P) { if (!P) return; const ph = P.physical || P; for (const k of ['energy', 'skill']) Object.assign(PROFILE[k], ph[k] || {}); Object.assign(PROFILE.preference, P.preference || {}); Object.assign(PROFILE.mind, P.mind || {}); this.profile = P; }
   constructor(vrm, scene) {
     this.vrm = vrm;
@@ -185,6 +192,14 @@ export class Rider {
     /* THROWDOWN (running mount) params — data/moves/throwdown.json 'game' overrides them (lab.js) */
     this.TD = { run: 1.3, runV: 3.6, lat: 0.32, dragPhi: 55, set: 0.25, setPhi: 15, beside: 0.45, step: 0.5, boardV: 2.1, settle: 0.12, absorbIn: 0.1, absorbOut: 0.45, crouch: 0.55, grabT: 0.4 };
     this.swingK = 0; this.mount = null;
+    /* REFERENCE MOVES — data/moves/{push,pirouette,arm_styling,cross_step}.json 'game' (lab.js -> applyMoves); MVSTYLE = Cheney's caps kept over the data */
+    this.MV = { push: { T: 1.07, c0: 0.4, contactS: 0.3, kneeSupport: 135, lean: 18, reachFwd: 0.11, reachBack: 0.58, recoveryLift: 0.10 },
+      pirouette: { spinT: 1.15, windupT: 0.55, windupLean: 15, armsOpenAbd: 38, pullInSpan: 0.3, reopenSpan: 0.9, knee: 147, kneeRise: 163, torso: 8.1, feetGap: 0.2, speedLoss: 0.1 },
+      arm_styling: { upAbd: 90, upElbow: 33.3, otherAbd: 35, riseS: 0.33, holdS: 0.37, lowerS: 0.33 },
+      cross_step: { stepT: 0.47, kneeSupport: 165, torsoLean: 16.3 } };
+    this.MVSTYLE = { push: { recoveryLift: 0.10 }, arm_styling: { slow: 2.5 }, cross_step: { torsoLean: 9 } };
+    this.moveCool = 6; this.mv = null; this.piro = null; this.trickN = 0;
+    this.SIT = { hipY: 0.272, back: 0.30, board: 0.34, edge: 0.9, handY: 0.2, ankY: 0.11, ankZ: 0.31, ankX: 0.11, poleUp: 0.35, footRoll: 0.5 }; this.restYaw = 0;
     this.stam = 0.7; this.pump = null; this.pumpHipYaw = 0; this.pumpYaw = 0; this.pumpLat = 0; this.pumpDrop = 0; this.spin = 0; this.bend = 0; this.armIKw = 0; this.armIKt = new V(); this.footTap = 0; this.tapPt = new V(); this.drag = 0;
   }
 
@@ -206,18 +221,18 @@ export class Rider {
         const carrying = this.plan?.kind === 'carry' && grade > 0.02;
         const pc0 = this.plan, climbAhead = pc0 && pc0.climbAt !== undefined && pc0.climbAt !== null && pc0.climbAt < 60;
         const PF = PROFILE.preference, vFloor = (climbAhead && grade < 0.02 && PROFILE.mind.foresight > 0.5 ? PF.chargeBeforeClimbKmh : PF.speedFloorKmh) / 3.6; this.vFloor = vFloor; this.vTarget = vFloor;   /* climb ahead: charge to ~31 km/h on the run-in */   /* Cheney: below ~20 km/h she works (pump / push) to bring it back */
-        const needGo = !this.dance && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < vFloor - 0.15 || (carrying && this.v < cruise));
+        const needGo = !this.dance && !this.piro && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < vFloor - 0.15 || (carrying && this.v < cruise));
         // PUMP (S-carve): rhythmic weight shifts through the turns convert body work into forward speed. Real pumping needs
         // speed to work (~>7 km/h) and is less efficient than a push, but feet stay on the board: she prefers it on the flat
         // and on gentle climbs (<3.5°) when she already rolls; below that speed (or steeper) she pushes.
-        const canPump = this.v > PROFILE.skill.pushBelowKmh / 3.6 && grade < (carrying ? 0.12 : 0.06) && Math.abs(kappa) < 0.4 && !this.push && !this.ollie && this.air <= 0 && !this.dance && this.stam > 0.05 && !holeSoon;   /* pumping through bends too (carving IS the pump) */
+        const canPump = this.v > PROFILE.skill.pushBelowKmh / 3.6 && grade < (carrying ? 0.12 : 0.06) && Math.abs(kappa) < 0.4 && !this.push && !this.ollie && this.air <= 0 && !this.dance && !this.piro && this.stam > 0.05 && !holeSoon;   /* pumping through bends too (carving IS the pump) */
         // The body steers the board: shoulders turn first, the hips follow, the board follows the hips. Intensity I sets the
         // style: elegant = slow, small, upright, rhythmic (gliding on the flat / downhill, I≈0.15); power = faster & bigger
         // when she needs speed (I→1). Steep climbs are never elegant: she pushes or walks.
         const pumpGo = canPump && (needGo || (this.pump && this.v < vFloor + 0.4));   /* keep pumping until a little above the floor */
         this.pumpHold = Math.max(0, (this.pumpHold || 0) - dt);
         const wantPump = pumpGo || (this.pumpHold > 0 && canPump && this.stam > 0.03);   // no idle pumping: when she has speed she stands tall and GLIDE-CARVES with her centre of mass
-        const carveGo = !pumpGo && !this.push && !this.ollie && this.air <= 0 && this.v > 2.0 && Math.abs(kappa) < 0.08 && !holeSoon && grade < 0.04;
+        const carveGo = !pumpGo && !this.push && !this.ollie && !this.piro && this.air <= 0 && this.v > 2.0 && Math.abs(kappa) < 0.08 && !holeSoon && grade < 0.04;
         this.glideA = damp(this.glideA || 0, carveGo ? 1 : 0, 0.8, dt); this.glidePh = (this.glidePh || 0) + 2 * Math.PI * 0.125 * dt;   // slow: one S every 8 s
         const Itgt = pumpGo ? clamp(0.35 + (vFloor - this.v) * 0.45 + Math.max(0, grade) * 9, 0.35, 1) : 0.15;   /* further below the floor / steeper -> harder, faster pumping */
         if (wantPump && !this.pump) { this.pump = { t: 0, ph: 0, I: Itgt, A: 0 }; this.decide(carrying ? '借冲坡的速度上坡 + pump' : 'pump 补速度'); }
@@ -241,13 +256,20 @@ export class Rider {
         this.ctxV = vmax; const pc = this.plan, upSoon = pc && pc.climbAt !== undefined && pc.climbAt !== null && pc.climbAt < 12 + this.v * 8;
         const vCap = upSoon ? vmax + 2.2 : vmax;   /* a climb ahead: keep the speed, she'll spend it going up */
         if (this.v > vCap) a -= (this.pump ? 1.1 : 1.6) * (this.v - vCap) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
-        this.trickReady = this.mode === 'ride' && !holeSoon && this.stam >= PROFILE.preference.trickMinStamina && grade < 0.035 && grade > -0.09 && this.v > PROFILE.preference.trickMinKmh / 3.6 && this.v < vmax + 1.2 && !this.ollie && !this.push && this.air <= 0 && !this.dance && (this.trickCool ?? 0) <= 0;
+        this.trickReady = this.mode === 'ride' && !holeSoon && this.stam >= PROFILE.preference.trickMinStamina && grade < 0.035 && grade > -0.09 && this.v > PROFILE.preference.trickMinKmh / 3.6 && this.v < vmax + 1.2 && !this.ollie && !this.push && this.air <= 0 && !this.dance && !this.piro && (this.trickCool ?? 0) <= 0;
         this.trickProg = { stam: this.stam, speed: clamp(this.v / (PROFILE.preference.trickMinKmh / 3.6), 0, 1), fast: this.v >= vmax + 1.2, ready: this.trickReady };
         if (this.trickReady && !this._trWas) this.decide('蓄力够 + 速度合适：等你点转板'); this._trWas = this.trickReady;
         if (upSoon && this.v > vmax && !this._upWas) this.decide('前方上坡：不刹车，留着速度冲上去'); this._upWas = upSoon && this.v > vmax;
-        if (this.trickReq) { this.trickReq = false; if (this.trickReady) { this.startTrick('full'); this.look = null; } }
+        if (this.trickReq) { this.trickReq = false; if (this.trickReady) { const pt = PROFILE.preference.playerTrick, pk = pt === 'shove' ? 'shove' : pt === 'pirouette' ? 'pirouette' : (this.trickN++ % 2 === 0 ? 'pirouette' : 'shove');
+          this.mv = null; this.dance = null; this.look = null; if (pk === 'pirouette') this.startPirouette('player'); else this.startTrick('full'); this.decide('玩家触发：' + (pk === 'pirouette' ? '转身 pirouette' : '转板 shove-it')); } }
+        if (this.piro) { const PR = this.piro, M = this.MV.pirouette; PR.t += dt; const sp = clamp((PR.t - M.windupT) / M.spinT, 0, 1);
+          if (sp > 0 && sp < 1) a -= this.v * M.speedLoss / M.spinT;   /* light speed loss while she turns */
+          if (PR.t > PR.T) { this.piro = null; this.trickCool = 6; this.moveCool = Math.max(this.moveCool, 6); } }
+        this.moveCool -= dt; this.updateMove(dt);
+        { const calmRide = !this.push && !(this.pump && this.pump.A > 0.1) && !this.ollie && this.air <= 0 && !this.dance && !this.piro && !this.mv && !this.look && !this.hairHand && Math.abs(grade) < 0.035 && Math.abs(kappa) < 0.06 && this.v > 2.0 && this.v < vmax + 0.5 && !holeSoon && this.plan?.kind !== 'walk' && this.m < 0.5;
+          if (calmRide && this.moveCool <= 0) this.pickMove(); }
         this.pushCool -= dt; this.trickCool = (this.trickCool ?? 6) - dt; this.danceCool = (this.danceCool ?? 10) - dt;
-        if (this.dance) { this.dance.t += dt * 0.75; if (this.dance.t > DANCE_T) { this.dance = null; this.danceCool = 14 + Math.random() * 8; } }
+        if (this.dance) { this.dance.t += dt; if (this.dance.t > this.dance.T) { this.dance = null; this.danceCool = 14 + Math.random() * 8; } }
         if (!this.planT || this.t - this.planT > PROFILE.mind.planEveryS) { this.plan = this.planClimb(track); this.planT = this.t; }
         const pl = this.plan, stopDist = this.v * this.v / (2 * 2.6) + this.v * 0.6 + 1.5;   // room to stop before it
         this.slowT = this.v < 0.9 ? (this.slowT || 0) + dt : 0;
@@ -262,7 +284,6 @@ export class Rider {
           // too fast: no trick (unsafe) — she tucks and carves/foot-drags to check speed (see vmax drag); the player can trick
           // while the speed is still in the window, which bleeds speed on long descents
           // full-bar trick is now PLAYER-triggered (tap / Space / Enter): she only gets READY and looks at us
-          else if (!this.dance && !holeSoon && this.stam > 0.35 && Math.abs(grade) < 0.035 && Math.abs(kappa) < 0.06 && this.v > 2.0 && (this.danceCool ?? 6) <= 0 && pl.kind !== 'walk' && PROFILE.preference.autoDance) this.startDance();   // Cheney: no tricks on her own (dance kept for later, player-triggered)
         }
       } else a -= this.seq.decel;
       this.v = Math.max(0, this.v + a * dt);
@@ -273,7 +294,7 @@ export class Rider {
       }
     } else if (this.mode === 'walk') {
       this.updateRest(dt);
-      this.v = this.rest ? damp(this.v, 0, 6, dt) : damp(this.v, grade > 0.03 ? 1.0 : grade < -0.08 ? 0.9 : 1.3, 2, dt); this.s += this.v * dt; this.phi += this.v * dt / (1.1 * (1 - Math.min(0.3, Math.max(0, grade) * 1.6)));
+      this.v = this.rest ? damp(this.v, this.rest?.vT ?? 0, 4, dt) : damp(this.v, grade > 0.03 ? 1.0 : grade < -0.08 ? 0.9 : 1.3, 2, dt); { const ry = this.restYaw || 0; this.s += this.v * dt * Math.cos(ry); this.lat += this.v * dt * Math.sin(ry); } this.phi += this.v * dt / (1.1 * (1 - Math.min(0.3, Math.max(0, grade) * 1.6)));
       const E = PROFILE.energy, R6 = E.restGradeDeg * D, cl = (th) => (m * g * this.v * Math.max(0, Math.sin(th))) / EFF * 0.6;
       /* WALKING ENERGY (Cheney): restGradeDeg (6°) is the line. Steeper than that she spends (climb work above what a 6° walk costs);
          gentler than that she slowly recovers (most on the flat / downhill, nothing right at 6°). Sitting recovers fastest. */
@@ -290,7 +311,7 @@ export class Rider {
       const energyOK = this.stam > 0.12 || ahead.down;
       if (this.rest) { /* sitting: handled by rest logic */ }
       else if (this.modeT > 1.8 && canRoll && !climbSoon && energyOK && (!pushSoon || this.stam > pl.need / EMAX)) this.startOn();
-      else if (this.stam <= 0.005 && grade < 0.05 && this.modeT > 1) this.startRest();   // spent: sit down at the roadside
+      else if (this.stam <= 0.005 && grade < 0.05 && this.modeT > 1) this.startRest(track);   // spent: sit down at the roadside
     } else { if (!brake) this.v = this.mode === 'on' ? this.v : 0; spend += (130 - P_AERO) * dt; }
     this.stam = clamp(this.stam - spend / PROFILE.energy.barJ, 0, 1);
     this.stepSeq(dt, track);
@@ -390,14 +411,14 @@ export class Rider {
     if (this.spin) { this.board.quaternion.multiply(new Q().setFromAxisAngle(up, this.spin)); this.board.updateMatrixWorld(true); }
     // walking frame: on the ground at s, facing along the path, stepped aside by lat
     const left = new V(Math.cos(yaw), 0, -Math.sin(yaw));
-    this.lat = this.mode === 'walk' ? damp(this.lat, 0, 0.8, dt) : this.lat;
+    this.lat = this.mode === 'walk' && !this.rest ? damp(this.lat, 0, 0.8, dt) : this.lat;
     this.walkF.position.copy(tr.p).addScaledVector(left, this.lat);
     if (this.groundFn) this.walkF.position.y = this.groundFn(this.walkF.position.x, this.walkF.position.z);
-    this.walkF.quaternion.setFromAxisAngle(up, yaw); this.walkF.updateMatrixWorld();
+    this.walkF.quaternion.setFromAxisAngle(up, yaw + (this.mode === 'walk' ? this.restYaw || 0 : 0)); this.walkF.updateMatrixWorld();
     this.root.position.lerpVectors(this.deckF.position, this.walkF.position, this.m);
     this.root.quaternion.slerpQuaternions(this.deckF.quaternion, this.walkF.quaternion, this.m);
     if (this.spin || this.ollie?.kind === 'shove') this.root.position.y += 0;
-    this.vrm.scene.rotation.y = lerp(-Math.PI / 2, 0, this.face) + this.yaw0;
+    { const ps = this.piroState(); this.vrm.scene.rotation.y = lerp(-Math.PI / 2, 0, this.face) + this.yaw0 + (ps ? ps.yaw : 0); }
     this.body.position.y = -DECK_Y * this.m;
     const bq = new Q().setFromEuler(new THREE.Euler(this.pitch + this.boardPitch * 0.85, 0, -(this.lean - this.tilt), 'XYZ'));
     this.body.quaternion.copy(bq).slerp(new Q(), this.m);
@@ -415,7 +436,7 @@ export class Rider {
     this.pose(dt, ctx);
     this.root.updateMatrixWorld(true);
     this.solveLegs(dt);
-    this.placeHeldBoard(); this.restBoard(track);
+    this.placeHeldBoard(); this.restBoard();
     this.events(dt, ctx);
     this.vrm.update(dt);
   }
@@ -463,14 +484,38 @@ export class Rider {
   lookAhead(track, L) { let up = 0, down = 0; for (let d = 2; d <= L; d += 2) { const gr = track(this.s + d).grade; if (gr > 0.03) up += 2; if (gr < -0.02) down += 2; } return { up: up > L * 0.3, down: down > L * 0.4 }; }
   // REST (Cheney): energy at zero -> she stops at the roadside, puts the board down and sits on it; resting refills
   // fastest; she gets up at ~60% and carries on (walking, or back on the board if the road allows).
-  startRest() { this.decide('体力 0：路边坐下休息'); this.rest = { t: 0, sit: false, s0: this.s }; this.ev.push(['rest', this.s]); }
-  updateRest(dt) { const R = this.rest; if (!R) return; R.t += dt;
-    const up = PROFILE.energy.getUpAt; const keep = this.stam < up || R.t < PROFILE.energy.minSitS; R.sit = R.t > 1.2 && keep; this.sitW = damp(this.sitW || 0, R.t > 1.0 && keep ? 1 : 0, 2.2, dt);
-    if (this.stam >= up && R.t < PROFILE.energy.minSitS) this.sitW = Math.max(this.sitW, 0.99);   /* sit at least a few seconds even if the bar is back */
-    if (this.stam >= up && this.sitW < 0.05) { this.rest = null; this.modeT = 0; } }
-  restBoard(track) { const R = this.rest; if (!R || !this.hold) return; const k = sstep(0.3, 1.0, R.t) * (this.stam < 0.6 ? 1 : 1 - sstep(0, 0.8, (R.t2 = (R.t2 || 0) + 1 / 30)));
-    if (k <= 0.001) return; const tr = track(R.s0), l = new V(Math.cos(tr.yaw), 0, -Math.sin(tr.yaw)); const p = tr.p.clone().addScaledVector(l, this.lat || 0); const q = this.boardRestQ(R.s0, track);
-    this.board.position.lerp(p, k); this.board.quaternion.slerp(q, k); this.board.updateMatrixWorld(true); }
+  /* REST POSE (Cheney, exact): at 0 stamina she stops at the roadside and sits ON the board, the board perpendicular to the way she
+     faces, facing the lower ground (or, no difference, the road), legs crossed, hands resting in front. Sequence (all eased):
+     go (short curved walk to the spot; a U-turn first if she must face the road's right) -> set (bends, lays the board flat on her
+     right, along the road) -> turn (90° left: the board is now behind her) -> sit (squats back onto the deck, then crosses the legs)
+     -> hold -> up -> unturn -> pick (bend, grab) -> back (curves back to her line). */
+  startRest(track) { this.decide('体力 0：路边坐下休息'); const tr = (track || this.trackFn)(this.s), yaw = Math.atan2(tr.dir.x, tr.dir.z), L = new V(Math.cos(yaw), 0, -Math.sin(yaw));
+    let side = 0; const TH = this.track?.terrainH; if (TH) { const pl = tr.p.clone().addScaledVector(L, 6), pr = tr.p.clone().addScaledVector(L, -6), d = TH(pl.x, -pl.z) - TH(pr.x, -pr.z); if (Math.abs(d) > 0.3) side = d < 0 ? 1 : -1; }
+    const E = this.SIT.edge, sig = side || 1, H1 = sig > 0 ? 0 : Math.PI, latF = side ? sig * E : -E;   /* face-road: sit at the right edge facing left (the road) */
+    this.rest = { t: 0, pt: 0, ph: 'go', sit: false, s0: this.s, sig, side, H1, latT: latF, sw: 0, vT: 0.75 };
+    this.decide(side ? `休息：面向${side > 0 ? '左' : '右'}侧低处坐下` : '休息：两边一样高 → 面向道路坐下'); this.ev.push(['rest', this.s, side]); }
+  updateRest(dt) { const R = this.rest; if (!R) return; R.t += dt; R.pt += dt; const E = PROFILE.energy, ry = this.restYaw || 0, nx = (ph) => { R.ph = ph; R.pt = 0; };
+    if (R.ph === 'go') { const ryT = R.H1 + Math.cos(R.H1) * clamp(1.4 * (R.latT - this.lat), -0.7, 0.7); this.restYaw = damp(ry, ryT, 2.2, dt);
+      const close = Math.abs(R.latT - this.lat) < 0.08 && Math.abs(this.restYaw - R.H1) < 0.1; R.vT = close ? 0 : 0.75; if ((close && this.v < 0.08) || R.pt > 14) nx('set'); }
+    else if (R.ph === 'set') { R.vT = 0; this.restYaw = damp(ry, R.H1, 3, dt); this.bend = Math.sin(clamp(R.pt / 1.4, 0, 1) * Math.PI) * 0.85;
+      if (!R.bQ) { const q = new Q().setFromAxisAngle(new V(0, 1, 0), Math.atan2(this.dir.x, this.dir.z) + R.H1).multiply(new Q().setFromAxisAngle(new V(1, 0, 0), -Math.atan(this.gradeNow || 0) * Math.cos(R.H1)));
+        const p = this.walkF.localToWorld(new V(-this.SIT.board, 0, 0.0)); p.y = this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y; R.bQ = q; R.bPos = p; }
+      if (R.pt >= 0.72 && this.hold) { this.hold = null; this.carry = 0; this.clampQ = null; }
+      if (R.pt > 1.4) { this.bend = 0; nx('turn'); } }
+    else if (R.ph === 'turn') { this.restYaw = lerp(R.H1, R.H1 + Math.PI / 2, sstep(0, 1.0, R.pt)); if (R.pt > 1.0) nx('sit'); }
+    else if (R.ph === 'sit') { R.sw = sstep(0, 2.0, R.pt); if (R.pt > 2.0) { R.sit = true; R.sitT = 0; nx('hold'); } }
+    else if (R.ph === 'hold') { R.sitT += dt; if (this.stam >= E.getUpAt && R.sitT >= E.minSitS) { R.sit = false; nx('up'); this.decide('休息够了：起身'); } }
+    else if (R.ph === 'up') { R.sw = 1 - sstep(0, 1.8, R.pt); if (R.pt > 1.8) nx('unturn'); }
+    else if (R.ph === 'unturn') { this.restYaw = lerp(R.H1 + Math.PI / 2, R.H1, sstep(0, 1.0, R.pt)); if (R.pt > 1.0) nx('pick'); }
+    else if (R.ph === 'pick') { this.bend = Math.sin(clamp(R.pt / 1.3, 0, 1) * Math.PI) * 0.85; if (R.pt >= 0.62 && !this.hold) this.grab(R.bPos, R.bQ, new V(-0.117, DECK_Y - 0.004, 0), 0.62);
+      if (R.pt > 1.3) { this.bend = 0; nx('back'); } }
+    else if (R.ph === 'back') { R.vT = 1.0; const ryT = Math.atan2(Math.sin(0 - ry), Math.cos(0 - ry)) * 0 + clamp(-1.2 * this.lat, -0.6, 0.6); let d = ryT - ry; this.restYaw = ry + d * (1 - Math.exp(-2.0 * dt));
+      if (Math.abs(this.restYaw) < 0.06 && Math.abs(this.lat) < 0.08) { this.rest = null; this.restYaw = 0; this.modeT = 0; } }
+    this.sitW = R ? R.sw : 0; }
+  /* the board while resting: set (carry pose -> flat on the road at her right), then fixed on the ground until picked up */
+  restBoard() { const R = this.rest; if (!R || !R.bQ) return;
+    if (R.ph === 'set' && this.hold) { const k = sstep(0.05, 0.72, R.pt); this.board.position.lerp(R.bPos, k); this.board.quaternion.slerp(R.bQ, k); this.board.updateMatrixWorld(true); return; }
+    if (!this.hold) { this.board.position.copy(R.bPos); this.board.quaternion.copy(R.bQ); this.deck.quaternion.identity(); this.deck.position.set(0, 0, 0); this.board.updateMatrixWorld(true); } }
   // ---------------- mode sequences ----------------
   startOff(why) {
     this.decide('下板：' + ({ steep: '前面太陡（>6°）', long: '前面长坡，体力不够推', slow: '速度没了', tired: '体力耗尽' }[why] || why));
@@ -491,6 +536,46 @@ export class Rider {
   }
   jogPh() { const S = this.seq; return this.mode === 'on' && !!S && (S.ph === 'run' || S.ph === 'set' || S.ph === 'beside'); }
   requestTrick() { this.trickReq = true; return !!this.trickReady; }
+  /* ONE MOVE SET (Cheney 11/08): while she rides calmly she picks a small move at random, weighted by her profile preference
+     (0..1 each). Gates: flat-ish, safe speed, not pumping/pushing, nothing else running; tricks (pirouette) also need
+     stamina >= trickMinStamina. Cooldown moveGapS [min,max] s between moves. The player trigger still forces a trick. */
+  pickMove() { const PF = PROFILE.preference, gap = PF.moveGapS || [8, 20], ok = [];
+    const add = (k, w, why) => { if (w > 0) ok.push([k, w, why]); };
+    add('arm', PF.armStyling ?? 0.6, '滑行中，抬手舒展一下');
+    add('cross', PF.crossStep ?? 0.4, '路平，走两步 cross-step');
+    if (this.stam >= 0.35) add('dance', PF.dance ?? 0.2, '心情好，跳一段（cross-step + Peter Pan）');
+    if (this.stam >= PF.trickMinStamina && this.trickReady) add('pirouette', PF.pirouette ?? 0.3, '体力 ' + Math.round(this.stam * 100) + '% + 速度合适：转个身');
+    add('look', (PF.lookBack ?? 0.6) * 0.8, '回头看看');
+    if (this.w.wind > 0.25) add('hair', PF.hairTouch ?? 0.5, '有风，理一下头发');
+    this.moveCool = gap[0] + Math.random() * (gap[1] - gap[0]);
+    const tot = ok.reduce((a, b) => a + b[1], 0); if (tot <= 0) return; let x = Math.random() * tot, pick = ok[0]; for (const o of ok) { x -= o[1]; if (x <= 0) { pick = o; break; } }
+    const k = pick[0]; this.lastMove = { k, s: this.s, why: pick[2] }; this.ev.push(['move', this.s, k]); this.decide('动作 ' + k + '：' + pick[2]);
+    if (k === 'arm') { const A = this.MV.arm_styling, sl = A.slow || 2.5; this.mv = { kind: 'arm', t: 0, side: (this.lean || 0) > 0.01 ? 1 : (this.lean || 0) < -0.01 ? -1 : (Math.random() < 0.5 ? 1 : -1), r: A.riseS * sl, h: A.holdS * sl, l: A.lowerS * sl }; this.mv.T = this.mv.r + this.mv.h + this.mv.l; }
+    else if (k === 'cross') this.startDance('cross');
+    else if (k === 'dance') this.startDance('dance');
+    else if (k === 'pirouette') this.startPirouette('auto');
+    else if (k === 'look') { this.look = { t: 0, T: 2.6 }; this.ev.push(['look', this.s]); }
+    else if (k === 'hair') { this.hairHand = { t: 0, T: 2.0 }; this.ev.push(['hair', this.s]); } }
+  updateMove(dt) { const m = this.mv; if (!m) return; m.t += dt; if (this.hairHand && m.t < 0.3) this.hairHand = null;
+    if (this.push || (this.pump && this.pump.A > 0.2) || this.ollie || this.piro || this.mode !== 'ride') m.t = Math.max(m.t, m.r + m.h);   /* never while pumping/pushing: lower straight away */
+    if (m.t >= m.T) this.mv = null; }
+  armEnv() { const m = this.mv; if (!m || m.kind !== 'arm') return 0; const t = m.t; const e = t < m.r ? t / m.r : t < m.r + m.h ? 1 : 1 - (t - m.r - m.h) / m.l; const c = clamp(e, 0, 1); return c * c * (3 - 2 * c); }
+  /* PIROUETTE (data/moves/pirouette.json, ref pro_ARCk35WWnbk_36): wind-up (counter-turn + small lean, arms open) -> one 360° body
+     turn over spinT with the arms gathered to the chest (turns fastest there) and re-opened after the half turn -> settle. The board
+     keeps its heading; her feet stay on the deck and pivot on the balls (heels lifted). */
+  startPirouette(why) { const M = this.MV.pirouette; this.pump = null; this.mv = null; this.piro = { t: 0, T: M.windupT + M.spinT + 0.7, dir: 1, why }; this.trickCool = 8;
+    this.stam = Math.max(0, this.stam - 500 / PROFILE.energy.barJ); this.ev.push(['pirouette', this.s, why]); }
+  /* body yaw (rad) + phases of the pirouette at time t */
+  piroState() { const PR = this.piro; if (!PR) return null; const M = this.MV.pirouette, t = PR.t, wu = M.windupT, sT = M.spinT;
+    const wind = sstep(0, wu * 0.8, t) * (1 - sstep(wu * 0.75, wu + 0.15, t));      /* counter-wind and lean, released into the turn */
+    const u = clamp((t - wu) / sT, 0, 1);
+    /* angle profile: faster while gathered (first half), slowing as the arms re-open: warp u with a skewed ease */
+    const w = u < 0.55 ? 0.62 * (u / 0.55) ** 1.6 : 0.62 + 0.38 * (1 - (1 - (u - 0.55) / 0.45) ** 2);   /* fastest around the half turn (arms in), slows as they re-open */
+    const yaw = PR.dir * (2 * Math.PI * w - wind * 22 * D);
+    const gather = sstep(wu - 0.15, wu + 0.12, t) * (1 - sstep(wu + sT * 0.45, wu + sT * 0.75, t));
+    const open = sstep(0, wu * 0.6, t) * (1 - sstep(wu + sT + 0.2, PR.T, t));
+    const on = sstep(0, 0.34, t) * (1 - sstep(PR.T - 0.5, PR.T - 0.02, t)), rise = Math.sin(Math.PI * u) * (u > 0 && u < 1 ? 1 : 0);
+    return { yaw, wind, gather, open, on, u, rise, spinning: u > 0 && u < 1 }; }
   startTrick(why) {
     this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 6 : 20;   /* player-triggered: short cooldown, the 70% bar is the real limit */
     this.stam = Math.max(0, this.stam - (MASS * 9.81 * 0.32 / EFF + 450) / EMAX);   /* a trick costs ~1.3 kJ (≈9% bar) */ this.ev.push(['trick', this.s, why]);
@@ -609,6 +694,10 @@ export class Rider {
     }
     if (this.hold && this.hold.drop > 0) { const gp = new V(-0.117, DECK_Y, 0).applyQuaternion(this.seq.bQ).add(this.seq.bPos); this.armIKt.lerp(gp, this.hold.drop); }
     if (this.mode === 'on' && S?.ph === 'step') w = 0;
+    { const R = this.rest; if (R && R.bQ && (R.ph === 'set' || R.ph === 'pick')) { const gp = new V(-0.117, DECK_Y, 0).applyQuaternion(R.bQ).add(R.bPos);
+        if (R.ph === 'set') { if (this.hold) { this.armIKt.lerp(gp, sstep(0.05, 0.72, R.pt)); w = 1; } else w = 0; }
+        else { this.armIKt.copy(gp); w = this.hold ? 1 : sstep(0.15, 0.55, R.pt); } }
+      else if (R && !this.hold) w = 0; }
     this.armIKw = damp(this.armIKw, w, this.mode === 'on' && w < this.armIKw ? 4 : 14, 1 / 30);   /* throwdown release: the hand leaves the nose softly */
   }
   // NO CLIPPING while carrying: sample the skinned vertices of her right arm, hips, thighs, skirt; any that fall inside the
@@ -716,29 +805,34 @@ export class Rider {
     this.board.updateMatrixWorld(true);
   }
 
-  startDance() {
-    this.pump = null; this.dance = { t: 0 }; this.stam = Math.max(0, this.stam - 300 / EMAX); this.ev.push(['dance', this.s]); }
+  startDance(kind = 'dance') {
+    const K = kind === 'cross' ? DANCE_X : DANCE_K; this.pump = null; this.dance = { t: 0, K, T: K[K.length - 1][0], kind }; this.stam = Math.max(0, this.stam - 300 / EMAX); this.ev.push(['dance', this.s]); }
   // foot keyframes on the deck (z along board, + = nose; x across, + = her toe side is -x): [t, lz, rz, liftL, liftR, lx, rx]
   danceFeet() {
-    const u = this.dance.t, K = DANCE_K; let i = 0; while (i < K.length - 2 && K[i + 1][0] <= u) i++;
+    const u = this.dance.t, K = this.dance.K || DANCE_K; let i = 0; while (i < K.length - 2 && K[i + 1][0] <= u) i++;
     const a = K[i], b = K[i + 1], f = sstep(a[0], b[0], u);
     const L = (j) => lerp(a[j], b[j], f), arc = (j) => (a[j] !== b[j] ? Math.sin(f * Math.PI) * 0.07 : 0);
-    return { lz: L(1), rz: L(2), ly: arc(1) + L(3), ry: arc(2) + L(4), lx: L(5), rx: L(6), k: i };
+    return { lz: L(1), rz: L(2), ly: arc(1) + L(3), ry: arc(2) + L(4), lx: L(5), rx: L(6), k: i, mv: a[1] !== b[1] || a[2] !== b[2] ? 1 : 0 };
   }
   startPush(grade) { this.decide(grade > 0.03 ? '上坡推板' : '速度低，推板');
-    const T = grade > 0.03 ? 1.0 : 1.3;
+    const MP = this.MV.push, T = MP.T * (grade > 0.03 ? 0.85 : 1);   /* push.json: 1.07 s per stroke (uphill a little quicker) */
     this.push = { t: 0, T, contact: null };
     this.pushCount++;
   }
   pushAccel() {
     const p = this.push;
     // contact window inside the cycle
-    const c0 = 0.3 * p.T, c1 = c0 + clamp(0.6 / Math.max(this.v, 0.6), 0.22, 0.45);   // a long stroke: the foot stays on the road while the body rolls past
-    p.c0 = c0; p.c1 = c1;
+    /* push.json: foot touches down c0 = 0.40 s into the cycle (cycle start = foot leaves the deck); contact ~0.30 s, but the foot can
+       only stay planted while the leg reaches it: contact = (reachFwd + reachBack) / v, clamped; the leg geometry may end it earlier (p.legEnd) */
+    const MP = this.MV.push, c0 = Math.min(MP.c0, 0.42 * p.T), cF = c0 + clamp(0.6 / Math.max(this.v, 0.6), 0.22, 0.45), c1 = p.legEnd ?? Math.min(cF, c0 + 0.36);
+    p.c0 = c0; p.c1 = c1; p.cF = cF;   /* force window cF = the old stroke (impulse unchanged); the foot's toe-off c1 comes from the leg's reach */
     const gr = this.gradeNow || 0, def = Math.max(0, (this.vFloor || 5.5) - this.v), F = clamp(PROFILE.skill.pushForceN + 70 * def + MASS * 9.81 * Math.max(0, Math.sin(Math.atan(gr))) * 1.6, 120, 380);
-    p.F = F; return p.t > c0 && p.t < c1 && !p.abort ? F / MASS : 0;   /* harder kick when slower / uphill; the work F·v is billed to the stamina bar */
+    p.F = F; return p.t > c0 && p.t < cF && !p.abort ? F / MASS : 0;   /* harder kick when slower / uphill; the work F·v is billed to the stamina bar */
   }
 
+  /* push body envelope 0..1: support knee bends / body tips forward from the hips as the foot reaches down, peaks through the
+     contact, rises again during the recovery; 0 at the start and end of every cycle so kick-kick-kick joins smoothly */
+  pushEnv() { const p = this.push; if (!p) return 0; const c0 = p.c0 ?? 0.4, c1 = p.c1 ?? c0 + 0.3, t = p.t; return sstep(0.06, c0 + 0.04, t) * (1 - sstep(Math.max(c1, c0 + 0.12), p.T - 0.02, t)); }
   stateWeights(dt, grade, ctx) {
     const w = this.w;
     if (this.push) {
@@ -755,7 +849,7 @@ export class Rider {
     // look-back: occasionally turn over the trailing (right) shoulder toward the camera
     this.nextLook -= dt;
     if (this.trickReady && !this.look && !this.ollie) this.nextLook = Math.min(this.nextLook, 0);
-    if (!this.look && this.nextLook <= 0 && this.mode !== 'off' && this.mode !== 'on' && !this.push && !this.ollie && Math.abs(this.lean) < 8 * D && w.tuck < 0.3 && w.effort < 0.5) {
+    if (!this.look && this.nextLook <= 0 && (this.mode === 'walk' || this.trickReady) && !this.piro && this.mode !== 'off' && this.mode !== 'on' && !this.push && !this.ollie && Math.abs(this.lean) < 8 * D && w.tuck < 0.3 && w.effort < 0.5) {
       this.look = { t: 0, T: 2.6 }; this.ev.push(['look', this.s]);
     }
     if (this.nextLook <= 0 && !this.look) this.nextLook = 0.5;
@@ -769,7 +863,7 @@ export class Rider {
     w.look = lk;
     // hand tucks hair in sustained wind
     this.nextHair -= dt;
-    if (!this.hairHand && !this.pump && w.wind > 0.55 && this.nextHair <= 0 && !this.push && !this.look && !this.ollie && w.tuck < 0.3) { this.hairHand = { t: 0, T: 2.0 }; this.ev.push(['hair', this.s]); }
+    if (!this.hairHand && !this.pump && !this.piro && !this.mv && !this.dance && w.wind > 0.55 && this.nextHair <= 0 && !this.push && !this.look && !this.ollie && w.tuck < 0.3) { this.hairHand = { t: 0, T: 2.0 }; this.ev.push(['hair', this.s]); }
     let hh = 0;
     if (this.hairHand) { this.hairHand.t += dt; const u = this.hairHand.t; hh = sstep(0, 0.45, u) * (1 - sstep(this.hairHand.T - 0.5, this.hairHand.T, u)); if (u > this.hairHand.T) { this.hairHand = null; this.nextHair = 9; } }
     w.hair = hh;
@@ -780,8 +874,11 @@ export class Rider {
   pose(dt, ctx) {
     const w = this.w, t = this.t, b = this.b;
     const P = this.push ? this.push.t / this.push.T : 0;
+    const psP = this.piroState(); this.psP = psP;
+    const R0 = this.rest, sw = R0 ? R0.sw || 0 : 0, sitLean = R0 ? (R0.lean || 0) + sw * 0.07 : 0;
     // push sub-phase envelope: down (0..0.3 reach), contact, recover
-    const reach = this.push ? 0.55 * sstep(0.05, 0.32, P) * (1 - sstep(0.7, 0.98, P)) : 0;   // a woman's push: long spine, a soft knee bend, not a hunched dig
+    const pe = this.push && this.m < 0.5 ? this.pushEnv() : 0; this.pe = damp(this.pe ?? 0, pe, 30, dt);
+    const reach = 0.55 * this.pe;   /* a woman's push (Cheney: the push doesn't bend the waist): long spine, the lean comes from the hips, knee soft */
     const ol = this.ollie ? this.ollie.t : -1;
     // ollie body phases (from longboard-ollie reference: deep ~90° knee wind-up, explosive extension with arms
     // sweeping up, knees pulled toward chest in the air, then reach down and absorb on landing)
@@ -798,27 +895,31 @@ export class Rider {
     if (this.mount) { this.mount.t += dt; if (this.mount.t > this.TD.absorbOut + 0.6) this.mount = null; }
     const mt = this.mount ? this.mount.t : -1, mountAbs = mt >= 0 ? Math.sin(Math.min(1, mt / this.TD.absorbIn) * Math.PI / 2) * (1 - sstep(this.TD.absorbIn, this.TD.absorbOut, mt)) : 0;
     const stepOn = this.mode === 'on' && this.seq?.ph === 'step' ? sstep(0, 0.2, this.seq.t) : 0, swingK = this.swingK || 0;
-    const crouchT = clamp((brk ? (brk.kind === 'slide' ? 0.7 : brk.kind === 'heel' ? 0.45 : 0.1) * sstep(0, 0.3, brk.t) : 0) + (heel * 0.38 + toe * 0.3) * (1 - 0.75 * tallG) + w.tuck * 1.05 + crouchO * 1.55 - extend * 0.2 + tuckAir * 1.15 + landAbs * 1.1 + w.effort * 0.25 + reach * 0.15, -0.35, 1.6);
-    this.crouch = damp(this.crouch ?? crouchT, crouchT + mountAbs * this.TD.crouch, this.ollie || this.mount ? 18 : 9, dt);
+    const crouchT = clamp((brk ? (brk.kind === 'slide' ? 0.7 : brk.kind === 'heel' ? 0.45 : 0.1) * sstep(0, 0.3, brk.t) : 0) + (heel * 0.38 + toe * 0.3) * (1 - 0.75 * tallG) + w.tuck * 1.05 + crouchO * 1.55 - extend * 0.2 + tuckAir * 1.15 + landAbs * 1.1 + w.effort * 0.25, -0.35, 1.6);
+    this.crouch = damp(this.crouch ?? crouchT, crouchT * (psP ? 1 - psP.on : 1) + mountAbs * this.TD.crouch, this.ollie || this.mount ? 18 : 9, dt);
     const breathe = Math.sin(t * (w.effort > 0.3 ? 4.2 : 1.6)) * (0.012 + w.effort * 0.03);
     // ---- hips placement (vrm model frame: +z facing, +x = board forward)
     const sway = Math.sin(t * 0.9) * 0.008;
-    const hipX = 0.0 + (this.pumpFA || 0) * 0.045 + reach * 0.1 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
+    const hipX = 0.0 + (this.pumpFA || 0) * 0.045 + reach * 0.13 - w.tuck * 0.02 + this.windLocal.z * -0.002;   // over the front foot when pushing
     this.oTuck = tuckAir;
     this.oDrop = damp(this.oDrop ?? 0, crouchO * 0.16 + tuckAir * 0.27 + landAbs * 0.12 + (this.pumpDrop || 0), 22, dt);
-    const dn = this.dance ? sstep(0.2, 0.9, this.dance.t) * (1 - sstep(5.5, 6.3, this.dance.t)) : 0, DF = this.dance ? this.danceFeet() : null;
-    this.dn = dn;
+    const dn = this.dance ? sstep(0.2, 0.9, this.dance.t) * (1 - sstep(this.dance.T - 0.9, this.dance.T - 0.1, this.dance.t)) : 0, DF = this.dance ? this.danceFeet() : null;
+    this.dn = dn; this.danceStep = damp(this.danceStep || 0, DF && DF.mv ? 1 : 0, 5, dt);
     const runB = this.jogPh(), gB = this.mode === 'walk' || runB, uB = ((this.phi % 1) + 1) % 1, SFB = runB ? 0.42 : 0.56;
     const M = this.m, F = this.face, bob = gB ? (0.5 + 0.5 * Math.cos(4 * Math.PI * (uB - SFB / 2))) * (runB ? 0.05 : 0.045) * M : Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
-    const sitD = (this.sitW || 0) * 0.62;   /* sitting on the board at the roadside */
-    const hipDrop = sitD + lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03 + swingK * 0.05 + Math.max(0, swingK - 1) * 0.25, M);   // walking: nearly straight knees (a lady's walk), small bob
-    const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
+    const sitD = 0;   /* rest pose: hips set below (sitPose) */
+    const piroD = psP ? psP.on * 0.03 + psP.wind * 0.05 - psP.rise * 0.03 + (psP.u >= 1 ? Math.sin(Math.PI * clamp((this.piro.t - this.MV.pirouette.windupT - this.MV.pirouette.spinT) / 0.5, 0, 1)) * 0.035 : 0) : 0;   /* pirouette: knees ~147°, rising to ~163° mid-turn */
+    const hipDrop = sitD + piroD - (this.dance?.kind === 'cross' ? dn * (this.xsLift ?? 0.008) : 0) + lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + this.pe * ((this.pushDrop ?? 0.03) + (this.pushExtra || 0)) + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03 + swingK * 0.05 + Math.max(0, swingK - 1) * 0.25, M);   // walking: nearly straight knees (a lady's walk), small bob
+    const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + this.pe * 0.11 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
     // model walk: hips shift a little over the standing foot each step (pelvis side sway ~1.6 cm) — in the walk frame the
     // model's +x is her LEFT when facing forward (F=1); stance foot alternates with phi (left planted around phi≈0.28)
     const walkW = this.mode === 'walk' ? M * F : 0, hsw = walkW * 0.011 * Math.sin(this.phi * Math.PI * 2 - 0.3);
     this.hipSw = walkW * Math.sin(this.phi * Math.PI * 2 - 0.3);
     b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip + hsw, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
+    if (sw > 0) { /* REST: squat-sit back onto the board behind her (hips over the deck centre, bottom on the grip tape) */
+      const hs = this.SIT.hipY, hz = -this.SIT.back, e = sw, dip = Math.sin(Math.PI * e) * 0.04;
+      b.hips.position.y = lerp(b.hips.position.y, hs, e) - dip * 0; b.hips.position.z = lerp(b.hips.position.z, this.hipRest.z + hz * this.flip, sstep(0.1, 0.85, e)); b.hips.position.x = lerp(b.hips.position.x, this.hipRest.x, e); }
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
     const open = (30 * D + reach * 34 * D + w.tuck * 6 * D + dn * 45 * D) * (1 - F);
     const lb = w.look;
@@ -827,9 +928,9 @@ export class Rider {
     const tall = 1 - 0.6 * (this.pump?.A || 0);
     // pelvis: swing-side hip drops a touch (~3°) and rotates forward with the swinging leg (~5°); the chest counters it
     const hsW = this.hipSw || 0, pYaw = (this.mode === 'walk' ? M * F : 0) * Math.cos(this.phi * Math.PI * 2) * 3 * D;
-    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0) + pYaw, leanIn * 0.3 + hsW * 1.8 * D);
+    this.rot('hips', 0.0 + w.tuck * 0.15 + this.pe * (this.pushLeanK ?? 0.9) * this.MV.push.lean * D, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0) + pYaw, leanIn * 0.3 + hsW * 1.8 * D + this.pe * (this.pushRoll ?? 12) * D);
     const walkLean = M * (-0.03 + Math.min(0.1, Math.max(0, this.gradeNow || 0) * 0.8)) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0) + swingK * (this.TD.lean ?? 0.4) + stepOn * 0.1;
-    const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 * (1 - M) + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
+    const fwd = walkLean - 0.02 + this.dn * this.MV.cross_step.torsoLean * D * (this.danceStep || 0) - this.dn * 0.03 * (1 - (this.danceStep || 0)) + (psP ? psP.wind * this.MV.pirouette.windupLean * D * 0.6 + psP.on * 3 * D : 0) + sitLean + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 * (1 - M) + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     const ptw = this.pumpTwist || 0;
     this.rot('spine', fwd * 0.45 * tall + breathe - M * 0.12, open * 0.2 + tw * 0.25 + ptw * 0.3, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
     this.rot('chest', fwd * 0.35 * tall - breathe * 0.5, open * 0.2 + tw * 0.35 + ptw * 0.4, leanIn * 0.3);
@@ -893,6 +994,18 @@ export class Rider {
     const hair = { rx: -0.2, ry: 1.25, rz: 20 * D, re: 2.3, rw: -0.2 };
     const tgt = {};
     for (const k in rest) { tgt[k] = lerp(rest[k], act[k], up); if (k[0] === 'r' && hair[k] !== undefined) tgt[k] = lerp(tgt[k], hair[k], hh); }
+    { /* ARM STYLING (arm_styling.json; rise/hold/lower ×slow, capped at shoulder height): the outside arm floats up with a soft elbow, the other stays low.
+         Measured on this rig: lz≈-5° = hand at shoulder height (abd 90), lz -76° = hanging; le -0.58 ≈ 33° elbow */
+      const e = this.armEnv(); if (e > 0) { const AS = this.MV.arm_styling, abd = Math.min(90, AS.upAbd), lzU = -(95 - abd) * D, oth = -(95 - Math.min(35, AS.otherAbd)) * D, eb = -Math.max(30, AS.upElbow) / 33.3 * 0.58;
+        if (this.mv.side > 0) { tgt.lz = lerp(tgt.lz, lzU, e); tgt.ly = lerp(tgt.ly, -0.3, e); tgt.le = lerp(tgt.le, eb, e); tgt.lw = lerp(tgt.lw, 0.25, e); tgt.lx = lerp(tgt.lx, -0.25, e); tgt.rz = lerp(tgt.rz, 66 * D, e * 0.6); tgt.ry = lerp(tgt.ry, 0.12, e * 0.6); }
+        else { tgt.rz = lerp(tgt.rz, -lzU, e); tgt.ry = lerp(tgt.ry, 0.3, e); tgt.re = lerp(tgt.re, -eb, e); tgt.rw = lerp(tgt.rw, -0.25, e); tgt.rx = lerp(tgt.rx, -0.25, e); tgt.lz = lerp(tgt.lz, -66 * D, e * 0.6); tgt.ly = lerp(tgt.ly, -0.12, e * 0.6); } } }
+    { const ps = this.piroState(); if (ps) { /* PIROUETTE arms: open ~38° on the wind-up -> gathered to the chest (wrists ~0.3 m) -> re-open wide (~0.9 m) -> back to rest */
+        const o = { lx: -0.1, ly: -0.25, lz: -57 * D, le: -0.4, lw: -0.2, rx: -0.1, ry: 0.25, rz: 57 * D, re: 0.4, rw: 0.2 };
+        const g = { lx: -0.3, ly: -0.42, lz: -50 * D, le: -1.55, lw: -0.1, rx: -0.3, ry: 0.42, rz: 50 * D, re: 1.55, rw: 0.1 };
+        const wd = { lx: -0.15, ly: -0.3, lz: -22 * D, le: -0.45, lw: -0.25, rx: -0.15, ry: 0.3, rz: 22 * D, re: 0.45, rw: 0.25 };
+        const reo = sstep(0.45, 0.8, ps.u) * (1 - sstep(0.0, 1, (this.piro.t - this.MV.pirouette.windupT - this.MV.pirouette.spinT) / 0.6));
+        for (const k in o) { let v = lerp(o[k], g[k], ps.gather); v = lerp(v, wd[k], reo * (1 - ps.gather)); tgt[k] = lerp(tgt[k], v, ps.open); } } }
+    if (this.armOv) Object.assign(tgt, this.armOv);   /* probe hook: force arm targets */
     // follow-through: elbows/wrists lag the upper arm, so the hand trails when the arm rises or falls
     for (const k in tgt) A[k] = A[k] === undefined ? tgt[k] : damp(A[k], tgt[k], k.endsWith('w') ? 2.6 : k.endsWith('e') ? 3.8 : 5.5, dt);
     this.rot('leftShoulder', 0, -0.08 * M, -0.04 * bal);   // shoulder blades back: no rounded shoulders
@@ -915,6 +1028,12 @@ export class Rider {
       if (this.hold) { if (this.carryStyle === 'under') this.rot('rightHand', -0.5, 0.3, 0.6); else if (this.carryStyle !== 'clamp') this.rot('rightHand', 0, 0, 0.15); }
       if (this.hold && this.carryStyle === 'clamp') this.clampHand();
     }
+    { const R = this.rest, sw = R ? R.sw || 0 : 0; if (sw > 0.02) { /* REST: both hands rest in front, on the crossed shins, wrists soft */
+        this.root.updateMatrixWorld(true); const e = sstep(0.3, 1.0, sw);
+        for (const [sd, x] of [['left', 0.11], ['right', -0.11]]) { const ua = b[sd + 'UpperArm'], la = b[sd + 'LowerArm'], hd = b[sd + 'Hand'];
+          const kn = b[(x > 0 ? 'left' : 'right') + 'LowerLeg'].getWorldPosition(new V()), hipW = b.hips.getWorldPosition(new V()); const tg = kn.clone().lerp(hipW, 0.28); tg.y = kn.y + 0.035;   /* hands rest on the knees, a little inside */
+          const cur = hd.getWorldPosition(new V()), sp = ua.getWorldPosition(new V()), pole = sp.clone().add(this.walkF.localToWorld(new V(x > 0 ? 1 : -1, -0.6, -0.4)).sub(this.walkF.position));
+          twoBoneIK(ua, la, hd, cur.lerp(tg, e), pole); } } }
     // fingers softly curled (graceful hands)
     for (const f of this.fing) {
       const sgn = f.side === 'left' ? -1 : 1;
@@ -1002,32 +1121,51 @@ export class Rider {
       const F = this.danceFeet();
       lf = deck(F.lx, F.lz, DECK_Y + ANK + F.ly); rf = deck(F.rx, F.rz, DECK_Y + ANK + F.ry);
       if (F.ry > 0.15) rf = deck(F.rx - 0.05, F.rz - 0.25, DECK_Y + ANK + F.ry);   // Peter Pan: back leg extends behind and up
-      const fw = sstep(0.4, 1.0, this.dance.t) * (1 - sstep(5.4, 6.2, this.dance.t));
+      const fw = sstep(0.4, 1.0, this.dance.t) * (1 - sstep(this.dance.T - 1.0, this.dance.T - 0.2, this.dance.t));
       lYaw = lerp(lYaw, -12 * D, fw); rYaw = lerp(rYaw, -20 * D, fw);   // toes point toward the nose while walking the board
     }
+    const psL = this.piro && this.m < 0.5 ? this.piroState() : null;
+    if (psL) { /* PIROUETTE feet: drawn together over the deck centre (~0.2 m apart), on the balls of the feet, turning with the body */
+      const k = psL.on, gap = this.MV.pirouette.feetGap / 2, yw = psL.yaw;
+      lYaw = lerp(lYaw, -50 * D, k) + yw; rYaw = lerp(rYaw, -60 * D, k) + yw;
+      /* pivot on the BALL of each foot: the ball point stays fixed on the deck, the ankle swings round it as the foot turns */
+      const BL = this.pivBL ?? 0.095, td = (y) => new V(0, 0, this.flip).applyAxisAngle(new V(0, 1, 0), y + this.yaw0), y0L = -50 * D, y0R = -60 * D;
+      const bL = new V(lerp(0.015, 0, k), 0, lerp(0.2, gap, k)).addScaledVector(td(y0L), BL * k), bR = new V(lerp(-0.01, 0, k), 0, lerp(-0.21, -gap, k)).addScaledVector(td(y0R), BL * k);
+      const aL = bL.clone().addScaledVector(td(lYaw), -BL * k), aR = bR.clone().addScaledVector(td(rYaw), -BL * k);
+      const stp = (x) => Math.max(0, Math.sin(Math.PI * clamp(x, 0, 1))) * 0.035;   /* feet gather / part in two small lifted steps (front foot first), never sliding */
+      const tk = this.piro.t, TT = this.piro.T; lf = deck(aL.x, aL.z, DECK_Y + ANK + stp(tk / 0.22) + stp((tk - (TT - 0.5)) / 0.22)); rf = deck(aR.x, aR.z, DECK_Y + ANK + stp((tk - 0.12) / 0.22) + stp((tk - (TT - 0.36)) / 0.22)); }
     if (this.ollie && this.m < 0.5) { // back foot to the tail during the crouch, front foot slides toward the nose after the pop
       const o = this.ollie.t; const tail = sstep(0.0, 0.3, o) * (1 - sstep(0.6, 0.9, o)), slide = sstep(0.36, 0.55, o) * (1 - sstep(0.75, 1.05, o));
       rf = deck(-0.01, -0.21 - tail * 0.13); lf = deck(0.015, 0.2 + slide * 0.17, DECK_Y + ANK + slide * 0.008); rYaw = -80 * D; lYaw = -65 * D;
     }
     if (this.push && !this.ollie && this.m < 0.5) {
       const p = this.push; const c0 = p.c0 ?? 0.3 * p.T, c1 = p.c1 ?? c0 + 0.3; const tt = p.t;
+      if (p.plantW) { const PW = p.plantW, fwdP = new V(0, 0, 1).applyQuaternion(this.board.quaternion).setY(0).normalize(); /* how low must the hips sit so the trailing leg can still reach the planted foot 0.2 m behind the hip joint? (support knee bends, waist stays long) */
+          const hj = bw(B.rightUpperLeg), Lg = this.legLen || 0.726, base = hj.y + this.pe * (this.pushExtra || 0), lat = PW.clone().sub(hj).setY(0).addScaledVector(fwdP, -PW.clone().sub(hj).setY(0).dot(fwdP)).length();
+          const R = Lg - 0.025, h = Math.hypot(lat, 0.22), need = clamp(base - PW.y - Math.sqrt(Math.max(0, R * R - h * h)), 0, 0.05); this.pushExtra = damp(this.pushExtra || 0, need, 9, dt); }
       if (tt < c0) { // lift off deck, swing down beside the front wheels (toe side = -x)
         // reach down to where the foot WILL touch the road at c0 (a world-fixed point ahead, at the board's speed), so the
         // foot arrives with zero ground speed — it used to ride along with the board and freeze instantly at contact (a jump)
         const u = sstep(0, c0, tt);
-        const a = deck(-0.01, -0.21), here = this.groundAt(-0.29, 0.1), fwdW = new V(0, 0, 1).applyQuaternion(this.board.quaternion).setY(0).normalize();
-        if (!p.plantW || tt < (p.lastT ?? 0)) p.plantW = here.clone().addScaledVector(fwdW, this.v * Math.max(0, c0 - tt));
+        const a = deck(-0.01, -0.21), here = this.groundAt(-(this.pushX ?? 0.22), this.MV.push.reachFwd), fwdW = new V(0, 0, 1).applyQuaternion(this.board.quaternion).setY(0).normalize();
+        if (!p.plantW || tt < (p.lastT ?? 0)) { /* push.json reachFwd: plant ahead of her right HIP JOINT (not the deck centre), beside the deck on the toe side */
+          const hj = bw(B.rightUpperLeg), inv = this.board.matrixWorld.clone().invert(), hl = hj.clone().applyMatrix4(inv);
+          const pt = this.groundAt(-(this.pushX ?? 0.16), hl.z + this.MV.push.reachFwd); p.plantW = pt.addScaledVector(fwdW, this.v * Math.max(0, c0 - tt)); }
         p.lastT = tt;
-        rf = a.clone().lerp(p.plantW, u); rf.y += Math.sin(u * Math.PI) * 0.05;
+        rf = a.clone().lerp(p.plantW, u); rf.y += Math.sin(u * Math.PI) * 0.04;
         this.footPlant.copy(p.plantW);
-        rYaw = lerp(-78 * D, -5 * D, u);
+        rYaw = lerp(-78 * D, -5 * D, u); this.pushPeel = 0;
       } else if (tt < c1 && !p.abort) { // planted: world-stationary
+        const fwdP = new V(0, 0, 1).applyQuaternion(this.board.quaternion).setY(0).normalize();
         rf = this.footPlant.clone(); rYaw = -5 * D; rPitch = -0.12 * sstep(c0, c1, tt);
+        { const hj0 = bw(B.rightUpperLeg), behind = hj0.clone().sub(rf).dot(fwdP); const pl = sstep(-0.02, 0.30, behind); rf.y += 0.06 * pl; rf.addScaledVector(fwdP, 0.016 * pl); this.pushPeel = pl; }   /* toe pivot: the heel peels up as the leg trails, ankle rises/moves over the ball; the ball stays put */   /* the heel peels up as the leg trails: the ball stays planted, the ankle rises */
+        /* the leg can only reach so far behind: end the contact (toe-off) before the planted foot would have to slide */
+        if (p.legEnd === undefined && tt > c0 + 0.06) { const hj = bw(B.rightUpperLeg), Lg = (this.legLen || (this.legLen = bw(B.rightUpperLeg).distanceTo(bw(B.rightLowerLeg)) + bw(B.rightLowerLeg).distanceTo(bw(B.rightFoot)))); if (hj.distanceTo(rf) + this.v * dt > Lg - 0.006) p.legEnd = tt; }
       } else { // recover: lift heel, come back to tail
-        if (!p.rec) { p.rec = this.footPlant.clone(); p.recT = tt; }
+        if (!p.rec) { p.rec = (this._rfLast || this.footPlant).clone(); p.recT = tt; }
         const u0 = clamp((tt - p.recT) / Math.max(0.05, p.T * 0.98 - p.recT), 0, 1), u = 0.5 - 0.5 * Math.cos(Math.PI * u0);   // sine ease: no velocity spike
         const back = deck(-0.01, -0.21);
-        rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u0 * Math.PI) * 0.055; rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
+        rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u0 * Math.PI) * this.MV.push.recoveryLift;   /* push.json recoveryLift: 10 cm (Cheney's style; ref 30 cm) */ rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
       }
     }
     { // load the deck where the feet actually are: front/back positions and weight share (pumping shifts weight fore/aft,
@@ -1089,6 +1227,15 @@ export class Rider {
       // heel strike / toe-off: lifting the heel raises the ankle (pivot on the toes), toes-up keeps the heel on the ground
       const ank = (pt) => (pt < 0 ? -pt * 0.12 : pt * 0.03); lf.y += ank(gL) * M; rf.y += ank(gR) * M;
     }
+    const swR = this.rest ? this.rest.sw || 0 : 0; this.sitPole = null;
+    if (swR > 0.001) { /* REST: cross-legged — each ankle tucked under the opposite knee, in front of the hips, shins near the ground; knees fall out */
+      const SI = this.SIT, cx = sstep(0.35, 1.0, swR), gy = (p) => (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y);
+      const sq = (x, z) => this.walkF.localToWorld(new V(x, 0, z));   /* walkF: +x = her left, +z = facing */
+      const zA = -SI.back + (SI.ankZ ?? 0.31), Lx = lerp(0.10, -(SI.ankX ?? 0.11), cx), Rx = lerp(-0.10, SI.ankX ?? 0.11, cx);
+      const lS = sq(Lx, lerp(0.02, zA + 0.02, cx)), rS = sq(Rx, lerp(0.02, zA - 0.03, cx));
+      lS.y = gy(lS) + (SI.ankY ?? 0.075) + Math.sin(Math.PI * cx) * 0.06; rS.y = gy(rS) + (SI.ankY ?? 0.075) + 0.03 + Math.sin(Math.PI * cx) * 0.06;
+      const e0 = sstep(0, 0.35, swR); lf = lf.clone().lerp(lS, e0 > 0.999 ? 1 : Math.max(cx, e0 * 0)); rf = rf.clone().lerp(rS, Math.max(cx, 0));
+      lYaw = lerp(lYaw, -90 * D - 55 * D * this.flip, cx); rYaw = lerp(rYaw, -90 * D + 55 * D * this.flip, cx); this.sitPole = cx; }
     if (this.drag > 0) { const dp = this.groundAt(-0.02, -0.5); rf = rf.lerp(dp, this.drag * 0.8); rPitch = -0.5 * this.drag; }
     if (this.footLift) { lf.y += this.footLift; rf.y += this.footLift; }
     this._lfLast = lf.clone(); this._rfLast = rf.clone();
@@ -1101,6 +1248,7 @@ export class Rider {
       const toeDir = new V(0, 0, this.flip).applyQuaternion(qbP.clone().multiply(new Q().setFromEuler(new THREE.Euler(0, yaw + this.yaw0, 0, 'YXZ')))).setY(0).normalize();
       const kdir = fwdModel.clone().setY(0).normalize().lerp(toeDir, 0.75).normalize();
       const pole = hip.clone().addScaledVector(kdir, 1.0).add(new V(0, -0.4 + (this.oTuck || 0) * 0.5, 0));
+      if (this.sitPole) { const outW = new V(side === 'left' ? 1 : -1, this.SIT.poleUp ?? 0.1, 0.45).applyQuaternion(this.walkF.quaternion); pole.lerp(hip.clone().addScaledVector(outW, 1.0), this.sitPole); }
       twoBoneIK(up, lo, ft, target, pole);
       // foot flat on deck, toes angled
       const qb = this.deck.getWorldQuaternion(new Q()).slerp(this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 1, 0), 90 * D)), this.m);
@@ -1129,9 +1277,10 @@ export class Rider {
         if (this.seq?.pick === 'kick' && isBack) { state = 'hook'; A = 75; }                                        // kicking/catching the board
       } else {
         if (o && isBack && o.t > 0.28 && o.t < 0.42) { state = 'toe'; toeUp = 0.45; }                               // ollie pop: press the tail with the ball of the foot
-        const p = this.push; if (p && isBack && !p.abort) { const c1 = p.c1 ?? (p.c0 ?? 0.3 * p.T) + 0.3; if (p.t > c1 - 0.15 && p.t < c1 + 0.15) { state = 'toe'; toeUp = 0.5 * sstep(c1 - 0.15, c1, p.t) * (1 - sstep(c1 + 0.03, c1 + 0.15, p.t)); } }   // push toe-off: heel rises, then rolls off the toes
+        if (psL && psL.on > 0.05) { state = 'toe'; toeUp = 0.32 * sstep(0, 0.25, psL.u + (psL.spinning ? 0.25 : 0)) * psL.on * (psL.u >= 1 ? 1 - sstep(0, 1, (this.piro.t - this.MV.pirouette.windupT - this.MV.pirouette.spinT) / 0.4) : 1); }
+        const p = this.push; if (p && isBack && !p.abort) { const c1 = p.c1 ?? (p.c0 ?? 0.3 * p.T) + 0.3; if (p.t > (p.c0 ?? 0.4) && p.t < c1 + 0.15) { state = 'toe'; toeUp = 0.5 * (p.t < c1 ? (this.pushPeel || 0) : 1 - sstep(c1 + 0.03, c1 + 0.15, p.t)); } }   // push toe-off: heel rises, then rolls off the toes
       }
-      const sickle = state === 'hang' ? air * 0.08 * (side === 'left' ? 1 : -1) : 0;   // a hanging foot inverts a touch; a pointed foot never sickles
+      const sickle = (state === 'hang' ? air * 0.08 * (side === 'left' ? 1 : -1) : 0) + (this.sitPole ? this.sitPole * (this.SIT.footRoll ?? 0.9) * (side === 'left' ? 1 : -1) : 0);   /* cross-legged: feet lie on their outer edges */   // a hanging foot inverts a touch; a pointed foot never sickles
       const qf = qb.clone().multiply(new Q().setFromEuler(new THREE.Euler(pitch * this.flip, yaw + this.yaw0, sickle, 'YXZ')));
       setWorldQuat(ft, qf);
       if (state === 'toe' && toeUp > 0) { /* heel up pivots on the ball of the foot: the ankle rises */ }

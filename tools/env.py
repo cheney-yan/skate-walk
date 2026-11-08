@@ -141,6 +141,75 @@ def bbox(P): xs = [p[0] for p in P]; ys = [p[1] for p in P]; return (min(xs), ma
 BEACH = [(c['line'], bbox(c['line'])) for c in R['coast'] if c['kind'] == 'beach']
 CLIFF = [c['line'] for c in R['coast'] if c['kind'] == 'cliff']
 BLD = [(b['poly'], bbox(b['poly'])) for b in R['buildings'] if len(b['poly']) >= 4]
+try:   # every footprint (tools/buildings.py: OSM + Microsoft ML footprints) instead of the 218 route.json polys
+    if os.environ.get('ENV_OLD_BLD'): raise FileNotFoundError
+    _D = json.load(open(f'{ROOT}/data/buildings.json')); BLD = []; _o = 0
+    for _n in _D['n']:
+        _x = _y = 0; _P = []
+        for _i in range(_n): _x += _D['xy'][(_o + _i) * 2]; _y += _D['xy'][(_o + _i) * 2 + 1]; _P.append((_x / 10, _y / 10))
+        _o += _n; _P.append(_P[0]); BLD.append((_P, bbox(_P)))
+    print('buildings:', len(BLD), 'footprints from data/buildings.json')
+except FileNotFoundError: pass
+BLDH = {}
+for _b in BLD:
+    a, b_, c, d = _b[1]     # hashed with a 4 m margin -> exact for near_building(m <= 4)
+    for _i in range(math.floor((a - 4) / 16), math.floor((b_ + 4) / 16) + 1):
+        for _j in range(math.floor((c - 4) / 16), math.floor((d + 4) / 16) + 1): BLDH.setdefault((_i, _j), []).append(_b)
+# OSM ground priors from the full Overpass dump (tools/cache/osm/raw.json + rel.json; optional): beaches incl. the
+# Bronte Beach multipolygon, bare_rock / rocks, scrub, wood
+OSMP = {'beach': [], 'rock': [], 'scrub': [], 'wood': []}
+def _join(ways):
+    """chain multipolygon outer ways into closed rings"""
+    ways = [list(w) for w in ways]; rings = []
+    while ways:
+        r = ways.pop(0)
+        while r[0] != r[-1]:
+            for k, w in enumerate(ways):
+                if w[0] == r[-1]: r += w[1:]; ways.pop(k); break
+                if w[-1] == r[-1]: r += w[::-1][1:]; ways.pop(k); break
+            else: break
+        rings.append(r)
+    return rings
+try:
+    _lat0, _lon0 = R['start']; _kx = 111320 * math.cos(math.radians(_lat0)); _ky = 110540
+    _xy = lambda g: ((g['lon'] - _lon0) * _kx, (g['lat'] - _lat0) * _ky)
+    _E = json.load(open(f'{ROOT}/tools/cache/osm/raw.json'))['elements']
+    try: _E += json.load(open(f'{ROOT}/tools/cache/osm/rel.json'))['elements']
+    except FileNotFoundError: pass
+    for e in _E:
+        t = e.get('tags', {}); nat = t.get('natural')
+        kind = 'beach' if nat == 'beach' else 'rock' if nat in ('bare_rock', 'rocks') else 'scrub' if nat in ('scrub', 'heath') else 'wood' if nat == 'wood' else None
+        if not kind: continue
+        if e['type'] == 'way' and e.get('geometry'): rings = [[_xy(g) for g in e['geometry']]]
+        elif e['type'] == 'relation': rings = _join([[_xy(g) for g in m['geometry']] for m in e.get('members', []) if m.get('role') == 'outer' and m.get('geometry')])
+        else: continue
+        for P in rings:
+            if len(P) > 3: OSMP[kind].append((P, bbox(P)))
+    print('OSM priors:', {k: len(v) for k, v in OSMP.items()})
+except FileNotFoundError: print('OSM priors: tools/cache/osm/raw.json missing -> route.json beaches only')
+if OSMP['beach'] and not os.environ.get('ENV_NO_LC'): BEACH = OSMP['beach']
+def poly_dist(L, x, y, cap):
+    """distance to the nearest polygon of L (0 inside), capped"""
+    best = cap
+    for P, (a, b_, c, d) in L:
+        if a - cap > x or b_ + cap < x or c - cap > y or d + cap < y: continue
+        if poly_contains(P, x, y): return 0.0
+        for k in range(len(P) - 1):
+            (x1, y1), (x2, y2) = P[k], P[k + 1]; ex, ey = x2 - x1, y2 - y1; l2 = ex * ex + ey * ey or 1e-9
+            u = clamp(((x - x1) * ex + (y - y1) * ey) / l2, 0, 1); best = min(best, math.hypot(x1 + ex * u - x, y1 + ey * u - y))
+    return best
+# real tree crowns + low-scrub cover (tools/canopy.py -> data/canopy.json: Meta/WRI 1 m canopy height map, roofs masked)
+CAN = None
+try:
+    if not os.environ.get('ENV_NO_CANOPY'):
+        CAN = json.load(open(f'{ROOT}/data/canopy.json'))
+        _lw = CAN['low']; CAN['lowA'] = zlib.decompress(base64.b64decode(_lw['b64'])); CAN['tallA'] = zlib.decompress(base64.b64decode(CAN['tall']['b64']))
+        print('canopy: %d crowns, low-scrub grid %dx%d' % (len(CAN['crowns']) // 5, _lw['nx'], _lw['ny']))
+except FileNotFoundError: print('canopy: data/canopy.json missing -> procedural groves')
+def can_low(x, y, which='lowA'):
+    L = CAN['low']; i, j = int((x - L['x0']) / L['step']), int((y - L['y0']) / L['step'])
+    if not (0 <= i < L['nx'] and 0 <= j < L['ny']): return 0.0
+    return CAN[which][j * L['nx'] + i] / 255
 PARK = []
 try:   # OSM parks (lawns): Bondi Park, Marks Park, Tamarama/Bronte Park ...
     lat0, lon0 = R['start']; kx = 111320 * math.cos(math.radians(lat0)); ky = 110540
@@ -169,7 +238,7 @@ def inside_any(L, x, y, m=0.0):
         if a - m <= x <= b + m and c - m <= y <= d + m and poly_contains(P, x, y): return True
     return False
 def near_building(x, y, m):
-    for P, (a, b, c, d) in BLD:
+    for P, (a, b, c, d) in BLDH.get((math.floor(x / 16), math.floor(y / 16)), ()) if m <= 4 else BLD:
         if a - m <= x <= b + m and c - m <= y <= d + m:
             if poly_contains(P, x, y): return True
             for k in range(len(P) - 1):   # distance to edges
@@ -199,7 +268,11 @@ for j in range(NY):
     for i in range(NX):
         k = idx(i, j); x, y = X0 + i * ST, Y0 + j * ST
         if SEA[k]:
-            SAND[k] = 1.0 if H[k] > -6 else 0.6; continue      # under water: sand shelf (only seen through the shallows)
+            SAND[k] = 1.0 if H[k] > -6 else 0.6      # under water: sand shelf (only seen through the shallows)
+            if OSMP['beach'] and LC:   # ... except off the rocky headlands: there the land-edge triangles blend into these
+                bd = poly_dist(OSMP['beach'], x, y, 40.0)               # vertices, and a sand value painted a pale strip
+                ROCK[k] = sstep(10, 30, bd); SAND[k] *= 1 - ROCK[k]
+            continue
         h, sl, ds = H[k], SL[k], DS[k]
         nz = (fbm(x / 55, y / 55, 1) - 0.5) * 2             # -1..1 breaks up iso-contours
         dse = ds + 22 * nz
@@ -228,11 +301,27 @@ for j in range(NY):
             # bare ground (60) / 'water' on our land cells (wave-washed rock shelves, the pools) next to the sea:
             # low + flat + beach-ish -> sand, otherwise sandstone
             open_ = clamp(ba + wa * sstep(60, 15, ds), 0, 1)
-            sandy = max(1.0 if beach else 0.0, sstep(7.5, 3.5, h + 1.5 * nz) * sstep(0.38, 0.18, sl) * sstep(60, 20, dse))
-            s2_ = open_ * sandy
-            if beach: s2_ = max(s2_, sstep(9, 5, h))
-            r2 = open_ * (1 - sandy)
-            r2 = max(r2, sstep(14, 4, cd + 4 * nz) * sstep(2, 6, h) * (1 - 0.6 * gr), 0.85 * sstep(0.85, 1.4, sl))   # OSM cliff edges
+            if OSMP['beach']:
+                # sand vs rock (Cheney: match the aerial): sand only on/at the OSM beach polygons (Bondi, Tamarama, Bronte)
+                # or where Sentinel-2 is bright pale sand right next to one; every other open coastal surface is
+                # sandstone (rock platforms, Mackenzies Point, Marks Park edge, Icebergs) - OSM bare_rock/rocks = rock
+                bd = poly_dist(OSMP['beach'], x, y, 30.0); rd = poly_dist(OSMP['rock'], x, y, 12.0)
+                r_, g_, b_ = S2[k]; bright = sstep(560, 680, r_ + g_ + b_) * sstep(-25, 5, r_ - b_)     # pale, not sea-blue
+                sandy = max(sstep(6, 0, bd), bright * sstep(25, 8, bd)) * sstep(4, 12, rd)
+                s2_ = open_ * sandy
+                if bd <= 0: s2_ = max(s2_, sstep(10, 6, h) * sstep(4, 10, rd))
+                r2 = open_ * (1 - sandy)
+                r2 = max(r2, sstep(12, 0, rd) * (1 - sstep(4, 0, bd)))                                   # OSM bare_rock / rocks
+                r2 = max(r2, sstep(14, 4, cd + 4 * nz) * sstep(2, 6, h) * (1 - 0.6 * gr), 0.85 * sstep(0.85, 1.4, sl))   # OSM cliff edges
+                # land right on the waterline outside the beaches is wave-washed platform, not grass
+                r2 = max(r2, sstep(18, 6, ds) * (1 - sandy) * (1 - 0.6 * sstep(0.3, 0.7, can_low(x, y) + can_low(x, y, 'tallA') if CAN else 0)))
+                r2 = max(r2, sstep(0.45, 0.9, sl) * sstep(60, 20, ds) * (1 - sandy))      # steep sea-facing slopes = cliff face
+            else:
+                sandy = max(1.0 if beach else 0.0, sstep(7.5, 3.5, h + 1.5 * nz) * sstep(0.38, 0.18, sl) * sstep(60, 20, dse))
+                s2_ = open_ * sandy
+                if beach: s2_ = max(s2_, sstep(9, 5, h))
+                r2 = open_ * (1 - sandy)
+                r2 = max(r2, sstep(14, 4, cd + 4 * nz) * sstep(2, 6, h) * (1 - 0.6 * gr), 0.85 * sstep(0.85, 1.4, sl))   # OSM cliff edges
             s, r = clamp(s2_, 0, 1), clamp(r2 * (1 - s2_), 0, 1)
             # dirt: worn patches inside grass, garden beds / paving joints in built-up blocks, steep banks
             d = (sstep(0.7, 0.82, dn) * 0.7 * gr + 0.35 * bu * sstep(0.45, 0.7, dn) + sstep(0.45, 0.85, sl) * 0.35) * (1 - s) * (1 - r)
@@ -240,6 +329,8 @@ for j in range(NY):
             # garden/verge (a bit drier), small noise so the 8 m grid never shows
             gs = s2_green(k); gw = clamp(veg * 1.4, 0, 1)
             g = gw * gs + (1 - gw) * (0.35 + 0.2 * (fbm(x / 70, y / 70, 13) - 0.5) * 2) + 0.08 * (fbm(x / 18, y / 18, 17) - 0.5) + 0.12 * tr
+            if CAN:   # headland / sea-front grass is sun- and salt-burnt straw in reality (Marks Park, Bronte, Bondi): pull it dry
+                g = g * (1 - 0.5 * sstep(160, 40, ds)) - 0.08 * sstep(80, 20, ds)
         SAND[k], ROCK[k], DIRT[k], GREEN[k] = clamp(s, 0, 1), clamp(r, 0, 1), clamp(d, 0, 1), clamp(g, 0, 1)
 q4 = lambda v: int(round(clamp(v, 0, 1) * 15))
 gb = bytearray()
@@ -425,27 +516,6 @@ def add(sp, x, y, scale, lean=0.0, tint=None):
                       round(tint if tint is not None else rng.random(), 2), round(nx_, 3), round(nz_, 3)])
     occ.setdefault((math.floor(x / 10), math.floor(y / 10)), []).append((x, y, sp))
 
-# 1) Norfolk Island pines: the rows behind the beaches (promenade / park edge facing the sea), plus park scatter
-for q in TP[::8]:
-    x, y = q['x'], -q['z']
-    if field(DS, x, y) > 140: continue
-    left = (math.cos(q['yaw']), math.sin(q['yaw']))      # three left (cos, -sin) -> route coords (cos, +sin)
-    for sd in (-1, 1):
-        off = sd * (7.5 + 1.5 * rng.random()); px, py = x + left[0] * off, y + left[1] * off
-        # row only on the landward side of a sandy beach / in a park near the sea
-        near_sand = max(field(SAND, px + dx, py + dy) for dx, dy in ((14, 0), (-14, 0), (0, 14), (0, -14), (25, 0), (0, 25), (-25, 0), (0, -25)))
-        inpark = inside_any(PARK, px, py)
-        if not (near_sand > 0.5 or (inpark and field(DS, px, py) < 120)): continue
-        if field(DS, px, py) < field(DS, x, y) - 2: continue    # landward side only
-        if rng.random() < 0.3 or not ok_site(px, py, 'pine', 5.5) or not free(px, py, 'pine'): continue
-        add('pine', px, py, 15 + rng.random() * 9)
-for P, (a, b, c, d) in PARK:
-    for _ in range(int((b - a) * (d - c) / 900) + 1):
-        x, y = a + rng.random() * (b - a), c + rng.random() * (d - c)
-        if not poly_contains(P, x, y) or field(DS, x, y) > 220 or rng.random() < 0.5: continue
-        if ok_site(x, y, 'pine', 6) and free(x, y, 'pine'): add('pine', x, y, 13 + rng.random() * 10)
-
-# 2) gums, banksias, shrubs: jittered candidates near the path, clumped by noise into groves with open grass between
 xs = [q['x'] for q in TP]; ys = [-q['z'] for q in TP]
 def candidates(cell, maxd):
     out = []
@@ -457,38 +527,96 @@ def candidates(cell, maxd):
     rng.shuffle(out); return out
 def pathdist(x, y, cap):
     d, _ = path_near(x, -y, cap); return d
-for x, y in candidates(7.0, 230):
-    d = pathdist(x, y, 230)
-    if d > 230 or d < 4.5: continue
-    ds, h = field(DS, x, y), mesh_h(x, y)
-    grove = sstep(0.42, 0.68, fbm(x / 48, y / 48, 21))
-    dens = (0.55 if d < 45 else 0.32 if d < 120 else 0.2) * grove
-    exposed = sstep(140, 50, ds)                       # salt wind near the sea: gums give way to banksia/heath
-    park = inside_any(PARK, x, y)
-    if park: dens *= 0.35                              # parks are mostly open lawn
-    if LC:   # WorldCover tree cover decides where the groves are; open grass / bare / built-up keep only a few trees
-        tc = field(LC['tree'], x, y)
-        dens = (0.85 * sstep(0.15, 0.6, tc) + 0.05 * field(LC['grass'], x, y) * grove + 0.06 * field(LC['built'], x, y) * grove) * (1.0 if d < 120 else 0.7)
-    if rng.random() > dens: continue
-    sp = 'banksia' if rng.random() < 0.25 + 0.6 * exposed else 'gum'
-    if not ok_site(x, y, sp, 4.5 if sp == 'gum' else 5.5) or not free(x, y, sp): continue
-    if sp == 'gum': add('gum', x, y, (8 + rng.random() * 8) * (1 - 0.35 * exposed))
-    else: add('banksia', x, y, 3.2 + rng.random() * 2.8, lean=0.08 + 0.12 * exposed)
-for x, y in candidates(2.6, 70):
-    d = pathdist(x, y, 70)
-    if d > 70 or d < 2.4: continue
-    ds = field(DS, x, y); rk = field(ROCK, x, y)
-    heath = sstep(0.4, 0.7, fbm(x / 22 + 9, y / 22, 31))
-    dens = (0.12 + 0.55 * sstep(160, 40, ds) * heath + 0.35 * sstep(0.1, 0.35, rk) * (1 - sstep(0.45, 0.6, rk))) * (1.0 if d < 25 else 0.55)
-    if inside_any(PARK, x, y): dens *= 0.25
-    if LC:   # heath where WorldCover has shrub / tree edges and on the rock fringe; mown grass + built-up stay open
-        tc, sb, gr, bu = (field(LC[f], x, y) for f in ('tree', 'shrub', 'grass', 'built'))
-        edge = tc * (1 - tc) * 4
-        dens = (0.7 * sb + 0.35 * edge * heath + 0.3 * sstep(0.1, 0.35, rk) * (1 - sstep(0.45, 0.6, rk)) + 0.06 * gr * heath + 0.05 * bu * heath) * (1.0 if d < 25 else 0.55)
-        if inside_any(PARK, x, y): dens *= 0.4
-    if rng.random() > dens: continue
-    sc = 0.6 + rng.random() * 1.0    # shrub crown radius ~0.85*scale: keep it off the road + 0.6 m and behind the kerb
-    if ok_site(x, y, 'shrub', 2.6 + 0.85 * sc) and free(x, y, 'shrub'): add('shrub', x, y, sc, lean=0.1)
+if CAN:
+    # ---- real crowns (tools/canopy.py): every tree stands where the canopy height model / OSM has one ----
+    # species by height + setting: tall (>= 13 m) crowns in the beach parks / promenade = Norfolk Island pines (and OSM
+    # needleleaved nodes); 6.5 m+ = coastal gums / figs (gum model); 3-6.5 m = banksia / tea-tree; exposed cliff tops
+    # keep only low growth (heath shrubs from the CHM's 0.7-3.5 m cover below). Crown size = the measured height.
+    Cw = CAN['crowns']; nc = {'kept': 0, 'pushed': 0, 'dropped_road': 0, 'dropped_site': 0, 'far': 0}
+    for k in range(0, len(Cw), 5):
+        x, y, h, cr, fl = Cw[k] / 10, Cw[k + 1] / 10, Cw[k + 2] / 10, Cw[k + 3] / 10, Cw[k + 4]
+        d, q = path_near(x, -y, 280)
+        if d > 270: nc['far'] += 1; continue
+        ds = field(DS, x, y); park = inside_any(PARK, x, y)
+        pine = bool(fl & 2) or (h >= 10 and ds < 260 and (park or poly_dist(OSMP['beach'], x, y, 140) < 140))   # the 1 m CHM reads Norfolk pines at only 10-15 m
+        sp = 'pine' if pine else 'gum' if h >= 6.5 else 'banksia'
+        # path clearance (>= road edge + 0.6 m): trunk + low crown parts; tall crowns may overhang above head height
+        clear = {'pine': 4.2, 'gum': 3.6, 'banksia': 1.6 + 0.6 + 0.45 * min(6.0, h) * 0.55}[sp]
+        if d < clear:
+            if d < clear - 3.0 or q is None: nc['dropped_road'] += 1; continue
+            ux, uz = (x - q['x']) / (d or 1), (-y - q['z']) / (d or 1); x, y = q['x'] + ux * (clear + 0.05), -(q['z'] + uz * (clear + 0.05)); nc['pushed'] += 1
+        if not (X0 + 2 < x < X0 + (NX - 1) * ST - 2 and Y0 + 2 < y < Y0 + (NY - 1) * ST - 2) or field(SEAF, x, y) > 0.01 or mesh_h(x, y) < 0.6 \
+           or field(SAND, x, y) > 0.5 or field(SL, x, y) > 1.1 or near_building(x, y, 0.8) or path_near(x, -y, clear + 8)[0] < clear:
+            nc['dropped_site'] += 1; continue
+        if sp == 'pine': add('pine', x, y, clamp(h * 1.55, 15, 26))
+        elif sp == 'gum': add('gum', x, y, clamp(h, 6.5, 17) * (1 - 0.15 * sstep(120, 30, ds)), lean=0.04 * sstep(120, 30, ds))
+        else: add('banksia', x, y, clamp(h * 0.95, 3.0, 6.2), lean=0.06 + 0.1 * sstep(140, 40, ds))
+        nc['kept'] += 1
+    print('real crowns ->', nc)
+    # ---- low scrub / coastal heath where the CHM has 0.7-3.5 m vegetation (cliff edges, gullies, hedges), plus OSM scrub ----
+    for x, y in candidates(3.3, 110):     # one heath clump per ~3.3 m cell (bigger clumps, fewer instances: mobile)
+        d = pathdist(x, y, 110)
+        if d > 110 or d < 2.4: continue
+        lo = max(can_low(x, y), can_low(x + 1.2, y), can_low(x, y + 1.2), can_low(x - 1.2, y - 1.2))
+        osc = 1.0 if inside_any(OSMP['scrub'], x, y) or inside_any(OSMP['wood'], x, y) else 0.0
+        dens = (0.92 * sstep(0.12, 0.55, lo) + 0.35 * osc * sstep(0.05, 0.2, lo)) * (1.0 if d < 40 else 0.6)
+        if rng.random() > dens: continue
+        sc = 0.9 + rng.random() * 1.0 * (0.6 + 0.6 * lo)
+        if ok_site(x, y, 'shrub', 2.2 + 0.85 * sc) and free(x, y, 'shrub'): add('shrub', x, y, sc, lean=0.1)
+else:
+    # 1) Norfolk Island pines: the rows behind the beaches (promenade / park edge facing the sea), plus park scatter
+    for q in TP[::8]:
+        x, y = q['x'], -q['z']
+        if field(DS, x, y) > 140: continue
+        left = (math.cos(q['yaw']), math.sin(q['yaw']))      # three left (cos, -sin) -> route coords (cos, +sin)
+        for sd in (-1, 1):
+            off = sd * (7.5 + 1.5 * rng.random()); px, py = x + left[0] * off, y + left[1] * off
+            # row only on the landward side of a sandy beach / in a park near the sea
+            near_sand = max(field(SAND, px + dx, py + dy) for dx, dy in ((14, 0), (-14, 0), (0, 14), (0, -14), (25, 0), (0, 25), (-25, 0), (0, -25)))
+            inpark = inside_any(PARK, px, py)
+            if not (near_sand > 0.5 or (inpark and field(DS, px, py) < 120)): continue
+            if field(DS, px, py) < field(DS, x, y) - 2: continue    # landward side only
+            if rng.random() < 0.3 or not ok_site(px, py, 'pine', 5.5) or not free(px, py, 'pine'): continue
+            add('pine', px, py, 15 + rng.random() * 9)
+    for P, (a, b, c, d) in PARK:
+        for _ in range(int((b - a) * (d - c) / 900) + 1):
+            x, y = a + rng.random() * (b - a), c + rng.random() * (d - c)
+            if not poly_contains(P, x, y) or field(DS, x, y) > 220 or rng.random() < 0.5: continue
+            if ok_site(x, y, 'pine', 6) and free(x, y, 'pine'): add('pine', x, y, 13 + rng.random() * 10)
+
+    # 2) gums, banksias, shrubs: jittered candidates near the path, clumped by noise into groves with open grass between
+    for x, y in candidates(7.0, 230):
+        d = pathdist(x, y, 230)
+        if d > 230 or d < 4.5: continue
+        ds, h = field(DS, x, y), mesh_h(x, y)
+        grove = sstep(0.42, 0.68, fbm(x / 48, y / 48, 21))
+        dens = (0.55 if d < 45 else 0.32 if d < 120 else 0.2) * grove
+        exposed = sstep(140, 50, ds)                       # salt wind near the sea: gums give way to banksia/heath
+        park = inside_any(PARK, x, y)
+        if park: dens *= 0.35                              # parks are mostly open lawn
+        if LC:   # WorldCover tree cover decides where the groves are; open grass / bare / built-up keep only a few trees
+            tc = field(LC['tree'], x, y)
+            dens = (0.85 * sstep(0.15, 0.6, tc) + 0.05 * field(LC['grass'], x, y) * grove + 0.06 * field(LC['built'], x, y) * grove) * (1.0 if d < 120 else 0.7)
+        if rng.random() > dens: continue
+        sp = 'banksia' if rng.random() < 0.25 + 0.6 * exposed else 'gum'
+        if not ok_site(x, y, sp, 4.5 if sp == 'gum' else 5.5) or not free(x, y, sp): continue
+        if sp == 'gum': add('gum', x, y, (8 + rng.random() * 8) * (1 - 0.35 * exposed))
+        else: add('banksia', x, y, 3.2 + rng.random() * 2.8, lean=0.08 + 0.12 * exposed)
+    for x, y in candidates(2.6, 70):
+        d = pathdist(x, y, 70)
+        if d > 70 or d < 2.4: continue
+        ds = field(DS, x, y); rk = field(ROCK, x, y)
+        heath = sstep(0.4, 0.7, fbm(x / 22 + 9, y / 22, 31))
+        dens = (0.12 + 0.55 * sstep(160, 40, ds) * heath + 0.35 * sstep(0.1, 0.35, rk) * (1 - sstep(0.45, 0.6, rk))) * (1.0 if d < 25 else 0.55)
+        if inside_any(PARK, x, y): dens *= 0.25
+        if LC:   # heath where WorldCover has shrub / tree edges and on the rock fringe; mown grass + built-up stay open
+            tc, sb, gr, bu = (field(LC[f], x, y) for f in ('tree', 'shrub', 'grass', 'built'))
+            edge = tc * (1 - tc) * 4
+            dens = (0.7 * sb + 0.35 * edge * heath + 0.3 * sstep(0.1, 0.35, rk) * (1 - sstep(0.45, 0.6, rk)) + 0.06 * gr * heath + 0.05 * bu * heath) * (1.0 if d < 25 else 0.55)
+            if inside_any(PARK, x, y): dens *= 0.4
+        if rng.random() > dens: continue
+        sc = 0.6 + rng.random() * 1.0    # shrub crown radius ~0.85*scale: keep it off the road + 0.6 m and behind the kerb
+        if ok_site(x, y, 'shrub', 2.6 + 0.85 * sc) and free(x, y, 'shrub'): add('shrub', x, y, sc, lean=0.1)
 print('trees', {k: len(v) for k, v in TREES.items()})
 
 # ---------------- stone kerb along cut banks ----------------

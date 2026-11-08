@@ -213,8 +213,8 @@ export function groundMaterial() {
       float yy = vWg.y * 1.35 + (n1.g - .5) * 3. + (n2.g - .5) * .9;
       float bed = fract(yy), lid = floor(yy);
       float bandTone = fract(sin(lid * 17.13) * 4375.85);
-      vec3 rock = mix(${glc('#b59d78')}, ${glc('#9a938a')}, bandTone * .8 + (n2.r - .5) * .4);
-      rock = mix(rock, ${glc('#c8a36e')}, smoothstep(.6, .85, n2.b) * .5);                          // iron-stained honey faces
+      vec3 rock = mix(${glc('#9e8d72')}, ${glc('#857f77')}, bandTone * .8 + (n2.r - .5) * .4);
+      rock = mix(rock, ${glc('#b4945f')}, smoothstep(.6, .85, n2.b) * .4);                          // iron-stained honey faces
       rock *= 0.8 + 0.22 * smoothstep(0., .25, bed) - 0.18 * smoothstep(.82, 1., bed) * (0.5 + vCls.y * .5);
       rock = mix(rock, ${glc('#8e9088')}, smoothstep(.62, .8, n3.a) * .35);                          // lichen grey
       rock *= 0.92 + .14 * n4.g;
@@ -382,8 +382,8 @@ function banksiaGeo() {     // coast banksia, 5 m: gnarly leaning dark trunk, ir
 function shrubGeo() {       // coastal heath shrub (westringia / coastal rosemary), ~1 m: loose multi-lobed mound, silvery grey-green, tiny pale flowers
   const parts = [], rnd = prng(71), g1 = C('#7f8f66'), g2 = C('#b2b99a'), dk = C('#56643f');
   const lobes = [[0, 0.36, 0, 0.5], [0.45, 0.26, 0.18, 0.36], [-0.36, 0.24, -0.26, 0.34], [0.1, 0.22, -0.48, 0.3], [-0.2, 0.55, 0.22, 0.3], [0.3, 0.5, -0.2, 0.26]];
-  lobes.forEach(([x, y, z, r], i) => parts.push(part(blob(r, 1.15, 0.9, 1.1, x, y, z, 300 + i, 1), (c, px, py, pz) => { const t = (py - y) / r; c.copy(dk).lerp(g1, 0.45 + t * 0.5).lerp(g2, Math.max(0, t) * 0.55 * (0.5 + 0.5 * Math.sin(px * 11 + pz * 7))); }, { x, y: y - 0.25, z, r })));
-  for (let k = 0; k < 14; k++) { const [x, y, z, r] = lobes[k % lobes.length], th = rnd() * 6.28, ph = 0.15 + rnd() * 1.1;
+  lobes.forEach(([x, y, z, r], i) => parts.push(part(blob(r, 1.15, 0.9, 1.1, x, y, z, 300 + i, 0), (c, px, py, pz) => { const t = (py - y) / r; c.copy(dk).lerp(g1, 0.45 + t * 0.5).lerp(g2, Math.max(0, t) * 0.55 * (0.5 + 0.5 * Math.sin(px * 11 + pz * 7))); }, { x, y: y - 0.25, z, r })));
+  for (let k = 0; k < 6; k++) { const [x, y, z, r] = lobes[k % lobes.length], th = rnd() * 6.28, ph = 0.15 + rnd() * 1.1;
     parts.push(part(new THREE.OctahedronGeometry(0.045, 0).translate(x + Math.cos(th) * Math.cos(ph) * r * 1.1, y + Math.sin(ph) * r * 0.9, z + Math.sin(th) * Math.cos(ph) * r * 1.05), (c) => c.set('#ece8f2'))); }
   return mergeGeometries(parts);
 }
