@@ -138,8 +138,7 @@ const sunFar = new THREE.DirectionalLight('#ffffff', 0); sunFar.castShadow = tru
 Object.assign(sunFar.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 1, far: 500 }); sunFar.shadow.bias = -0.0012; sunFar.shadow.normalBias = 0.25;
 scene.add(sunFar, sunFar.target);
 /* HEADLAMP (night): a spot from her head along the path; range tunable in the 光影 tab */
-const lamp = new THREE.SpotLight('#fff1dc', 0, 25, 0.5, 0.55, 1.4); lamp.castShadow = false; scene.add(lamp, lamp.target);
-const lampSpill = new THREE.PointLight('#ffe9cc', 0, 2.2, 1.6); scene.add(lampSpill);   /* light bouncing off the road back onto her */
+
 scene.add(sun, sun.target);
 // sky
 {
@@ -434,7 +433,7 @@ function routeSegs() { if (routeSegs.c) return routeSegs.c; const out = []; cons
   let a = 0, c = cls(track.at(0).grade);
   for (let s = 2; s <= track.total; s += 2) { const k = s >= track.total ? null : cls(track.at(s).grade); if (k !== c || s >= track.total) { if (s - a >= 6 || !out.length) { let mx = 0, dh = track.at(Math.min(s, track.total - 0.01)).p.y - track.at(a).p.y; for (let q = a; q < s; q += 1) { const g = track.at(q).grade; if (Math.abs(g) > Math.abs(mx)) mx = g; } out.push({ a, b: s, c, dh, mx }); } else { const p = out[out.length - 1]; p.b = s; } a = s; c = k; } }
   return (routeSegs.c = out); }
-const LTDEF = [['timeOverride', '时间（时）', 0, 24, 0.25], ['cloudOverride', '云量', 0, 1, 0.05], ['shadowK', '阴影强度', 0, 1, 0.02], ['toony', '明暗边界硬度', 0.3, 1, 0.02], ['sunMul', '阳光', 0, 2, 0.05], ['fillMul', '天光补光', 0, 2, 0.05], ['exposure', '曝光', 0.5, 1.8, 0.02], ['nightMul', '夜色', 0, 1, 0.05], ['lampRange', '头灯照多远（米）', 5, 60, 1], ['lampPow', '头灯亮度', 0, 3, 0.05], ['shadowFar', '远处阴影范围（米）', 30, 300, 5], ['farShadow', '远处阴影浓度', 0, 1, 0.05]];
+const LTDEF = [['timeOverride', '时间（时）', 0, 24, 0.25], ['cloudOverride', '云量', 0, 1, 0.05], ['shadowK', '阴影强度', 0, 1, 0.02], ['toony', '明暗边界硬度', 0.3, 1, 0.02], ['sunMul', '阳光', 0, 2, 0.05], ['fillMul', '天光补光', 0, 2, 0.05], ['exposure', '曝光', 0.5, 1.8, 0.02], ['nightMul', '夜色', 0, 1, 0.05], ['shadowFar', '远处阴影范围（米）', 30, 300, 5], ['farShadow', '远处阴影浓度', 0, 1, 0.05]];
 function lightPane(el) { if (el.dataset.lt === '1') { LTDEF.forEach(([k]) => { const o = el.querySelector(`[data-v="${k}"]`); if (o) o.textContent = LT[k] == null ? '实时' : (+LT[k]).toFixed(2); }); return; }
   el.dataset.lt = '1'; el.innerHTML = '<div class="sec">光影（可调，自动保存）</div>' + LTDEF.map(([k, n, a, b, st]) => `<div class="row"><span>${n}</span><span data-v="${k}"></span></div><input type="range" data-k="${k}" min="${a}" max="${b}" step="${st}" value="${LT[k] ?? (k === 'timeOverride' ? 12 : k === 'cloudOverride' ? NAT.cloud : 1)}" style="width:100%">` + (k.endsWith('Override') ? `<button data-r="${k}" style="font-size:10px">用实时</button>` : '')).join('') + '<button id="ltReset" style="margin-top:6px">全部恢复默认</button>';
   el.querySelectorAll('input[type=range]').forEach((i) => i.oninput = () => { LT[i.dataset.k] = +i.value; localStorage.sw_lt = JSON.stringify(LT); });
@@ -632,10 +631,7 @@ function sunFollow(base) {
       const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); const ctr = base.clone().addScaledVector(fwd, F * 0.6);   /* centre the far map ahead of the camera: that is what is visible */
       const step = (2 * F) / 2048; ctr.x = Math.round(ctr.x / step) * step; ctr.z = Math.round(ctr.z / step) * step;   /* snap to texels: no shimmering */
       sunFar.position.copy(ctr).addScaledVector(kdir, F * 2); sunFar.target.position.copy(ctr); }
-    { const hd = rider.b?.head; if (hd) { const hp = hd.getWorldPosition(new THREE.Vector3()), ahead = track.at(rider.s + Math.min(LT.lampRange * 0.5, 14)).p.clone(); ahead.y += 0.05;
-        lamp.position.copy(hp).add(new THREE.Vector3(0, 0.08, 0)); lamp.target.position.copy(ahead); lamp.distance = LT.lampRange; }
-      const lampOn = Math.max(0, night * 1.2 - 0.2 + (1 - day) * 0.3); lamp.intensity = LT.lampPow * 14 * Math.min(1, lampOn); lampSpill.intensity = LT.lampPow * 1.6 * Math.min(1, lampOn); lampSpill.position.copy(track.at(rider.s + 1.2).p).add(new THREE.Vector3(0, 0.45, 0));
-      seaU.uLamp.value.set(lamp.position.x, lamp.position.z, LT.lampRange, LT.lampPow * Math.min(1, lampOn)); }
+    seaU.uLamp.value.set(0, 0, 0, 0);   /* no head lamp (Cheney); a board-nose light is in docs/ideas.md */
     seaU.uNight.value = Math.max(night, (1 - day) * 0.5);
     /* sky fill: this is what lights the shade side. Lower fill = stronger light/shade split (Cheney: real sun casts real shade;
        not too dark). Overcast: fill rises and the sun fades -> soft. */
@@ -650,7 +646,7 @@ function sunFollow(base) {
     rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2 * rim;
     NAT.phase = night > 0.5 ? '夜' : day < 1 ? (sp.el > 0 ? '黄昏/清晨' : '蓝调') : '白天';
     return; }
-  sunFar.intensity = 0; lamp.intensity = 0; lampSpill.intensity = 0; seaU.uNight.value = 0; seaU.uLamp.value.set(0, 0, 0, 0);
+  sunFar.intensity = 0; seaU.uNight.value = 0; seaU.uLamp.value.set(0, 0, 0, 0);
   if (TOD === 'golden') {
     const ahead = track.at(rider.s + 30).dir; const sdir = RD ? (() => { const v = (rider.__vd || new THREE.Vector3(1, 0, 0)).clone(); v.y = 0; v.normalize(); return new THREE.Vector3(v.x * 0.9 + 0.35, 0.16, v.z * 0.9).normalize(); })() : new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
     sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
