@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { loadGirl, setupHair, Skirt, Hat, OUTFIT, addWristGuards, flutterUpdate } from './girl.js';
 import { Rider, EMAX } from './rider.js';
-import { envU, roadMaterial, roadEdges, roadDecals, groundAttr, groundMaterial, buildTrees } from './env.js';
+import { envU, roadMaterial, roadEdges, roadDecals, groundAttr, groundMaterial, buildTrees, corridorGround, buildKerb } from './env.js';
 
 const Q = new URLSearchParams(location.search);
 const REC = Q.has('rec');
@@ -249,22 +249,28 @@ const flags = [];
 // ---------------- real-world blocks (Apple-Maps style): terrain, OSM building footprints as clean extruded boxes ----------------
 if (RD) {
   const T = RD.terrain, tH = terrainFn({ ...T, h: T.hSea || T.h });
-  const PH = new Map();   // spatial hash of path points (8 m cells, with neighbours) for the ground cut
-  for (let i = 0; i < track.pts.length; i += 4) { const q = track.pts[i]; const ci = Math.floor(q.x / 8), cj = Math.floor(q.z / 8);
-    for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) { const kk = (ci + di) + ',' + (cj + dj); if (!PH.has(kk)) PH.set(kk, []); PH.get(kk).push(q); } }
+  // coarse 8 m terrain = raw heights; the cells near the road are cut out and drawn as a baked 1 m corridor lattice
+  // (env.py 'ground mesh height': ground never above the road, cut banks + stone kerb, embankment so the road sits on land)
+  const rawH = (i, j) => { const g = Math.max(-4, (T.hSea || T.h)[j * T.nx + i] / 10); return g < 1.3 ? g - 2.5 : g; };
   const geo = new THREE.PlaneGeometry((T.nx - 1) * T.step, (T.ny - 1) * T.step, T.nx - 1, T.ny - 1); geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position, col = new Float32Array(pos.count * 4);
   const cx = T.x0 + (T.nx - 1) * T.step / 2, cy = T.y0 + (T.ny - 1) * T.step / 2;
   for (let k = 0; k < pos.count; k++) {
-    const x = pos.getX(k) + cx, y = -pos.getZ(k) + cy; let h = tH(x, y); if (h < 1.3) h = -2.5 + h;
-    // the smoothed path runs slightly below crests of the raw terrain: cut the ground away under / beside the path so it never buries the board
-    const cell = PH.get(Math.floor(x / 8) + ',' + Math.floor(-y / 8));
-    if (cell) { let best = 1e9, py = 0; for (const q of cell) { const d = (q.x - x) ** 2 + (q.z + y) ** 2; if (d < best) { best = d; py = q.y; } } const d = Math.sqrt(best); if (d < 14) h = Math.min(h, py - 0.12 + Math.max(0, d - 2.2) * 0.45); }
-    pos.setXYZ(k, x, h, -y);
+    const x = pos.getX(k) + cx, y = -pos.getZ(k) + cy, i = k % T.nx, j = T.ny - 1 - Math.floor(k / T.nx);
+    pos.setXYZ(k, x, ENV?.corridor ? rawH(i, j) : (() => { let h = tH(x, y); return h < 1.3 ? h - 2.5 : h; })(), -y);
     col.set(groundAttr(ENV, T, x, y), k * 4);   // baked sand / rock / dirt / green weights
   }
   geo.setAttribute('aCls', new THREE.BufferAttribute(col, 4)); geo.computeVertexNormals();
-  const ground = new THREE.Mesh(geo, groundMaterial()); ground.receiveShadow = true; scene.add(ground);
+  const gMat = groundMaterial(), grounds = [];
+  if (ENV?.corridor) {
+    const cor = corridorGround(ENV, T, rawH, gMat), src = geo.index.array, keep = [];
+    for (let iy = 0; iy < T.ny - 1; iy++) for (let ix = 0; ix < T.nx - 1; ix++) { if (cor.skip.has((T.ny - 2 - iy) * (T.nx - 1) + ix)) continue;
+      const o = 6 * (iy * (T.nx - 1) + ix); for (let q = 0; q < 6; q++) keep.push(src[o + q]); }
+    geo.setIndex(keep); scene.add(cor.mesh); grounds.push(cor.mesh);
+    window.__kerb = buildKerb(scene, ENV);
+  }
+  const ground = new THREE.Mesh(geo, gMat); ground.receiveShadow = true; scene.add(ground); grounds.push(ground);
+  window.__grounds = grounds;
   const skirtG = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshStandardMaterial({ color: '#bfd3a0', roughness: 1 }));   // land beyond the data edge
   skirtG.rotation.x = -Math.PI / 2; skirtG.position.y = -0.5; scene.add(skirtG);
   // buildings: soft off-white blocks, slightly lighter roofs, the way Apple Maps draws a city before photo-3D loads
@@ -320,6 +326,8 @@ async function init() {
   hat = SD || OUTFIT === 'native' || OUTFIT === 'breeze' ? { step() {} } : new Hat(vrm, scene);
   addWristGuards(vrm);
   rider = new Rider(vrm, scene); rider.track = track;
+  try { rider.applyProfile(await (await fetch('./data/rider_profile.json')).json()); } catch (e) { console.warn('rider profile', e); }   // who she is & what she likes (tunable)
+  try { const td = await (await fetch('./data/moves/throwdown.json')).json(); for (const k in td.game) if (typeof td.game[k] === 'number') rider.TD[k] = td.game[k]; } catch (e) { console.warn('throwdown.json', e); }   /* throwdown mount params */
   // ground height under (x,z): project onto the nearest track SEGMENT and interpolate (snapping to the nearest sample
   // made the walking body hop ~3.5 cm at every sample on slopes)
   rider.groundFn = (x, z) => { const c = Math.round(rider.s / DS), P = track.pts; let best = 1e9, y = 0;
@@ -657,4 +665,5 @@ window.LAB = {
   prof() { const r = {}; let t0 = performance.now(); for (let i = 0; i < 10; i++) rider.update(1 / 30, (s) => track.at(s), ctx); r.rider = (performance.now() - t0) / 10; t0 = performance.now(); for (let i = 0; i < 10; i++) skirt.step(1 / 30, windNow, simT); r.skirt = (performance.now() - t0) / 10; t0 = performance.now(); renderer.render(scene, camera); r.render = performance.now() - t0; return r; },
   shot(q = 0.82) { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', q); },
   events: () => rider.ev, setDbg, stam(v) { rider.stam = v; },
+  mount(n = 27) { const r = rider; r.board.updateMatrixWorld(true); r.grab(r.board.position.clone(), r.board.quaternion.clone(), new THREE.Vector3(-0.117, 0.118, 0), 0.3); r.toWalk(); r.v = 1.3; r.push = r.pump = r.ollie = r.dance = null; for (let i = 0; i < n; i++) step(1 / 30); r.startOn(); },   /* throwdown on demand (probes/demo) */
 };

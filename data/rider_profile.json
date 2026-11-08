@@ -1,0 +1,65 @@
+{
+ "_doc": "Rider profile = PHYSICAL (body, energy, skill: what her body can do) + PREFERENCE (what she likes to do, 0..1 = how much / how often) + MIND (how far she looks ahead and how carefully she plans). rider.js reads it at start. Tune freely.",
+ "name": "Mia",
+ "physical": {
+  "body": {
+   "massKg": 60,
+   "heightM": 1.63
+  },
+  "energy": {
+   "_doc": "stamina bar [J]; restGradeDeg: walking steeper than this slowly costs, gentler slowly recovers (walkRestW on the flat); sitRestW: sitting recovery [W]; getUpAt: bar fraction to get up",
+   "barJ": 15000,
+   "walkCostMul": 1.0,
+   "glideRestMul": 1.0,
+   "sitRestW": 160,
+   "getUpAt": 0.6,
+   "restGradeDeg": 6,
+   "walkRestW": 40
+  },
+  "skill": {
+   "_doc": "pumpGain: how much speed a pump gives per effort; pushForceN: base kick force",
+   "pumpGain": 1.0,
+   "pushForceN": 165,
+   "pushBelowKmh": 10
+  }
+ },
+ "preference": {
+  "_doc": "0 = never/dislikes .. 1 = loves, does it often",
+  "speedFloorKmh": 20,
+  "chargeBeforeClimbKmh": 31,
+  "vmaxKmh": 30,
+  "trickMinStamina": 0.7,
+  "trickMinKmh": 9.4,
+  "mounts": [
+   "run"
+  ],
+  "pickups": [
+   "bend"
+  ],
+  "dismounts": [
+   "slide",
+   "heel",
+   "roll"
+  ],
+  "autoDance": false,
+  "walk": {
+   "feetApartM": 0.09,
+   "hipSwayM": 0.011
+  },
+  "lookBack": 0.6,
+  "jumps": 0.3,
+  "dance": 0.2,
+  "hairTouch": 0.5,
+  "carving": 0.7,
+  "pumping": 0.6,
+  "walkInsteadOfPush": 0.4,
+  "tricks": 0.5
+ },
+ "mind": {
+  "_doc": "lookAheadM: how far she reads the road; planEveryS: how often she re-plans; foresight 0..1: 0 = reacts at the last moment, 1 = plans the whole hill (uses momentum, charges speed early); caution 0..1: margin she keeps for energy/speed",
+  "lookAheadM": 150,
+  "planEveryS": 0.5,
+  "foresight": 0.8,
+  "caution": 0.5
+ }
+}

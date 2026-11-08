@@ -229,6 +229,78 @@ export function groundMaterial() {
   return m;
 }
 
+// ---------------- fine road corridor ground (baked in env.py: ENV.corridor) ----------------
+// The 8 m terrain grid is too coarse beside the road: a triangle spanning the road interpolates a far vertex and
+// rises through the concrete, or drops into the sea. Cells near the road are drawn instead as an fs x fs lattice
+// whose heights = coarse bilinear + baked delta (cut under the road, cut bank beside it, embankment fill so the road
+// sits on land). rawH(i, j) = coarse vertex height (route grid, j north). Returns { mesh, skip:Set(cell k) }.
+export function corridorGround(ENV, T, rawH, material) {
+  const C = ENV.corridor, FS = C.fs, NX = T.nx, st = T.step / FS;
+  const raw = atob(C.dcm), dcm = new Int16Array(raw.length / 2);
+  for (let k = 0; k < dcm.length; k++) { const v = raw.charCodeAt(2 * k) | (raw.charCodeAt(2 * k + 1) << 8); dcm[k] = v > 32767 ? v - 65536 : v; }
+  const bil = (I, J) => { const i = Math.min(NX - 2, Math.floor(I / FS)), j = Math.min(T.ny - 2, Math.floor(J / FS)), u = I / FS - i, v = J / FS - j;
+    return rawH(i, j) * (1 - u) * (1 - v) + rawH(i + 1, j) * u * (1 - v) + rawH(i, j + 1) * (1 - u) * v + rawH(i + 1, j + 1) * u * v; };
+  const cls = (x, y) => { const fi = (x - T.x0) / T.step, fj = (y - T.y0) / T.step, i = Math.min(NX - 2, Math.floor(fi)), j = Math.min(T.ny - 2, Math.floor(fj)), u = fi - i, v = fj - j, o = [0, 0, 0, 0];
+    for (const [a, b, w] of [[0, 0, (1 - u) * (1 - v)], [1, 0, u * (1 - v)], [0, 1, (1 - u) * v], [1, 1, u * v]]) { const c = groundAttr(ENV, T, T.x0 + (i + a) * T.step, T.y0 + (j + b) * T.step); for (let q = 0; q < 4; q++) o[q] += c[q] * w; }
+    return o; };
+  const map = new Map(), pos = [], at = [], idx = [];
+  const vid = (I, J) => { const key = I * 100000 + J; let n = map.get(key); if (n !== undefined) return n; n = map.size; map.set(key, n);
+    const x = T.x0 + I * st, y = T.y0 + J * st, b = bil(I, J), d = dcm[n] / 100, h = b + d; pos.push(x, h, -y);
+    const c = cls(x, y), fill = Math.max(0, d), wall = Math.min(1, Math.max(0, (fill - 0.25) / 0.6));
+    // built-up embankment / seawall = sandstone blocks (rock class); deep cut banks show a bit of earth
+    c[1] = Math.max(c[1], wall); c[0] *= 1 - wall; c[2] = Math.max(c[2] * (1 - wall), Math.min(0.5, Math.max(0, -d - 0.6) * 0.4)); at.push(...c); return n; };
+  for (const k of C.cells) { const i = k % (NX - 1), j = Math.floor(k / (NX - 1));
+    for (let b = 0; b <= FS; b++) for (let a = 0; a <= FS; a++) vid(i * FS + a, j * FS + b); }
+  for (const k of C.cells) { const i = k % (NX - 1), j = Math.floor(k / (NX - 1));
+    for (let b = 0; b < FS; b++) for (let a = 0; a < FS; a++) { const I = i * FS + a, J = j * FS + b;
+      const p00 = vid(I, J), p10 = vid(I + 1, J), p01 = vid(I, J + 1), p11 = vid(I + 1, J + 1);
+      idx.push(p00, p10, p11, p00, p11, p01); } }   // diagonal (0,0)-(1,1) like the coarse PlaneGeometry; CCW seen from above
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aCls', new THREE.Float32BufferAttribute(at, 4));
+  g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, material); m.receiveShadow = true;
+  return { mesh: m, skip: new Set(C.cells) };
+}
+
+// ---------------- stone kerb along cut banks (baked: ENV.kerb) ----------------
+// low, rounded, irregular Hawkesbury-sandstone blocks bedded in the verge; 3 lumpy shape variants, each one instanced mesh
+function kerbStoneGeo(seed) {
+  const rnd = prng(seed), g = new THREE.IcosahedronGeometry(0.5, 2), p = g.attributes.position, v = new THREE.Vector3();
+  const lobes = [0, 1, 2, 3].map(() => [new THREE.Vector3(rnd() - 0.5, (rnd() - 0.5) * 0.6, rnd() - 0.5).normalize(), 0.05 + rnd() * 0.08]);
+  for (let k = 0; k < p.count; k++) { v.fromBufferAttribute(p, k); const n = v.clone().normalize();
+    // superellipsoid-ish: flattened top, squarer sides (dressed stone), plus a few broad lumps
+    const sq = (x) => Math.sign(x) * Math.pow(Math.abs(x), 0.82);
+    v.set(sq(n.x) * 0.5, sq(n.y) * 0.5, sq(n.z) * 0.5); let r = 1; for (const [d, a] of lobes) r += a * Math.max(0, n.dot(d)) ** 2 - a * 0.25;
+    v.multiplyScalar(r); if (v.y > 0.22) v.y = 0.22 + (v.y - 0.22) * 0.55;             // flatter, worn top
+    p.setXYZ(k, v.x, v.y + 0.3, v.z); }                                                     // base at y ~ -0.2 (sunk), top ~ +0.65
+  g.computeVertexNormals(); return g;
+}
+export function buildKerb(scene, ENV) {
+  const A = ENV.kerb || [], n = A.length / 8; if (!n) return 0;
+  const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95, metalness: 0 });
+  mat.onBeforeCompile = (sh) => { sh.uniforms.uNoise = { value: NOISE };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWk; varying float vYk;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvWk = (modelMatrix * instanceMatrix * vec4(position, 1.)).xyz; vYk = position.y;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D uNoise; varying vec3 vWk; varying float vYk;').replace('#include <map_fragment>', `
+      vec4 n1 = texture2D(uNoise, vWk.xz * .7 + vWk.y * .4), n2 = texture2D(uNoise, vWk.xz * 2.6 - vWk.y * 1.3), n3 = texture2D(uNoise, vec2(vWk.x + vWk.z, vWk.y) * 1.7);
+      float bed = fract(vWk.y * 9. + n1.g * 1.5);                                           // faint bedding lines
+      diffuseColor.rgb *= (0.8 + 0.26 * n1.r) * (0.9 + 0.14 * n2.g) * (0.94 + 0.08 * smoothstep(.1, .3, bed));
+      diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(.78, .8, .74), smoothstep(.62, .8, n3.b) * .6);   // lichen / grime
+      diffuseColor.rgb *= mix(0.72, 1., smoothstep(0.02, 0.22, vYk));                      // earthy foot where it beds into the verge`); };
+  const geos = [kerbStoneGeo(11), kerbStoneGeo(23), kerbStoneGeo(37)], buckets = [[], [], []];
+  for (let i = 0; i < n; i++) buckets[Math.floor(A[i * 8 + 7] * 997) % 3].push(i);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), c = new THREE.Color();
+  const pal = ['#bfa27a', '#a89d8c', '#c9a56f', '#b39a80', '#9f9584'].map((h) => new THREE.Color(h));
+  buckets.forEach((list, gi) => { if (!list.length) return;
+    const im = new THREE.InstancedMesh(geos[gi], mat, list.length);
+    list.forEach((i, j) => { const [x, y, z, yaw, L, H, W, t] = A.slice(i * 8, i * 8 + 8), r = prng(Math.floor(t * 1e4) + i)();
+      const flip = r < 0.5 ? 0 : Math.PI;                                                    // turn half of them round
+      e.set((r - 0.5) * 0.14, yaw + flip, ((t * 7.7) % 1 - 0.5) * 0.12, 'YXZ'); q.setFromEuler(e);
+      // geometry spans y ~-0.2..0.7 at unit scale: scale so the top sits at base + H, the foot well bedded
+      m4.compose(new THREE.Vector3(x, y + 0.2 * H / 0.9, z), q, new THREE.Vector3(W * (0.95 + r * 0.2), H / 0.9, L)); im.setMatrixAt(j, m4);
+      const a = pal[Math.floor(t * 5) % 5], b = pal[Math.floor(t * 13) % 5]; im.setColorAt(j, c.copy(a).lerp(b, r)); });
+    im.computeBoundingSphere(); im.castShadow = true; im.receiveShadow = true; scene.add(im); });
+  return n;
+}
+
 // ---------------- trees ----------------
 // helpers: each part gets vertex colours; foliage normals are pushed toward "away from the clump centre + up" for a soft,
 // painterly read (no faceted gems).

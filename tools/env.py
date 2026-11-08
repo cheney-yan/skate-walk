@@ -14,6 +14,12 @@ Output data/env.json:
   decals       [[s, off, kind, size, rot]]  s = metres along the browser's smoothed track (same maths as
                lab.js routeTrack), off = metres to the left of travel (+ = left lane), kind 0 bike, 1 pedestrian,
                2 arrow, 3 stain, 4 bike+pedestrian pair; rot = 0 faces +s, 1 faces -s (for stains: any angle).
+  kerb         flat [x, y, z, yaw, length, height, width, tint] * n  rounded sandstone blocks lining the road edge
+               where the ground beside it rises above the road (cut banks); y = block base (slightly sunk).
+  corridor     {fs, cells, dcm}: 8 m terrain cells near the road (k = j*(nx-1)+i, sorted) that lab.js draws as an
+               fs x fs fine lattice instead; dcm = int16 LE per fine vertex (first-encounter order over cells, rows
+               b then columns a) = height change in cm vs the bilinear coarse surface (cut under/beside the road,
+               embankment fill so the road always sits on land). See 'ground mesh height' below.
 """
 import json, base64, math, os, random
 
@@ -207,24 +213,133 @@ for k in range(NX * NY):
     gb.append(q4(SAND[k]) << 4 | q4(ROCK[k])); gb.append(q4(DIRT[k]) << 4 | q4(GREEN[k]))
 print('ground: sand %.0f%% rock %.0f%% of land' % tuple(100 * sum(1 for k in range(NX * NY) if not SEA[k] and F[k] > 0.5) / max(1, SEA.count(False)) for F in (SAND, ROCK)))
 
-# ---------------- ground mesh height (replicates lab.js ground mesh: hSea shelf, low-land sink, path cut, triangles) ----------------
+# ---------------- ground mesh height (replicates lab.js: hSea shelf, low-land sink, fine road corridor) ----------------
+# Coarse 8 m grid = raw terrain (per vertex: hSea, clamp -4, land below 1.3 m sunk by 2.5 m). Every 8 m cell within
+# CORR m of the road is NOT drawn coarse; it is replaced by a 1 m lattice ("corridor") whose heights are baked here:
+#   cap   : within SHOULDER m of the centre line the ground stays >= CLEAR below the road surface (1 m triangles,
+#           diameter 1.41 m, so 1.6 + 1.41 < SHOULDER guarantees no triangle reaches above the road), then may rise
+#           at BANK slope (cut bank -> lined with a stone kerb, see below)
+#   floor : the road always sits on land: verge at road - 0.2 m out to FLOOR_W, then a 1:1 embankment / seawall,
+#           and the ground within SEA_W of the centre stays above the water where the road itself is above it
+# Cells on the corridor rim keep the coarse surface (delta 0) so both meshes meet without cracks.
 HS = [min(H[k], (-10 - min(SH[k] / 4, 60) * 2.5) / 10) if SH[k] else H[k] for k in range(NX * NY)]
-tHS = terrain_fn(HS)
-MESH = [0.0] * (NX * NY)
-for j in range(NY):
-    for i in range(NX):
-        x, y = X0 + i * ST, Y0 + j * ST; h = tHS(x, y)
-        if h < 1.3: h = -2.5 + h
-        d, q = path_near(x, -y, 16)
-        if q is not None and d < 14: h = min(h, q['y'] - 0.12 + max(0, d - 2.2) * 0.45)
-        MESH[idx(i, j)] = h
+RAWV = []
+for k in range(NX * NY):
+    g = max(-4, HS[k]); RAWV.append(g - 2.5 if g < 1.3 else g)
+def base_h(x, y):           # bilinear of the coarse vertex heights (== the coarse triangles along every cell edge)
+    return field(RAWV, x, y)
+CLEAR, BANK, BANK0 = 0.08, 0.8, 2.1          # road clearance; cut-bank slope rising from BANK0 m off the centre line
+ROADW, TRI_R = 1.6, 0.71                     # road half width; farthest point of a 1 m right triangle from its nearest vertex
+FLOOR_W, FLOOR_DROP, SEA_W = 2.6, 1.0, 4.6
+CORR, FS = 7.0, 8                            # corridor radius (m), fine subdivisions per 8 m cell
+for k, q in enumerate(TP): q['k'] = k
+TQ = TP[::2]
+PA = {}
+for q in TQ: PA.setdefault((math.floor(q['x'] / 4), math.floor(q['z'] / 4)), []).append(q)
+def near_info(x, z, R=2):
+    """-> (distance to road centre, road cap, free-bank cap, embankment floor) for a three-coords point"""
+    dmin, rc, bc, f = 1e9, 1e9, 1e9, -1e9
+    ci, cj = math.floor(x / 4), math.floor(z / 4); L = []
+    for di in range(-R, R + 1):
+        for dj in range(-R, R + 1):
+            for q in PA.get((ci + di, cj + dj), ()):
+                d = math.sqrt((q['x'] - x) ** 2 + (q['z'] - z) ** 2); L.append((d, q['k']))
+                if d < dmin: dmin = d
+                bc = min(bc, q['y'] - CLEAR + max(0.0, d - BANK0) * BANK)
+                fl = q['y'] - 0.2 - max(0.0, d - FLOOR_W) * FLOOR_DROP
+                if d < SEA_W and q['y'] > 0.6: fl = max(fl, min(q['y'] - 0.2, 0.3))
+                f = max(f, fl)
+    # road surface at the vertex's own projection onto the centre line (segment-interpolated; on hairpins any
+    # branch nearly as close counts too). Ground and road are near-planar per metre, so capping each vertex at its
+    # own projection keeps the whole 1 m triangle under the slab even on 40% stairs.
+    KN = [k for d, k in L if d < dmin + 1.2]
+    for k0 in KN:
+        for k in range(max(0, k0 - 3), min(len(TP) - 1, k0 + 3)):
+            a, b = TP[k], TP[k + 1]; ex, ez = b['x'] - a['x'], b['z'] - a['z']; l2 = ex * ex + ez * ez or 1e-9
+            u = clamp(((x - a['x']) * ex + (z - a['z']) * ez) / l2, 0, 1)
+            d = math.hypot(a['x'] + ex * u - x, a['z'] + ez * u - z)
+            if d < dmin + 0.35: rc = min(rc, a['y'] + (b['y'] - a['y']) * u - CLEAR)
+    return dmin, rc, bc, f
+# corridor cells: any point of the cell within CORR of a track point
+CELLS = set()
+for q in TQ:
+    x, y = q['x'], -q['z']
+    for i in range(math.floor((x - CORR - X0) / ST), math.floor((x + CORR - X0) / ST) + 1):
+        for j in range(math.floor((y - CORR - Y0) / ST), math.floor((y + CORR - Y0) / ST) + 1):
+            if not (0 <= i < NX - 1 and 0 <= j < NY - 1) or (i, j) in CELLS: continue
+            cx_, cy_ = clamp(x, X0 + i * ST, X0 + (i + 1) * ST), clamp(y, Y0 + j * ST, Y0 + (j + 1) * ST)
+            if (cx_ - x) ** 2 + (cy_ - y) ** 2 < CORR * CORR: CELLS.add((i, j))
+CELL_LIST = sorted(j * (NX - 1) + i for i, j in CELLS)
+# fine lattice vertices in first-encounter order (lab.js rebuilds the same order)
+FV = {}; FORDER = []
+for ck in CELL_LIST:
+    i, j = ck % (NX - 1), ck // (NX - 1)
+    for b_ in range(FS + 1):
+        for a_ in range(FS + 1):
+            key = (i * FS + a_, j * FS + b_)
+            if key not in FV: FV[key] = len(FORDER); FORDER.append(key)
+def rim(I, J):   # lattice point on an edge shared with a coarse (non-corridor) cell -> must equal the coarse surface
+    if I % FS and J % FS: return False
+    i0, j0 = I // FS, J // FS
+    for ci in ((i0 - 1, i0) if I % FS == 0 else (i0,)):
+        for cj in ((j0 - 1, j0) if J % FS == 0 else (j0,)):
+            if (ci, cj) not in CELLS: return True
+    return False
+INFO = {}
+for (I, J) in FORDER:
+    x, y = X0 + I * ST / FS, Y0 + J * ST / FS; INFO[(I, J)] = (base_h(x, y),) + near_info(x, -y)
+# a fine triangle can touch the road only if its nearest vertex is within ROADW + TRI_R: cap ALL its vertices at the road
+ROADV = set()
+for ck in CELL_LIST:
+    i, j = ck % (NX - 1), ck // (NX - 1)
+    for b_ in range(FS):
+        for a_ in range(FS):
+            I, J = i * FS + a_, j * FS + b_
+            for tri in (((I, J), (I + 1, J), (I + 1, J + 1)), ((I, J), (I + 1, J + 1), (I, J + 1))):
+                if min(INFO[v][1] for v in tri) < ROADW + TRI_R: ROADV.update(tri)
+FH = {}; FD = []; nfill = ncut = 0
+for (I, J) in FORDER:
+    b0, d, rc, bc, f = INFO[(I, J)]
+    if rim(I, J): h = b0
+    else: h = min(max(b0, f), rc if (I, J) in ROADV else bc)
+    dc = int(round((h - b0) * 100)); dc = max(-32768, min(32767, dc))
+    if (I, J) in ROADV and b0 + dc / 100 > rc: dc = math.floor((rc - b0) * 100)    # rounding must never lift it above
+    if dc > 0: nfill += 1
+    if dc < 0: ncut += 1
+    FD.append(dc); FH[(I, J)] = b0 + dc / 100
+print('corridor cells', len(CELL_LIST), 'fine verts', len(FORDER), 'road-capped', len(ROADV), 'filled', nfill, 'cut', ncut)
 def mesh_h(x, y):
     fi, fj = (x - X0) / ST, (y - Y0) / ST; i = max(0, min(NX - 2, math.floor(fi))); j = max(0, min(NY - 2, math.floor(fj)))
+    if (i, j) in CELLS:     # fine lattice, same diagonal as lab.js (a,b,d)/(b,c,d) with b = next row
+        gi, gj = (x - X0) / ST * FS, (y - Y0) / ST * FS; I, J = math.floor(gi), math.floor(gj); u, v = gi - I, gj - J
+        g = lambda a_, b_: FH.get((I + a_, J + b_), base_h(X0 + (I + a_) * ST / FS, Y0 + (J + b_) * ST / FS))
+        h00, h10, h01, h11 = g(0, 0), g(1, 0), g(0, 1), g(1, 1)
+        return h00 + (h10 - h00) * u + (h11 - h10) * v if u >= v else h00 + (h11 - h01) * u + (h01 - h00) * v
     u, v = clamp(fi - i, 0, 1), clamp(fj - j, 0, 1)
-    h00, h10, h01, h11 = MESH[idx(i, j)], MESH[idx(i + 1, j)], MESH[idx(i, j + 1)], MESH[idx(i + 1, j + 1)]
+    h00, h10, h01, h11 = RAWV[idx(i, j)], RAWV[idx(i + 1, j)], RAWV[idx(i, j + 1)], RAWV[idx(i + 1, j + 1)]
     return h00 + (h10 - h00) * u + (h11 - h10) * v if u >= v else h00 + (h11 - h01) * u + (h01 - h00) * v
+ground_h = mesh_h
+# verify-and-fix: sample the road slab densely (0.25 m along, 0.1 m across) and push down any fine triangle that
+# still reaches above road - 0.02 m (tight bends / stair kinks where the per-vertex projection cap is not enough)
+def fine_tri(x, y):
+    gi, gj = (x - X0) / ST * FS, (y - Y0) / ST * FS; I, J = math.floor(gi), math.floor(gj)
+    return [(I, J), (I + 1, J), (I + 1, J + 1)] if gi - I >= gj - J else [(I, J), (I + 1, J + 1), (I, J + 1)]
+FIDX = {key: n for n, key in enumerate(FORDER)}
+for it in range(6):
+    nfix = 0
+    for q in TP:
+        lx, lz = math.cos(q['yaw']), -math.sin(q['yaw'])
+        for o10 in range(-16, 17):
+            o = o10 / 10; x, y = q['x'] + lx * o, -(q['z'] + lz * o)
+            ex = mesh_h(x, y) - (q['y'] - 0.02)
+            if ex <= 0: continue
+            for v in fine_tri(x, y):
+                if v in FH and not rim(*v): FH[v] -= ex + 0.03; FD[FIDX[v]] = int(math.floor((FH[v] - INFO[v][0]) * 100)); FH[v] = INFO[v][0] + FD[FIDX[v]] / 100
+            nfix += 1
+    print('road clearance fix pass', it, 'violations', nfix)
+    if not nfix: break
 def mesh_n(x, y):
-    e = 1.5; gx = (mesh_h(x + e, y) - mesh_h(x - e, y)) / (2 * e); gy = (mesh_h(x, y + e) - mesh_h(x, y - e)) / (2 * e)
+    e = 1.0; gx = (mesh_h(x + e, y) - mesh_h(x - e, y)) / (2 * e); gy = (mesh_h(x, y + e) - mesh_h(x, y - e)) / (2 * e)
     n = math.sqrt(gx * gx + gy * gy + 1); return -gx / n, gy / n          # three xz of the normal (z = -north)
 
 # ---------------- trees & shrubs ----------------
@@ -255,7 +370,7 @@ def ok_site(x, y, sp, clear):
     return True
 SEAF = [1.0 if s else 0.0 for s in SEA]
 def add(sp, x, y, scale, lean=0.0, tint=None):
-    hy = mesh_h(x, y); nx_, nz_ = mesh_n(x, y)
+    hy = ground_h(x, y); nx_, nz_ = mesh_n(x, y)
     lx = lz = 0.0
     if lean:   # lean away from the sea breeze (down the sea-distance gradient = inland)
         gx = field(DS, x + 4, y) - field(DS, x - 4, y); gy = field(DS, x, y + 4) - field(DS, x, y - 4); gl = math.hypot(gx, gy) or 1
@@ -307,7 +422,7 @@ for x, y in candidates(7.0, 230):
     if park: dens *= 0.35                              # parks are mostly open lawn
     if rng.random() > dens: continue
     sp = 'banksia' if rng.random() < 0.25 + 0.6 * exposed else 'gum'
-    if not ok_site(x, y, sp, 4.5) or not free(x, y, sp): continue
+    if not ok_site(x, y, sp, 4.5 if sp == 'gum' else 5.5) or not free(x, y, sp): continue
     if sp == 'gum': add('gum', x, y, (8 + rng.random() * 8) * (1 - 0.35 * exposed))
     else: add('banksia', x, y, 3.2 + rng.random() * 2.8, lean=0.08 + 0.12 * exposed)
 for x, y in candidates(2.6, 70):
@@ -318,8 +433,51 @@ for x, y in candidates(2.6, 70):
     dens = (0.12 + 0.55 * sstep(160, 40, ds) * heath + 0.35 * sstep(0.1, 0.35, rk) * (1 - sstep(0.45, 0.6, rk))) * (1.0 if d < 25 else 0.55)
     if inside_any(PARK, x, y): dens *= 0.25
     if rng.random() > dens: continue
-    if ok_site(x, y, 'shrub', 2.4) and free(x, y, 'shrub'): add('shrub', x, y, 0.6 + rng.random() * 1.0, lean=0.1)
+    sc = 0.6 + rng.random() * 1.0    # shrub crown radius ~0.85*scale: keep it off the road + 0.6 m and behind the kerb
+    if ok_site(x, y, 'shrub', 2.6 + 0.85 * sc) and free(x, y, 'shrub'): add('shrub', x, y, sc, lean=0.1)
 print('trees', {k: len(v) for k, v in TREES.items()})
+
+# ---------------- stone kerb along cut banks ----------------
+# where the ground beside the road rises above it (cut bank), a low row of rounded sandstone blocks lines the road edge
+rng = random.Random(SEED + 3)
+KERB = []; kerb_stats = {}
+for sd in (1, -1):                    # +1 = left of travel
+    step = 2; need = []               # every 0.5 m (TP is 0.25 m)
+    for i in range(0, len(TP), step):
+        q = TP[i]; lx, lz = math.cos(q['yaw']), -math.sin(q['yaw'])
+        bank = max(ground_h(q['x'] + lx * sd * d, -(q['z'] + lz * sd * d)) for d in (2.5, 3.0, 3.6, 4.3)) - q['y']
+        need.append(bank)
+    m = [b > 0.14 for b in need]; n = len(m)
+    m = [any(m[max(0, k - 5):k + 6]) for k in range(n)]                     # bridge short gaps (~2.5 m)
+    k = 0; runs = []
+    while k < n:
+        if m[k]:
+            e = k
+            while e < n and m[e]: e += 1
+            if e - k >= 6: runs.append((k, e))                                 # >= 3 m long, else skip
+            k = e
+        else: k += 1
+    kerb_stats['left' if sd > 0 else 'right'] = round(sum(e - k for k, e in runs) * 0.5)
+    cov = [False] * n
+    for a_, b_ in runs:
+        for k in range(a_, b_): cov[k] = True
+    kerb_stats['uncovered>0.2m_' + ('left' if sd > 0 else 'right')] = sum(1 for k in range(n) if need[k] > 0.2 and not cov[k])
+    for k0, k1 in runs:
+        s0, s1 = TP[k0 * step]['s'], TP[min(len(TP) - 1, (k1 - 1) * step)]['s']; s = s0 + rng.random() * 0.2
+        while s < s1:
+            L = 0.5 + rng.random() * 0.3; W = 0.32 + rng.random() * 0.12
+            i = min(len(TP) - 1, int((s + L / 2) / 0.25)); q = TP[i]; lx, lz = math.cos(q['yaw']), -math.sin(q['yaw'])
+            b = need[min(n - 1, i // step)]
+            Hh = 0.2 + 0.08 * clamp(b / 1.2, 0, 1) + rng.random() * 0.07           # visible height above the road
+            d = sd * (1.6 + 0.05 + W / 2 + rng.random() * 0.04); cx_, cz_ = q['x'] + lx * d, q['z'] + lz * d
+            # seat the block in the ground: base = lowest ground under its footprint (minus 5 cm), never floating
+            fx, fz = math.sin(q['yaw']), math.cos(q['yaw'])
+            gmin = min(ground_h(cx_ + lx * a * W / 2 + fx * c * L / 2, -(cz_ + lz * a * W / 2 + fz * c * L / 2)) for a in (-1, 0, 1) for c in (-1, 0, 1))
+            base = min(q['y'] - 0.07, gmin - 0.05)
+            KERB.append([round(cx_, 2), round(base, 2), round(cz_, 2), round(q['yaw'] + (rng.random() - 0.5) * 0.18, 3),
+                         round(L, 2), round(q['y'] + Hh - base, 2), round(W, 2), round(rng.random(), 2)])
+            s += L * (0.7 + rng.random() * 0.1)           # rounded ends overlap: a continuous dry-stone row, no gaps
+print('kerb stones', len(KERB), 'metres', kerb_stats)
 
 # ---------------- road decals: painted symbols (bike / pedestrian / arrow) + stains ----------------
 rng = random.Random(SEED + 2)
@@ -348,7 +506,9 @@ ENV = {'note': 'baked by tools/env.py (seed %d); see its docstring for the forma
        'ground': {'nx': NX, 'ny': NY, 'b64': base64.b64encode(bytes(gb)).decode()},
        'road': {'width': 3.2, 'joint': 2.4, 'trackTotal': round(TOTAL, 2)},
        'trees': {k: [v for t in L for v in t] for k, L in TREES.items()},
-       'decals': DEC}
+       'decals': DEC,
+       'kerb': [v for t in KERB for v in t],
+       'corridor': {'fs': FS, 'cells': CELL_LIST, 'dcm': base64.b64encode(b''.join(int(v).to_bytes(2, 'little', signed=True) for v in FD)).decode()}}
 json.dump(ENV, open(f'{ROOT}/data/env.json', 'w'), separators=(',', ':'))
 print('wrote data/env.json', os.path.getsize(f'{ROOT}/data/env.json') // 1024, 'KB')
 
