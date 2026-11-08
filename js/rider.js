@@ -19,10 +19,10 @@ export const EMAX = 15000;
 // Times are REAL seconds. Each cross-step takes XS (data/moves/cross_step.json game.stepT = 0.47 s, ref pro_ARCk35WWnbk_38).
 const XS = 0.47;
 const danceKeys = (st, pp) => { const k = [[0, 0.2, -0.21, 0, 0, 0.015, -0.01], [0.6, 0.2, -0.21, 0, 0, 0.015, -0.01]]; let t = 0.6;
-  k.push([t += st, 0.2, 0.31, 0, 0, 0.015, 0.03]); k.push([t += st, 0.42, 0.31, 0, 0, -0.01, 0.03]); k.push([t += pp ? 0.6 : 0.9, 0.42, 0.31, 0, 0, -0.01, 0.03]);
+  k.push([t += st, 0.2, 0.31, 0, 0, 0.035, -0.06]); k.push([t += st * 0.6, 0.2, 0.31, 0, 0, 0.035, -0.06]); k.push([t += st, 0.42, 0.31, 0, 0, -0.01, 0.03]);   /* CROSSED: back foot lands in front of the front leg (an X from the side), a beat, then the front foot uncrosses behind */ k.push([t += pp ? 0.6 : 0.9, 0.42, 0.31, 0, 0, -0.01, 0.03]);
   if (pp) { k.push([t += 0.7, 0.42, 0.02, 0, 0.24, -0.01, -0.02]); k.push([t += 2.0, 0.42, 0.0, 0, 0.26, -0.01, -0.02]); k.push([t += st, 0.42, 0.22, 0, 0, -0.01, 0.0]); }
   else k.push([t += st, 0.42, 0.22, 0, 0, -0.01, 0.0]);
-  k.push([t += st, 0.2, 0.22, 0, 0, 0.015, 0.0]); k.push([t += st, 0.2, -0.21, 0, 0, 0.015, -0.01]); k.push([t += 0.7, 0.2, -0.21, 0, 0, 0.015, -0.01]); return k; };
+  k.push([t += st, 0.12, 0.24, 0, 0, -0.07, 0.05]); k.push([t += st * 0.6, 0.12, 0.24, 0, 0, -0.07, 0.05]); k.push([t += st, 0.2, -0.21, 0, 0, 0.015, -0.01]);   /* walking back: the front foot crosses in front of the back leg the same way */ k.push([t += 0.7, 0.2, -0.21, 0, 0, 0.015, -0.01]); return k; };
 let DANCE_K = danceKeys(XS, true), DANCE_X = danceKeys(XS, false);
 const PUSH_F = 165;   // N, a strong but unhurried kick
 export const MASS = 60;   // Cheney (corrected): more INERTIA — each push takes real force, but once rolling she keeps her speed (same friction/drag force, more mass -> slower decay)   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
@@ -813,8 +813,14 @@ export class Rider {
   danceFeet() {
     const u = this.dance.t, K = this.dance.K || DANCE_K; let i = 0; while (i < K.length - 2 && K[i + 1][0] <= u) i++;
     const a = K[i], b = K[i + 1], f = sstep(a[0], b[0], u);
-    const L = (j) => lerp(a[j], b[j], f), arc = (j) => (a[j] !== b[j] ? Math.sin(f * Math.PI) * 0.07 : 0);
-    return { lz: L(1), rz: L(2), ly: arc(1) + L(3), ry: arc(2) + L(4), lx: L(5), rx: L(6), k: i, mv: a[1] !== b[1] || a[2] !== b[2] ? 1 : 0 };
+    const L = (j) => lerp(a[j], b[j], f), arc = (j) => (a[j] !== b[j] ? Math.sin(f * Math.PI) * 0.09 : 0), sw = (j) => (a[j] !== b[j] ? -Math.sin(f * Math.PI) * 0.06 : 0);   /* swing foot passes on the toe side of the standing leg */
+    const mv = a[1] !== b[1] || a[2] !== b[2] ? 1 : 0, dip = mv ? Math.sin(f * Math.PI) * 0.6 : 0;
+    let lx = L(5) + sw(1), rx = L(6) + sw(2); const lz = L(1), rz = L(2), near = 1 - clamp(Math.abs(lz - rz) / 0.16, 0, 1);
+    if (near > 0) { /* passing: the moving foot goes round the standing leg on the toe side with real clearance (calves ~10 cm thick) */
+      /* pass on the side the moving foot STARTS on relative to the standing foot (uncrossing goes back round the heel side) */
+      if (a[2] !== b[2]) { const sd = Math.sign((a[6] - a[5]) || -1); rx = sd < 0 ? Math.min(rx, lerp(rx, lx - 0.12, near)) : Math.max(rx, lerp(rx, lx + 0.12, near)); }
+      else if (a[1] !== b[1]) { const sd = Math.sign((a[5] - a[6]) || 1) * (a[1] > b[1] ? -1 : 1); lx = sd < 0 ? Math.min(lx, lerp(lx, rx - 0.12, near)) : Math.max(lx, lerp(lx, rx + 0.12, near)); } }
+    return { lz, rz, ly: arc(1) + L(3), ry: arc(2) + L(4), lx, rx, k: i, mv, dip };
   }
   startPush(grade) { this.decide(grade > 0.03 ? '上坡推板' : '速度低，推板');
     const MP = this.MV.push, T = MP.T * (grade > 0.03 ? 0.85 : 1);   /* push.json: 1.07 s per stroke (uphill a little quicker) */
@@ -911,7 +917,7 @@ export class Rider {
     const M = this.m, F = this.face, bob = gB ? (0.5 + 0.5 * Math.cos(4 * Math.PI * (uB - SFB / 2))) * (runB ? 0.05 : 0.045) * M : Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
     const sitD = 0;   /* rest pose: hips set below (sitPose) */
     const piroD = psP ? psP.on * 0.065 + psP.wind * 0.06 + psP.rise * 0.022 + (psP.u >= 1 ? Math.sin(Math.PI * clamp((this.piro.t - this.MV.pirouette.windupT - this.MV.pirouette.spinT) / 0.5, 0, 1)) * 0.035 : 0) : 0;   /* pirouette: knees ~147°, rising to ~163° mid-turn */
-    const hipDrop = sitD + piroD - (this.dance?.kind === 'cross' ? dn * (this.xsLift ?? 0.008) : 0) + lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + this.pe * ((this.pushDrop ?? 0.03) + (this.pushExtra || 0)) + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03 + swingK * 0.05 + Math.max(0, swingK - 1) * 0.25, M);   // walking: nearly straight knees (a lady's walk), small bob
+    const hipDrop = sitD + piroD - (this.dance?.kind === 'cross' ? dn * (this.xsLift ?? 0.008) : 0) + (DF ? dn * (DF.dip || 0) * 0.03 : 0) +   /* soft knees: a small dip as each step lands */ lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + this.pe * ((this.pushDrop ?? 0.03) + (this.pushExtra || 0)) + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03 + swingK * 0.05 + Math.max(0, swingK - 1) * 0.25, M);   // walking: nearly straight knees (a lady's walk), small bob
     const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + this.pe * 0.11 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
     // model walk: hips shift a little over the standing foot each step (pelvis side sway ~1.6 cm) — in the walk frame the
