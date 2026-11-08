@@ -503,9 +503,11 @@ export class Rider {
       if (R.pt >= 0.72 && this.hold) { this.hold = null; this.carry = 0; this.clampQ = null; }
       if (R.pt > 1.4) { this.bend = 0; nx('turn'); } }
     else if (R.ph === 'turn') { this.restYaw = lerp(R.H1, R.H1 + Math.PI / 2, sstep(0, 1.0, R.pt)); if (R.pt > 1.0) nx('sit'); }
-    else if (R.ph === 'sit') { R.sw = sstep(0, 2.0, R.pt); if (R.pt > 2.0) { R.sit = true; R.sitT = 0; nx('hold'); } }
+    else if (R.ph === 'sit') { R.sw = sstep(0.5, 2.4, R.pt); R.reach = sstep(0, 0.7, R.pt) * (1 - sstep(2.3, 3.0, R.pt)); R.cross = sstep(2.0, 3.4, R.pt); R.lean = 0.32 * Math.sin(Math.PI * clamp(R.pt / 2.6, 0, 1));
+      if (R.pt > 3.4) { R.sit = true; R.sitT = 0; R.reach = 0; R.lean = 0; nx('hold'); } }   /* lean forward + reach back to the deck, lower the hips onto it, then fold the legs one after the other */
     else if (R.ph === 'hold') { R.sitT += dt; if (this.stam >= E.getUpAt && R.sitT >= E.minSitS) { R.sit = false; nx('up'); this.decide('休息够了：起身'); } }
-    else if (R.ph === 'up') { R.sw = 1 - sstep(0, 1.8, R.pt); if (R.pt > 1.8) nx('unturn'); }
+    else if (R.ph === 'up') { R.cross = 1 - sstep(0, 1.0, R.pt); R.reach = sstep(0.4, 0.9, R.pt) * (1 - sstep(1.8, 2.4, R.pt)); R.lean = 0.42 * Math.sin(Math.PI * clamp((R.pt - 0.7) / 1.9, 0, 1)); R.sw = 1 - sstep(1.0, 2.6, R.pt);
+      if (R.pt > 2.7) { R.reach = 0; R.lean = 0; nx('unturn'); } }   /* unfold the legs, plant the feet, hand on the deck, lean the chest over the feet, then rise */
     else if (R.ph === 'unturn') { this.restYaw = lerp(R.H1 + Math.PI / 2, R.H1, sstep(0, 1.0, R.pt)); if (R.pt > 1.0) nx('pick'); }
     else if (R.ph === 'pick') { this.bend = Math.sin(clamp(R.pt / 1.3, 0, 1) * Math.PI) * 0.85; if (R.pt >= 0.62 && !this.hold) this.grab(R.bPos, R.bQ, new V(-0.117, DECK_Y - 0.004, 0), 0.62);
       if (R.pt > 1.3) { this.bend = 0; nx('back'); } }
@@ -1037,12 +1039,13 @@ export class Rider {
       if (this.hold) { if (this.carryStyle === 'under') this.rot('rightHand', -0.5, 0.3, 0.6); else if (this.carryStyle !== 'clamp') this.rot('rightHand', 0, 0, 0.15); }
       if (this.hold && this.carryStyle === 'clamp') this.clampHand();
     }
-    { const R = this.rest, sw = R ? R.sw || 0 : 0; if (sw > 0.02) { /* REST: both hands rest in front, on the crossed shins, wrists soft */
-        this.root.updateMatrixWorld(true); const e = sstep(0.3, 1.0, sw);
+    { const R = this.rest, sw = R ? R.sw || 0 : 0; if (sw > 0.02 || (R && R.reach > 0.02)) { /* REST: both hands rest in front, on the crossed shins, wrists soft; while sitting down / getting up the right hand reaches back to the deck for support */
+        this.root.updateMatrixWorld(true); const e = sstep(0.3, 1.0, sw) * (R.cross ?? 1), rch = R.reach || 0;
         for (const [sd, x] of [['left', 0.11], ['right', -0.11]]) { const ua = b[sd + 'UpperArm'], la = b[sd + 'LowerArm'], hd = b[sd + 'Hand'];
           const kn = b[(x > 0 ? 'left' : 'right') + 'LowerLeg'].getWorldPosition(new V()), hipW = b.hips.getWorldPosition(new V()); const tg = kn.clone().lerp(hipW, 0.28); tg.y = kn.y + 0.035;   /* hands rest on the knees, a little inside */
           const cur = hd.getWorldPosition(new V()), sp = ua.getWorldPosition(new V()), pole = sp.clone().add(this.walkF.localToWorld(new V(x > 0 ? 1 : -1, -0.6, -0.4)).sub(this.walkF.position));
-          twoBoneIK(ua, la, hd, cur.lerp(tg, e), pole); } } }
+          let goal = cur.clone().lerp(tg, e); if (x < 0 && rch > 0 && R.bPos) { const deckP = R.bPos.clone().add(new V(0, DECK_Y + 0.03, 0)).add(this.walkF.localToWorld(new V(-0.16, 0, -0.05)).sub(this.walkF.position)); goal = cur.clone().lerp(deckP, rch); }
+          twoBoneIK(ua, la, hd, goal, pole); } } }
     // fingers softly curled (graceful hands)
     for (const f of this.fing) {
       const sgn = f.side === 'left' ? -1 : 1;
@@ -1238,13 +1241,14 @@ export class Rider {
     }
     const swR = this.rest ? this.rest.sw || 0 : 0; this.sitPole = null;
     if (swR > 0.001) { /* REST: cross-legged — each ankle tucked under the opposite knee, in front of the hips, shins near the ground; knees fall out */
-      const SI = this.SIT, cx = sstep(0.35, 1.0, swR), gy = (p) => (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y);
+      const SI = this.SIT, Rr = this.rest, cxA = Rr.cross ?? sstep(0.35, 1.0, swR), cxL = sstep(0, 0.65, cxA), cxR = sstep(0.35, 1, cxA), cx = cxA, gy = (p) => (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y);
       const sq = (x, z) => this.walkF.localToWorld(new V(x, 0, z));   /* walkF: +x = her left, +z = facing */
-      const zA = -SI.back + (SI.ankZ ?? 0.31), Lx = lerp(0.10, -(SI.ankX ?? 0.11), cx), Rx = lerp(-0.10, SI.ankX ?? 0.11, cx);
-      const lS = sq(Lx, lerp(0.02, zA + 0.02, cx)), rS = sq(Rx, lerp(0.02, zA - 0.03, cx));
-      lS.y = gy(lS) + (SI.ankY ?? 0.075) + Math.sin(Math.PI * cx) * 0.06; rS.y = gy(rS) + (SI.ankY ?? 0.075) + 0.03 + Math.sin(Math.PI * cx) * 0.06;
-      const e0 = sstep(0, 0.35, swR); lf = lf.clone().lerp(lS, e0 > 0.999 ? 1 : Math.max(cx, e0 * 0)); rf = rf.clone().lerp(rS, Math.max(cx, 0));
-      lYaw = lerp(lYaw, -90 * D - 55 * D * this.flip, cx); rYaw = lerp(rYaw, -90 * D + 55 * D * this.flip, cx); this.sitPole = cx; }
+      const zA = -SI.back + (SI.ankZ ?? 0.31), Lx = lerp(0.10, -(SI.ankX ?? 0.11), cxL), Rx = lerp(-0.10, SI.ankX ?? 0.11, cxR);
+      /* before crossing: feet planted flat a little in front of the deck (squat stance); each foot then lifts in an arc OVER the other shin (no passing through) */
+      const lS = sq(Lx, lerp(0.08, zA + 0.02, cxL)), rS = sq(Rx, lerp(0.08, zA - 0.03, cxR));
+      lS.y = gy(lS) + lerp(ANK, SI.ankY ?? 0.075, cxL) + Math.sin(Math.PI * cxL) * 0.14; rS.y = gy(rS) + lerp(ANK, (SI.ankY ?? 0.075) + 0.03, cxR) + Math.sin(Math.PI * cxR) * 0.16;
+      const e0 = sstep(0, 0.4, swR); lf = lf.clone().lerp(lS, e0); rf = rf.clone().lerp(rS, e0);
+      lYaw = lerp(lYaw, -90 * D - 55 * D * this.flip, cxL); rYaw = lerp(rYaw, -90 * D + 55 * D * this.flip, cxR); this.sitPole = cx; }
     if (this.drag > 0) { const dp = this.groundAt(-0.02, -0.5); rf = rf.lerp(dp, this.drag * 0.8); rPitch = -0.5 * this.drag; }
     if (this.footLift) { lf.y += this.footLift; rf.y += this.footLift; }
     this._lfLast = lf.clone(); this._rfLast = rf.clone();
