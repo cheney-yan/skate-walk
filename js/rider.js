@@ -216,10 +216,10 @@ export class Rider {
           const pa = P.A * P.I * P.I * (0.2 + 0.36 * ph) * clamp((this.v - 1.2) / 1.2, 0, 1); a += pa; spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
         const BASE = 110;   // W metabolic just standing balanced on a rolling board
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
-        spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0)) * dt;   // rolling downhill is the best rest: the bar fills fastest there
+        spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0) - (!this.push && !this.pump ? 25 : 0)) * dt;   // gliding = resting   // rolling downhill is the best rest: the bar fills fastest there
         if (this.v > vmax) a -= (this.pump ? 1.1 : 1.6) * (this.v - vmax) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
-        this.trickReady = this.mode === 'ride' && !holeSoon && this.stam >= 0.95 && Math.abs(grade) < 0.035 && this.v > 2.0 && !this.ollie && !this.push && this.air <= 0 && !this.dance && (this.trickCool ?? 0) <= 0;
-        this.trickProg = { stam: this.stam, speed: clamp(this.v / 2.0, 0, 1), ready: this.trickReady };
+        this.trickReady = this.mode === 'ride' && !holeSoon && this.stam >= 0.7 && grade < 0.035 && grade > -0.09 && this.v > 2.6 && this.v < vmax + 1.2 && !this.ollie && !this.push && this.air <= 0 && !this.dance && (this.trickCool ?? 0) <= 0;
+        this.trickProg = { stam: this.stam, speed: clamp(this.v / 2.6, 0, 1), fast: this.v >= vmax + 1.2, ready: this.trickReady };
         if (this.trickReq) { this.trickReq = false; if (this.trickReady) { this.startTrick('full'); this.look = null; } }
         this.pushCool -= dt; this.trickCool = (this.trickCool ?? 6) - dt; this.danceCool = (this.danceCool ?? 10) - dt;
         if (this.dance) { this.dance.t += dt * 0.75; if (this.dance.t > DANCE_T) { this.dance = null; this.danceCool = 14 + Math.random() * 8; } }
@@ -230,8 +230,9 @@ export class Rider {
         if (!this.ollie && this.air <= 0 && !this.push) {
           if (pl.kind === 'walk' && pl.start <= stopDist) this.startOff(pl.maxG > TAN6 ? 'steep' : 'long');
           else if (this.slowT > 2.2) this.startOff('slow');
-          else if (this.stam <= 0.02 && (grade > 0.02 || this.v < 1.0)) this.startOff('tired');
-          else if (!holeSoon && this.v > vmax + 0.6 && grade < -0.02 && this.stam > 0.3 && this.trickCool <= 0) this.startTrick('speed');
+          else if (this.stam <= 0.02 && (grade > 0.02 || this.v < 1.0) && !this.lookAhead(track, 25).down) this.startOff('tired');   // spent and it won't roll on its own
+          // too fast: no trick (unsafe) — she tucks and carves/foot-drags to check speed (see vmax drag); the player can trick
+          // while the speed is still in the window, which bleeds speed on long descents
           // full-bar trick is now PLAYER-triggered (tap / Space / Enter): she only gets READY and looks at us
           else if (!this.dance && !holeSoon && this.stam > 0.35 && Math.abs(grade) < 0.035 && Math.abs(kappa) < 0.06 && this.v > 2.0 && (this.danceCool ?? 6) <= 0 && pl.kind !== 'walk' && this.autoDance) this.startDance();   // Cheney: no tricks on her own (dance kept for later, player-triggered)
         }
@@ -243,11 +244,22 @@ export class Rider {
         if (d > 0 && d < lead + this.v * 0.12 && !this.push) { this.ollie = { t: 0, h }; this.stam -= (m * g * 0.35 / EFF) / EMAX; this.ev.push(['ollie', this.s]); break; }
       }
     } else if (this.mode === 'walk') {
-      this.v = damp(this.v, grade > 0.03 ? 1.0 : 1.3, 2, dt); this.s += this.v * dt; this.phi += this.v * dt / (1.1 * (1 - Math.min(0.3, Math.max(0, grade) * 1.6)));
-      spend += ((m * g * this.v * Math.max(0, Math.sin(theta))) / EFF * 0.6 + 170 - P_AERO) * dt;   // walking ~170 W + climb work (walking up stairs/hills is efficient)
+      this.updateRest(dt);
+      this.v = this.rest ? damp(this.v, 0, 6, dt) : damp(this.v, grade > 0.03 ? 1.0 : grade < -0.08 ? 0.9 : 1.3, 2, dt); this.s += this.v * dt; this.phi += this.v * dt / (1.1 * (1 - Math.min(0.3, Math.max(0, grade) * 1.6)));
+      spend += this.rest ? -(this.rest.sit ? 160 : 60) * dt : ((m * g * this.v * Math.max(0, Math.sin(theta))) / EFF * 0.6 + 170 + 40 * Math.max(0, -grade) * 10 - P_AERO + 30) * dt;   // walking always costs a little (net), uphill more; carrying the board downhill also costs (legs brake); sitting rests fast
       if (!this.planT || this.t - this.planT > 0.5) { this.plan = this.planClimb(track); this.planT = this.t; }
-      const pl = this.plan, nearFlat = grade < 0.02 && track(this.s + 2).grade < 0.02;
-      if (this.modeT > 2.5 && nearFlat && (pl.kind !== 'walk' || pl.start > 25) && this.stam > 0.12) this.startOn();
+      // REMOUNT decision (Cheney): look at 1) fatigue, 2) speed, 3) what the next stretch of road does.
+      //  - a downhill or flat ahead that she can ROLL (no walk-only climb within ~25 m) -> get back on, even when tired
+      //    (rolling rests her); a gentle downhill (≤ ~10°) is the best place to hop on; steeper than that she walks down
+      //    a few metres until it eases (hopping onto a steep descent is not safe);
+      //  - a climb ahead that needs pushing -> only remount if she has the energy for it, otherwise keep walking.
+      const ahead = this.lookAhead(track, 30), pl = this.plan;
+      const canRoll = grade < 0.03 && grade > -Math.tan(10 * D) && track(this.s + 2).grade < 0.03 && track(this.s + 2).grade > -Math.tan(10 * D);
+      const climbSoon = pl.kind === 'walk' && pl.start <= 25, pushSoon = (pl.kind === 'push' || pl.kind === 'pushThenWalk') && pl.start <= 20;
+      const energyOK = this.stam > 0.12 || ahead.down;
+      if (this.rest) { /* sitting: handled by rest logic */ }
+      else if (this.modeT > 1.8 && canRoll && !climbSoon && energyOK && (!pushSoon || this.stam > pl.need / EMAX)) this.startOn();
+      else if (this.stam <= 0.005 && grade < 0.05 && this.modeT > 1) this.startRest();   // spent: sit down at the roadside
     } else { if (!brake) this.v = this.mode === 'on' ? this.v : 0; spend += (130 - P_AERO) * dt; }
     this.stam = clamp(this.stam - spend / EMAX, 0, 1);
     this.stepSeq(dt, track);
@@ -307,7 +319,7 @@ export class Rider {
       if (o.t >= 0.38 && !o.popped) { o.popped = true; this.airV = sh ? 2.5 : 2.75; }
       if (o.popped) {
         this.air += this.airV * dt; this.airV -= g * dt;
-        if (this.air <= 0 && this.airV < 0) { this.air = 0; this.airV = 0; if (!o.landT) { o.landT = o.t; if (o.why === 'speed') this.v *= 0.72; } }
+        if (this.air <= 0 && this.airV < 0) { this.air = 0; this.airV = 0; if (!o.landT) { o.landT = o.t; this.v *= o.why === 'speed' ? 0.72 : 0.82;   /* landing a spin scrubs speed: tricks are how she sheds speed on a long descent */ } }
       }
       const tp = o.t - 0.38, ps = sh ? 0.45 : 1;
       if (tp > -0.05 && tp <= 0.05) popPitch = sstep(-0.05, 0.04, tp) * 28 * D * ps;
@@ -372,7 +384,7 @@ export class Rider {
     this.pose(dt, ctx);
     this.root.updateMatrixWorld(true);
     this.solveLegs(dt);
-    this.placeHeldBoard();
+    this.placeHeldBoard(); this.restBoard(track);
     this.events(dt, ctx);
     this.vrm.update(dt);
   }
@@ -408,6 +420,16 @@ export class Rider {
     else kind = 'pushThenWalk';   // gentle but long: push while the bar lasts, step off when it runs dry (the 'tired' rule), walk the rest
     return { kind, start, L, dh, maxG, need, have, steepLen };
   }
+  lookAhead(track, L) { let up = 0, down = 0; for (let d = 2; d <= L; d += 2) { const gr = track(this.s + d).grade; if (gr > 0.03) up += 2; if (gr < -0.02) down += 2; } return { up: up > L * 0.3, down: down > L * 0.4 }; }
+  // REST (Cheney): energy at zero -> she stops at the roadside, puts the board down and sits on it; resting refills
+  // fastest; she gets up at ~60% and carries on (walking, or back on the board if the road allows).
+  startRest() { this.rest = { t: 0, sit: false, s0: this.s }; this.ev.push(['rest', this.s]); }
+  updateRest(dt) { const R = this.rest; if (!R) return; R.t += dt;
+    R.sit = R.t > 1.2 && this.stam < 0.6; this.sitW = damp(this.sitW || 0, R.t > 1.0 && this.stam < 0.6 ? 1 : 0, 2.2, dt);
+    if (this.stam >= 0.6 && this.sitW < 0.05) { this.rest = null; this.modeT = 0; } }
+  restBoard(track) { const R = this.rest; if (!R || !this.hold) return; const k = sstep(0.3, 1.0, R.t) * (this.stam < 0.6 ? 1 : 1 - sstep(0, 0.8, (R.t2 = (R.t2 || 0) + 1 / 30)));
+    if (k <= 0.001) return; const tr = track(R.s0), l = new V(Math.cos(tr.yaw), 0, -Math.sin(tr.yaw)); const p = tr.p.clone().addScaledVector(l, this.lat || 0); const q = this.boardRestQ(R.s0, track);
+    this.board.position.lerp(p, k); this.board.quaternion.slerp(q, k); this.board.updateMatrixWorld(true); }
   // ---------------- mode sequences ----------------
   startOff(why) {
     this.push = null; this.dance = null;   /* pump keeps decaying smoothly through the brake, never frozen */ this.offWhy = why; this.mode = 'off'; this.modeT = 0;
@@ -418,8 +440,8 @@ export class Rider {
   startOn() { this.mode = 'on'; this.modeT = 0; const bs = this.s + 0.75; this.seq = { ph: 'drop', t: 0, bs }; this.slowT = 0; this.ev.push(['on', this.s]); }
   requestTrick() { this.trickReq = true; return !!this.trickReady; }
   startTrick(why) {
-    this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 40 : 20;
-    this.stam = Math.max(0, this.stam - (52 * 9.81 * 0.32 / EFF + 150) / EMAX); this.ev.push(['trick', this.s, why]);
+    this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 6 : 20;   /* player-triggered: short cooldown, the 70% bar is the real limit */
+    this.stam = Math.max(0, this.stam - (MASS * 9.81 * 0.32 / EFF + 450) / EMAX);   /* a trick costs ~1.3 kJ (≈9% bar) */ this.ev.push(['trick', this.s, why]);
   }
   boardRestQ(s, track) { const tr = track(s), q = new Q().setFromAxisAngle(new V(0, 1, 0), Math.atan2(tr.dir.x, tr.dir.z)); return q.multiply(new Q().setFromAxisAngle(new V(1, 0, 0), -Math.atan(tr.grade))); }
   carryQ() {
@@ -698,7 +720,8 @@ export class Rider {
     this.dn = dn;
     const runB = this.mode === 'on' && this.seq?.ph === 'run', gB = this.mode === 'walk' || runB, uB = ((this.phi % 1) + 1) % 1, SFB = runB ? 0.42 : 0.56;
     const M = this.m, F = this.face, bob = gB ? (0.5 + 0.5 * Math.cos(4 * Math.PI * (uB - SFB / 2))) * (runB ? 0.05 : 0.045) * M : Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
-    const hipDrop = lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);   // walking: nearly straight knees (a lady's walk), small bob
+    const sitD = (this.sitW || 0) * 0.62;   /* sitting on the board at the roadside */
+    const hipDrop = sitD + lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);   // walking: nearly straight knees (a lady's walk), small bob
     const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
     // model walk: hips shift a little over the standing foot each step (pelvis side sway ~1.6 cm) — in the walk frame the
