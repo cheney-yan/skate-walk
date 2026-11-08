@@ -300,7 +300,7 @@ export function buildShelf(scene, ENV, T, material) {
 // ---------------- stone kerb along cut banks (baked: ENV.kerb) ----------------
 // low, rounded, irregular Hawkesbury-sandstone blocks bedded in the verge; 3 lumpy shape variants, each one instanced mesh
 function kerbStoneGeo(seed) {
-  const rnd = prng(seed), g = new THREE.IcosahedronGeometry(0.5, 2), p = g.attributes.position, v = new THREE.Vector3();
+  const rnd = prng(seed), g = new THREE.IcosahedronGeometry(0.5, 1), p = g.attributes.position, v = new THREE.Vector3();
   const lobes = [0, 1, 2, 3].map(() => [new THREE.Vector3(rnd() - 0.5, (rnd() - 0.5) * 0.6, rnd() - 0.5).normalize(), 0.05 + rnd() * 0.08]);
   for (let k = 0; k < p.count; k++) { v.fromBufferAttribute(p, k); const n = v.clone().normalize();
     // superellipsoid-ish: flattened top, squarer sides (dressed stone), plus a few broad lumps
@@ -333,7 +333,7 @@ export function buildKerb(scene, ENV) {
       // geometry spans y ~-0.2..0.7 at unit scale: scale so the top sits at base + H, the foot well bedded
       m4.compose(new THREE.Vector3(x, y + 0.2 * H / 0.9, z), q, new THREE.Vector3(W * (0.95 + r * 0.2), H / 0.9, L)); im.setMatrixAt(j, m4);
       const a = pal[Math.floor(t * 5) % 5], b = pal[Math.floor(t * 13) % 5]; im.setColorAt(j, c.copy(a).lerp(b, r)); });
-    im.computeBoundingSphere(); im.castShadow = true; im.receiveShadow = true; scene.add(im); });
+    im.computeBoundingSphere(); im.castShadow = false; im.receiveShadow = true; scene.add(im); });   /* kerb stones: ~0.3 m high, their shadow is invisible from the chase cam but cost 3 shadow passes */
   return n;
 }
 

@@ -140,7 +140,7 @@ Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, n
 /* FAR cascade (Cheney: shadows only near her looked cut off): a second light that adds NO light of its own, it only darkens -
    implemented as a shadow-only directional light (ShadowMaterial ground pass is too costly), so: a weak copy of the sun whose
    shadow covers the whole visible area around the camera; its light intensity is taken out of the main sun so the total stays. */
-const sunFar = new THREE.DirectionalLight('#ffffff', 0); sunFar.castShadow = true; sunFar.shadow.mapSize.set(2048, 2048);
+const sunFar = new THREE.DirectionalLight('#ffffff', 0); sunFar.castShadow = true; sunFar.shadow.mapSize.set(2048, 2048); sunFar.shadow.autoUpdate = false;   /* far shadows change slowly: re-render the map every few frames, not every frame */
 Object.assign(sunFar.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 1, far: 500 }); sunFar.shadow.bias = -0.0012; sunFar.shadow.normalBias = 0.25;
 scene.add(sunFar, sunFar.target);
 /* HEADLAMP (night): a spot from her head along the path; range tunable in the 光影 tab */
@@ -640,6 +640,7 @@ function sunFollow(base) {
     sun.color.copy(sc).lerp(mc, night); const keyI = LT.sunMul * ((2.9 + 0.3 * low) * (1 - 0.6 * cl) * day * (1 - night) + 0.55 * moonI * night);
     /* near + far cascade share the key light: far part = farShadow share, so distant trees/houses cast shadow over everything in view */
     const fs = LT.farShadow; sun.intensity = keyI * (1 - fs); sunFar.intensity = keyI * fs; sunFar.color.copy(sun.color);
+    sunFar.castShadow = fs > 0.01; { const lc = sunFollow.lc, mv = !lc || lc.distanceToSquared(sunFar.target.position) > 1; if (mv || (sunFollow.k = (sunFollow.k || 0) + 1) % 6 === 0) { sunFar.shadow.needsUpdate = true; sunFollow.lc = sunFar.target.position.clone(); } }   /* re-render when its centre moved or every 6th frame */
     { const F = LT.shadowFar, cm = sunFar.shadow.camera; if (cm.right !== F) { cm.left = -F; cm.right = F; cm.top = F; cm.bottom = -F; cm.far = F * 4.5; cm.updateProjectionMatrix(); }
       const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); const ctr = base.clone().addScaledVector(fwd, F * 0.6);   /* centre the far map ahead of the camera: that is what is visible */
       const step = (2 * F) / 2048; ctr.x = Math.round(ctr.x / step) * step; ctr.z = Math.round(ctr.z / step) * step;   /* snap to texels: no shimmering */
@@ -937,6 +938,7 @@ window.LAB = {
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
   light(o) { Object.assign(LT, o || {}); girlShading.key = null; return LT; },
+  get renderer() { return renderer; },
   restart, jumpTo(s) { restart(); for (let i = 0; i < 4000 && rider.s < s; i++) step(1 / 30); },
   // advance n frames at fps then render; returns state
   adv(n = 1, fps = 30) { const t0 = performance.now(); for (let i = 0; i < n; i++) step(1 / fps); return { s: rider.s, v: rider.v, cap: $('cap').innerText, ms: (performance.now() - t0) / n }; },
