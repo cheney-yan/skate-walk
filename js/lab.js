@@ -631,12 +631,12 @@ function sunFollow(base) {
     const elD = sp.el * 180 / Math.PI, cl = LT.cloudOverride != null ? LT.cloudOverride : NAT.cloud;
     /* phases: day (sun > 6°) -> golden (6..-1) -> twilight (-1..-8, blue hour) -> night (< -8°, moon/stars) */
     const day = Math.min(1, Math.max(0, (elD + 1) / 7)), night = Math.min(1, Math.max(0, (-elD - 1) / 7)) * LT.nightMul;
-    const low = 1 - Math.min(1, Math.max(0, (elD - 4) / 30));
+    const low = 1 - Math.min(1, Math.max(0, (elD - 4) / 26)) ** 1.6;   /* warmth/rim rise earlier: 17:30 (~15°) already reads golden */
     const sdir = dirOf(Math.max(sp.el, 3 * Math.PI / 180), sp.az), mdir = dirOf(Math.max(mp.el, 5 * Math.PI / 180), mp.az);
     const moonUp = Math.min(1, Math.max(0, mp.el * 180 / Math.PI / 5)), moonI = moonUp * (0.25 + 0.75 * mp.illum) * (1 - 0.7 * cl);
     const kdir = night > 0.5 && moonI > 0.05 ? mdir : sdir;   /* the shadow-casting light: sun by day, moon at night */
     sun.position.copy(base).addScaledVector(kdir, 14); sun.target.position.copy(base);
-    const sc = new THREE.Color(1, 0.93 - 0.17 * low, 0.82 - 0.3 * low), mc = new THREE.Color('#9fb6ff');
+    const sc = new THREE.Color(1, 0.94 - 0.18 * low, 0.84 - 0.34 * low), mc = new THREE.Color('#9fb6ff');
     sun.color.copy(sc).lerp(mc, night); const keyI = LT.sunMul * ((2.9 + 0.3 * low) * (1 - 0.6 * cl) * day * (1 - night) + 0.55 * moonI * night);
     /* near + far cascade share the key light: far part = farShadow share, so distant trees/houses cast shadow over everything in view */
     const fs = LT.farShadow; sun.intensity = keyI * (1 - fs); sunFar.intensity = keyI * fs; sunFar.color.copy(sun.color);
@@ -648,15 +648,15 @@ function sunFollow(base) {
     seaU.uNight.value = Math.max(night, (1 - day) * 0.5);
     /* sky fill: this is what lights the shade side. Lower fill = stronger light/shade split (Cheney: real sun casts real shade;
        not too dark). Overcast: fill rises and the sun fades -> soft. */
-    const fill = (1 - LT.shadowK) * 1.6 + 1.1 * cl;
-    hemi.color.set(low > 0.6 ? '#ffe2c4' : '#eef6ff').lerp(new THREE.Color('#4a63a8'), night); hemi.groundColor.set('#c8b08a').lerp(new THREE.Color('#1c2846'), night);
+    const fill = (1 - LT.shadowK) * 1.6 + 1.1 * cl + 0.35 * low;   /* low sun: more open sky lights the shade side */
+    hemi.color.set('#eef6ff').lerp(new THREE.Color('#b9c8ec'), low * 0.8).lerp(new THREE.Color('#4a63a8'), night);   /* golden hour: warm key + cool blue sky fill on the shade side */ hemi.groundColor.set('#c8b08a').lerp(new THREE.Color('#1c2846'), night);
     hemi.intensity = LT.fillMul * (fill * (1 - night) * Math.max(0.35, day) + (0.85 + 0.5 * moonI) * night);
     scene.fog.color.set(low > 0.6 ? '#f4d9bd' : '#d6ebf5').lerp(new THREE.Color('#0d1730'), Math.max(night, (1 - day) * 0.6));
     renderer.toneMappingExposure = LT.exposure * (1 + 0.1 * night);
     const S = window.__sky.uniforms; S.uWarm.value = low * (1 - night); S.uSun.value.copy(sdir); S.uNight.value = Math.max(night, (1 - day) * 0.55); S.uMoon.value.copy(mdir); S.uMoonA.value = moonUp * (0.4 + 0.6 * mp.illum);
     seaU.uSun.value.copy(kdir); seaU.uSunCol.value.copy(sun.color); seaU.uSky.value.set(low > 0.6 ? '#c9d6e0' : '#a8cdea').lerp(new THREE.Color('#0c1630'), night); seaU.uFog.value.copy(scene.fog.color);
-    const rim = low * (1 - cl) * (1 - night) * day; if (skirt) skirt.rimU.value.set(0.75 * rim, 0.52 * rim, 0.3 * rim); if (skirt2) skirt2.rimU.value.set(0.6 * rim, 0.45 * rim, 0.3 * rim);
-    rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2 * rim;
+    const rim = Math.min(1, low * 1.35) * (1 - cl) * (1 - night) * day; if (skirt) skirt.rimU.value.set(0.75 * rim, 0.52 * rim, 0.3 * rim); if (skirt2) skirt2.rimU.value.set(0.6 * rim, 0.45 * rim, 0.3 * rim);
+    rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.color.setRGB(1, 0.68, 0.38); rimLight.intensity = 3.2 * rim;
     NAT.phase = night > 0.5 ? '夜' : day < 1 ? (sp.el > 0 ? '黄昏/清晨' : '蓝调') : '白天';
     return; }
   sunFar.intensity = 0; seaU.uNight.value = 0; seaU.uLamp.value.set(0, 0, 0, 0);
