@@ -142,7 +142,7 @@ const BONES = ['hips', 'spine', 'chest', 'upperChest', 'neck', 'head', 'leftShou
 const FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Little'];
 
 // RIDER PROFILE (Cheney): who she is & what she prefers — data/rider_profile.json, loaded by lab.js -> rider.applyProfile()
-export const PROFILE = { energy: { barJ: 15000, walkCostMul: 1, glideRestMul: 1, sitRestW: 160, getUpAt: 0.6, restGradeDeg: 6, walkRestW: 40 }, skill: { pumpGain: 1, pushForceN: 165, pushBelowKmh: 10 },
+export const PROFILE = { energy: { barJ: 24000, walkCostMul: 1, sitRestW: 4800, getUpAt: 0.6, restGradeDeg: 6, walkRestW: 1200, rideRestW: 1200, restFullKmh: 20, noRestKmh: 30, minSitS: 6 }, skill: { pumpGain: 1, pushForceN: 165, pushBelowKmh: 10 },
   preference: { speedFloorKmh: 20, chargeBeforeClimbKmh: 31, vmaxKmh: 30, trickMinStamina: 0.7, trickMinKmh: 9.4, autoDance: false, lookBack: 0.6, hairTouch: 0.5, carving: 0.7 },
   mind: { lookAheadM: 150, planEveryS: 0.5, foresight: 0.8, caution: 0.5 } };
 export class Rider {
@@ -229,7 +229,12 @@ export class Rider {
           const pa = PROFILE.skill.pumpGain * P.A * P.I * (0.25 + 0.35 * ph) * (0.6 + 0.5 * Math.min(1, def)) * clamp((this.v - 1.2) / 1.2, 0, 1) + P.A * P.I * Math.max(0, g * Math.sin(theta)) * 0.9; a += pa;   /* ~0.3-0.5 m/s² on the flat: 14->20 km/h in ~5 s; uphill adds what the slope takes away (and bills it) */   /* uphill she also pumps against the slope (costs proportionally more) */ spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
         const BASE = 110;   // W metabolic just standing balanced on a rolling board
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
-        spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0) - (!this.push && !this.pump ? 25 * PROFILE.energy.glideRestMul : 0) + Math.max(0, theta - PROFILE.energy.restGradeDeg * D) / D * 30) * dt;   /* gliding above the 6° line costs a little */   // gliding = resting   // rolling downhill is the best rest: the bar fills fastest there
+        /* RECOVERY ON THE BOARD (Cheney): standing still on a rolling board — gliding, looking around, small graceful moves
+           (dance steps, hair, look-back) — recovers, fast. Not when it's fast (>= noRestKmh you're working to stay balanced;
+           full rate at <= restFullKmh). Pushing / pumping / spins cost as before. */
+        const EN = PROFILE.energy, kmhN = this.v * 3.6, calm = !this.push && !this.pump && !this.ollie && this.air <= 0;
+        const rideRest = calm ? EN.rideRestW * clamp((EN.noRestKmh - kmhN) / (EN.noRestKmh - EN.restFullKmh), 0, 1) : 0;
+        spend += (BASE - P_AERO - rideRest + Math.max(0, theta - EN.restGradeDeg * D) / D * 30) * dt;   /* gliding above the 6° line costs a little */   // gliding = resting   // rolling downhill is the best rest: the bar fills fastest there
         this.ctxV = vmax; const pc = this.plan, upSoon = pc && pc.climbAt !== undefined && pc.climbAt !== null && pc.climbAt < 12 + this.v * 8;
         const vCap = upSoon ? vmax + 2.2 : vmax;   /* a climb ahead: keep the speed, she'll spend it going up */
         if (this.v > vCap) a -= (this.pump ? 1.1 : 1.6) * (this.v - vCap) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
@@ -457,7 +462,8 @@ export class Rider {
   // fastest; she gets up at ~60% and carries on (walking, or back on the board if the road allows).
   startRest() { this.decide('体力 0：路边坐下休息'); this.rest = { t: 0, sit: false, s0: this.s }; this.ev.push(['rest', this.s]); }
   updateRest(dt) { const R = this.rest; if (!R) return; R.t += dt;
-    const up = PROFILE.energy.getUpAt; R.sit = R.t > 1.2 && this.stam < up; this.sitW = damp(this.sitW || 0, R.t > 1.0 && this.stam < up ? 1 : 0, 2.2, dt);
+    const up = PROFILE.energy.getUpAt; const keep = this.stam < up || R.t < PROFILE.energy.minSitS; R.sit = R.t > 1.2 && keep; this.sitW = damp(this.sitW || 0, R.t > 1.0 && keep ? 1 : 0, 2.2, dt);
+    if (this.stam >= up && R.t < PROFILE.energy.minSitS) this.sitW = Math.max(this.sitW, 0.99);   /* sit at least a few seconds even if the bar is back */
     if (this.stam >= up && this.sitW < 0.05) { this.rest = null; this.modeT = 0; } }
   restBoard(track) { const R = this.rest; if (!R || !this.hold) return; const k = sstep(0.3, 1.0, R.t) * (this.stam < 0.6 ? 1 : 1 - sstep(0, 0.8, (R.t2 = (R.t2 || 0) + 1 / 30)));
     if (k <= 0.001) return; const tr = track(R.s0), l = new V(Math.cos(tr.yaw), 0, -Math.sin(tr.yaw)); const p = tr.p.clone().addScaledVector(l, this.lat || 0); const q = this.boardRestQ(R.s0, track);
@@ -1072,7 +1078,11 @@ export class Rider {
         rPitch = xr <= 0 ? -0.35 * sstep(0, 0.14, tt) : lerp(-0.35, 0, ur);   // push-off: heel up before the back foot leaves
       }
       const gL = gaitOn ? gait(0).pitch : 0, gR = gaitOn ? gait(0.5).pitch : 0;   // + toes up (heel strike), - heel up (toe-off)
-      rPitch = lerp(rPitch, -gR, M); this.lPitch = -gL * M;   // foot-bone pitch sign is the opposite (measured)
+      /* SLOPE (Cheney: shoes sink into the hill): the sole follows the ground's slope along her heading (toes up uphill,
+         down downhill), and the ankle sits a sole-thickness higher on a slope so neither toe nor heel digs in */
+      const slopeP = Math.atan(this.gradeNow || 0) * (this.face < 0.5 ? 0 : 1) * this.flip;
+      rPitch = lerp(rPitch, -gR + slopeP, M); this.lPitch = (-gL + slopeP) * M;   // foot-bone pitch sign is the opposite (measured)
+      const soleLift = Math.abs(Math.atan(this.gradeNow || 0)) * 0.06 + 0.004; lf.y += soleLift * M; rf.y += soleLift * M;
       // heel strike / toe-off: lifting the heel raises the ankle (pivot on the toes), toes-up keeps the heel on the ground
       const ank = (pt) => (pt < 0 ? -pt * 0.12 : pt * 0.03); lf.y += ank(gL) * M; rf.y += ank(gR) * M;
     }

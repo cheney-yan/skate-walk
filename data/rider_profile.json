@@ -7,14 +7,17 @@
    "heightM": 1.63
   },
   "energy": {
-   "_doc": "stamina bar [J]; restGradeDeg: walking steeper than this slowly costs, gentler slowly recovers (walkRestW on the flat); sitRestW: sitting recovery [W]; getUpAt: bar fraction to get up",
+   "_doc": "stamina bar [J]; recovery [W] (Cheney 11/08: ~30x the old rates). Walking: steeper than restGradeDeg costs, gentler recovers (walkRestW on the flat). Standing on the board without pumping/pushing recovers rideRestW at <= restFullKmh, fading to 0 at noRestKmh. Sitting is fastest; she sits at least minSitS seconds and gets up at getUpAt.",
    "barJ": 24000,
-   "walkCostMul": 1.0,
-   "glideRestMul": 1.0,
-   "sitRestW": 160,
+   "walkCostMul": 1,
+   "sitRestW": 4800,
    "getUpAt": 0.6,
+   "minSitS": 6,
    "restGradeDeg": 6,
-   "walkRestW": 40
+   "walkRestW": 1200,
+   "rideRestW": 1200,
+   "restFullKmh": 20,
+   "noRestKmh": 30
   },
   "skill": {
    "_doc": "pumpGain: how much speed a pump gives per effort; pushForceN: base kick force",

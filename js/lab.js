@@ -111,7 +111,23 @@ scene.fog = RD ? new THREE.Fog('#d6ebf5', 650, 2600) : new THREE.Fog('#d6ebf5', 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.05, RD ? 3200 : 1500);
 const hemi = new THREE.HemisphereLight('#eef6ff', '#d8c49a', 1.4); scene.add(hemi);
 const sun = new THREE.DirectionalLight('#ffe9c8', 2.5);
-let TOD = Q.get('tod') || 'golden';
+let TOD = Q.get('tod') || 'real';
+// ---- NATURE (Cheney): real sun for the route's place + the current time, real wind from the local weather.
+// Sun: NOAA-style solar position from lat/lon + clock. Wind/cloud: Open-Meteo current weather (free, no key).
+// Wind moves hair/cloth/body sway only (not her speed, Cheney); cloud softens the sun.
+const NAT = { lat: -33.8915, lon: 151.2767, wind: null, cloud: 0.2, src: '默认', t: null };
+function solarPos(date, lat, lon) { const rad = Math.PI / 180, d = date.getTime() / 86400000 + 2440587.5 - 2451545.0;
+  const g = (357.529 + 0.98560028 * d) * rad, q = 280.459 + 0.98564736 * d, L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad, e = (23.439 - 0.00000036 * d) * rad;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)), dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const gmst = (18.697374558 + 24.06570982441908 * d) % 24, ha = ((gmst * 15 + lon) * rad - ra), la = lat * rad;
+  const el = Math.asin(Math.sin(la) * Math.sin(dec) + Math.cos(la) * Math.cos(dec) * Math.cos(ha));
+  const az = Math.atan2(-Math.sin(ha), Math.tan(dec) * Math.cos(la) - Math.sin(la) * Math.cos(ha));   // from north, clockwise
+  return { el, az }; }
+async function loadWeather() { try {
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${NAT.lat}&longitude=${NAT.lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,temperature_2m&wind_speed_unit=ms&timezone=Australia%2FSydney`);
+  const c = (await r.json()).current; const to = (c.wind_direction_10m + 180) * Math.PI / 180, sp = c.wind_speed_10m * 0.55;   // 10 m wind -> ~1.5 m above ground
+  NAT.wind = new THREE.Vector3(Math.sin(to) * sp, 0, -Math.cos(to) * sp); NAT.cloud = (c.cloud_cover ?? 20) / 100; NAT.raw = c; NAT.src = 'Open-Meteo ' + (c.time || ''); } catch (e) { NAT.src = '天气读取失败，用默认海风'; } }
+if (!REC) loadWeather();
 const rimLight = new THREE.DirectionalLight('#ffb978', 0); scene.add(rimLight, rimLight.target);
 sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 30 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
@@ -325,6 +341,7 @@ async function init() {
   if (OUTFIT === 'native' || OUTFIT === 'breeze') skirt.mesh.visible = false;   // the model's own skirt (spring bones) is used instead
   hat = SD || OUTFIT === 'native' || OUTFIT === 'breeze' ? { step() {} } : new Hat(vrm, scene);
   addWristGuards(vrm);
+  vrm.scene.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = true; } });   /* self-shadow: skirt hem shades the thighs, arms shade the body */
   rider = new Rider(vrm, scene); rider.track = track;
   try { rider.applyProfile(await (await fetch('./data/rider_profile.json')).json()); } catch (e) { console.warn('rider profile', e); }   // who she is & what she likes (tunable)
   try { const td = await (await fetch('./data/moves/throwdown.json')).json(); for (const k in td.game) if (typeof td.game[k] === 'number') rider.TD[k] = td.game[k]; } catch (e) { console.warn('throwdown.json', e); }   /* throwdown mount params */
@@ -348,6 +365,7 @@ function restart() {
   skirt.inited = false; if (skirt2) skirt2.inited = false; vrm.springBoneManager?.reset?.();
 }
 function windTarget(s) {
+  if (RD && NAT.wind && !REC) return NAT.wind.clone().multiplyScalar(1 + 0.25 * Math.sin(s * 0.013));   // real local wind
   if (RD) return new THREE.Vector3(-2.2 - 1.2 * Math.sin(s * 0.013), 0, 0.6 * Math.sin(s * 0.021));   // onshore sea breeze from the east
   const { g } = track.segAt(s), p = track.at(s), left = new THREE.Vector3(Math.cos(p.yaw), 0, -Math.sin(p.yaw));
   const W = 6.5;
@@ -394,7 +412,8 @@ const PROFILE_LA = () => rider.profile?.mind?.lookAheadM ?? 150;
 // 自然 (sun, wind, road), 决策 (plan + history), 全图 (god's-eye list of the whole route, current stretch highlighted)
 let brainTab = localStorage.sw_tab || 'girl';
 document.querySelectorAll('#brain .tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === brainTab);
-  b.onclick = (ev) => { ev.stopPropagation(); brainTab = b.dataset.t; localStorage.sw_tab = brainTab; brainHUD.map = null; document.querySelectorAll('#brain .tabs button').forEach((x) => x.classList.toggle('on', x === b)); brainHUD.k = 5; brainHUD(); }; });
+  b.onclick = (ev) => { ev.stopPropagation(); brainTab = b.dataset.t; localStorage.sw_tab = brainTab; brainHUD.map = null; brainHUD.mapBuilt = false; brainHUD.force = true; document.querySelectorAll('#brain .tabs button').forEach((x) => x.classList.toggle('on', x === b)); brainHUD(); }; });
+$('brainPane').addEventListener('scroll', () => { brainHUD.userScroll = true; clearTimeout(brainHUD.us); brainHUD.us = setTimeout(() => brainHUD.userScroll = false, 4000); }, { passive: true });
 ['pointerdown', 'touchstart', 'wheel'].forEach((ev) => $('brain').addEventListener(ev, (e) => e.stopPropagation(), { passive: true }));
 const deg = (gr) => (Math.atan(gr) * 57.3).toFixed(1) + '°';
 const row = (k, v, hl) => `<div class="row${hl ? ' hl' : ''}"><span>${k}</span><span>${v}</span></div>`;
@@ -405,7 +424,7 @@ function routeSegs() { if (routeSegs.c) return routeSegs.c; const out = []; cons
   for (let s = 2; s <= track.total; s += 2) { const k = s >= track.total ? null : cls(track.at(s).grade); if (k !== c || s >= track.total) { if (s - a >= 6 || !out.length) { let mx = 0, dh = track.at(Math.min(s, track.total - 0.01)).p.y - track.at(a).p.y; for (let q = a; q < s; q += 1) { const g = track.at(q).grade; if (Math.abs(g) > Math.abs(mx)) mx = g; } out.push({ a, b: s, c, dh, mx }); } else { const p = out[out.length - 1]; p.b = s; } a = s; c = k; } }
   return (routeSegs.c = out); }
 function brainHUD() { const r = rider, el = $('brainPane'); if (!el || document.body.classList.contains('nodbg')) return;
-  if ((brainHUD.k = (brainHUD.k || 0) + 1) % 6) return;
+  const now = performance.now(); if (now - (brainHUD.tw || 0) < 250 && !brainHUD.force) return; brainHUD.tw = now; brainHUD.force = false;   /* 4 Hz: rebuilding the panel every few frames stalled phones */
   const g = track.at(r.s).grade, pl = r.plan || {}, kmh = (r.v * 3.6).toFixed(1), P = r.profile || {}, ph = P.physical || {}, pref = P.preference || {}, mind = P.mind || {};
   const act = r.rest ? (r.rest.sit ? '坐着休息' : '准备休息') : r.mode === 'walk' ? '拿板走路' : r.mode === 'on' ? '上板中' : r.mode === 'off' ? '下板中' : r.push ? '推板' : r.pump ? 'pump' : r.ollie ? (r.ollie.kind === 'shove' ? '转板' : 'ollie') : '滑行';
   const planTxt = { flat: '看得见的路都能滑', coast: '惯性就能过', carry: '借速度 + pump 冲上去', push: '推板上坡', pushThenWalk: `预计 ${pl.start}m 处会停住`, walk: `${pl.start}m 处太陡，要下板` }[pl.kind] || '-';
@@ -417,7 +436,7 @@ function brainHUD() { const r = rider, el = $('brainPane'); if (!el || document.
     body = head + `<div class="sec">此刻</div>` + row('动作', act, true) + row('pump 强度', r.pump ? `${r.pump.A.toFixed(2)} / ${r.pump.I.toFixed(2)}` : '-') + row('蹬地冷却', (r.pushCool || 0).toFixed(1) + 's') + row('身体侧倾', ((r.lean || 0) * 57.3).toFixed(0) + '°') + row('花样', r.trickReady ? '<b>可以</b>' : r.stam < (pref.trickMinStamina ?? 0.7) ? '体力不够' : r.v < (pref.trickMinKmh ?? 9.4) / 3.6 ? '速度不够' : r.v > vm + 1.2 ? '太快不安全' : '不合适') +
       sec('身体', ph.body) + sec('体力', ph.energy) + sec('技术', ph.skill) + sec('喜好', pref) + sec('头脑', mind);
   } else if (brainTab === 'nature') {
-    const T = track.at(r.s); body = head + `<div class="sec">自然</div>` + row('时间', $('tod')?.textContent || '-') + row('风', ((ctx.wind || 0)).toFixed(2)) + row('坡度', deg(g), true) + row('弯曲 κ', T.kappa.toFixed(3)) + row('海拔', T.p.y.toFixed(1) + ' m') +
+    const T = track.at(r.s); const ws = ctx.wind ? Math.hypot(ctx.wind.x, ctx.wind.z) : 0; body = head + `<div class="sec">自然</div>` + row('光照模式', $('tod')?.textContent || '-') + row('当地时间', new Date().toLocaleTimeString('zh-CN', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' })) + (NAT.sun ? row('太阳高度 / 方位', `${(NAT.sun.el * 57.3).toFixed(0)}° / ${(((NAT.sun.az * 57.3) % 360 + 360) % 360).toFixed(0)}°`, true) : '') + row('天气来源', NAT.src) + (NAT.raw ? row('气温 / 云量', `${NAT.raw.temperature_2m}°C / ${NAT.raw.cloud_cover}%`) + row('10 m 风 / 阵风', `${NAT.raw.wind_speed_10m} / ${NAT.raw.wind_gusts_10m} m/s 来自 ${NAT.raw.wind_direction_10m}°`) : '') + row('她身边的风', ws.toFixed(1) + ' m/s（只吹头发衣服）') + row('坡度', deg(g), true) + row('弯曲 κ', T.kappa.toFixed(3)) + row('海拔', T.p.y.toFixed(1) + ' m') +
       row('空气阻力', (0.5 * 1.2 * 0.23 * r.v * r.v).toFixed(1) + ' N') + row('滚阻', (60 * 9.81 * 0.004).toFixed(1) + ' N') + row('重力沿坡', (60 * 9.81 * Math.sin(Math.atan(g))).toFixed(0) + ' N') + row('动能', (0.5 * 60 * r.v * r.v / 1000).toFixed(2) + ' kJ') +
       `<div class="sec">前方 60 m</div>` + [10, 20, 30, 45, 60].map((d) => row(`+${d} m`, deg(track.at(Math.min(track.total - 0.1, r.s + d)).grade))).join('');
   } else if (brainTab === 'mind') {
@@ -427,10 +446,12 @@ function brainHUD() { const r = rider, el = $('brainPane'); if (!el || document.
   } else {
     const S = routeSegs(); let cur = 0; S.forEach((q, i) => { if (r.s >= q.a && r.s < q.b) cur = i; });
     const col = { 下坡: '#3b8f6a', 缓下: '#6cbfb0', 平: '#999', 上坡: '#d08a3c', 陡坡: '#c4512f' };
-    el.innerHTML = head + `<div class="sec">全图 ${S.length} 段（天眼）</div>` + S.map((q, i) => `<div class="seg${i === cur ? ' cur' : i < cur ? ' done' : ''}" ${i === cur ? 'id="segCur"' : ''}><span style="color:${col[q.c]}">■</span> ${q.a.toFixed(0)}–${q.b.toFixed(0)} m · ${q.c} ${(q.b - q.a).toFixed(0)} m · ${q.dh >= 0 ? '+' : ''}${q.dh.toFixed(1)} m · 最陡 ${deg(q.mx)}${pl.start != null && (pl.kind === 'walk' || pl.kind === 'pushThenWalk') && r.s + pl.start >= q.a && r.s + pl.start < q.b ? ' · <b>⚠ 计划下板</b>' : ''}</div>`).join('');
-    if (brainHUD.map !== cur) { brainHUD.map = cur; $('segCur')?.scrollIntoView({ block: 'center' }); } return;
+    if (!brainHUD.mapBuilt) { brainHUD.mapBuilt = true; el.innerHTML = `<div id="mapHead"></div><div class="sec">全图 ${S.length} 段（天眼）</div>` + S.map((q, i) => `<div class="seg${i === cur ? ' cur' : i < cur ? ' done' : ''}" ${i === cur ? 'id="segCur"' : ''}><span style="color:${col[q.c]}">■</span> ${q.a.toFixed(0)}–${q.b.toFixed(0)} m · ${q.c} ${(q.b - q.a).toFixed(0)} m · ${q.dh >= 0 ? '+' : ''}${q.dh.toFixed(1)} m · 最陡 ${deg(q.mx)}${pl.start != null && (pl.kind === 'walk' || pl.kind === 'pushThenWalk') && r.s + pl.start >= q.a && r.s + pl.start < q.b ? ' · <b>⚠ 计划下板</b>' : ''}</div>`).join(''); brainHUD.map = null; }
+    $('mapHead').innerHTML = head;
+    if (brainHUD.map !== cur) { const segs = el.querySelectorAll('.seg'); segs.forEach((d, i) => { d.classList.toggle('cur', i === cur); d.classList.toggle('done', i < cur); });
+      if (!brainHUD.userScroll) { const c = segs[cur]; if (c) el.scrollTop = c.offsetTop - el.clientHeight / 2; } brainHUD.map = cur; } return;
   }
-  el.innerHTML = body; }
+  if (!brainHUD.userScroll) el.innerHTML = body; }
 function stamHUD() {
   trickHUD(); brainHUD();
   const r = rider, f = r.stam;
@@ -548,6 +569,16 @@ function updateCamera(dt) {
   sunFollow(base);
 }
 function sunFollow(base) {
+  if (TOD === 'real') { const now = NAT.t || new Date(), sp = solarPos(now, NAT.lat, NAT.lon); NAT.sun = sp;
+    const el = Math.max(sp.el, 4 * Math.PI / 180), sdir = new THREE.Vector3(Math.sin(sp.az) * Math.cos(el), Math.sin(el), -Math.cos(sp.az) * Math.cos(el)).normalize();
+    const low = 1 - Math.min(1, Math.max(0, (sp.el * 180 / Math.PI - 4) / 30)), cl = NAT.cloud;   // low sun -> warm, long side light
+    sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
+    sun.color.setRGB(1, 0.93 - 0.17 * low, 0.82 - 0.3 * low); sun.intensity = (2.6 + 0.4 * low) * (1 - 0.55 * cl); hemi.color.set(low > 0.6 ? '#ffe2c4' : '#eef6ff'); hemi.groundColor.set('#c8b08a'); hemi.intensity = 0.6 + 0.8 * cl;   /* less sky fill under a clear sun -> the shade side stays shade (strong light/shade line) */
+    scene.fog.color.set(low > 0.6 ? '#f4d9bd' : '#d6ebf5'); renderer.toneMappingExposure = 1.08; window.__sky.uniforms.uWarm.value = low; window.__sky.uniforms.uSun.value.copy(sdir);
+    seaU.uSun.value.copy(sdir); seaU.uSunCol.value.copy(sun.color); seaU.uSky.value.set(low > 0.6 ? '#c9d6e0' : '#a8cdea'); seaU.uFog.value.copy(scene.fog.color);
+    const rim = low * (1 - cl); if (skirt) skirt.rimU.value.set(0.75 * rim, 0.52 * rim, 0.3 * rim); if (skirt2) skirt2.rimU.value.set(0.6 * rim, 0.45 * rim, 0.3 * rim);
+    rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2 * rim;
+    return; }
   if (TOD === 'golden') {
     const ahead = track.at(rider.s + 30).dir; const sdir = RD ? (() => { const v = (rider.__vd || new THREE.Vector3(1, 0, 0)).clone(); v.y = 0; v.normalize(); return new THREE.Vector3(v.x * 0.9 + 0.35, 0.16, v.z * 0.9).normalize(); })() : new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
     sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
@@ -565,7 +596,7 @@ function sunFollow(base) {
 }
 
 // ---------------- loop ----------------
-let slow = 1;
+let slow = 1, paused = false;
 function step(dt) {
   simT += dt; seaU.uT.value = simT; envU.uT.value = simT;
   // events by position
@@ -624,7 +655,7 @@ addEventListener('resize', resize); resize();
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000) * slow; last = now;
-  if (rider && !REC) step(dt);
+  if (rider && !REC && !paused) step(dt);
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -633,6 +664,11 @@ requestAnimationFrame(frame);
 
 document.querySelectorAll('[data-cam]').forEach((b) => b.onclick = () => { camMode = b.dataset.cam; camInit = false; document.querySelectorAll('[data-cam]').forEach((x) => x.classList.toggle('on', x === b)); });
 $('restart').onclick = restart;
+/* pause / resume (Cheney): freezes the simulation; camera still orbits so you can look around */
+const setPause = (p) => { paused = p; $('pause').textContent = p ? '▶' : '⏸'; $('pause').classList.toggle('on', p); };
+$('pause').onclick = (e) => { e.stopPropagation(); setPause(!paused); };
+$('restart2').onclick = (e) => { e.stopPropagation(); restart(); setPause(false); };
+addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); setPause(!paused); } });
 // debug switch: hides everything except the stamina bar (and the switch itself)
 const setDbg = (on) => { document.body.classList.toggle('nodbg', !on); $('dbg').classList.toggle('on', on); localStorage.sw_dbg = on ? '1' : '0'; };
 setDbg(Q.has('debug') ? Q.get('debug') !== '0' : localStorage.sw_dbg !== '0');
@@ -666,7 +702,8 @@ function startAudio() {
 const sndUI = () => { $('snd').textContent = AC && AC.state === 'running' ? '🔊' : '🔇'; };
 $('snd').onclick = (e) => { e.stopPropagation(); if (!AC) startAudio(); else if (AC.state === 'running') AC.suspend(); else AC.resume(); setTimeout(sndUI, 50); };
 if (!REC) addEventListener('pointerdown', function first() { removeEventListener('pointerdown', first); if (!AC) { startAudio(); setTimeout(sndUI, 50); } }, { once: true });   // browsers need a tap before audio
-$('tod').onclick = () => { TOD = TOD === 'golden' ? 'noon' : 'golden'; $('tod').textContent = TOD === 'golden' ? '☀️ 正午' : '🌅 夕阳'; };
+const TODS = ['real', 'noon', 'golden'], TODL = { real: '🕒 实时', noon: '☀️ 正午', golden: '🌅 夕阳' };
+$('tod').textContent = TODL[TOD] || TOD; $('tod').onclick = () => { TOD = TODS[(TODS.indexOf(TOD) + 1) % 3]; $('tod').textContent = TODL[TOD]; };
 $('slow').onclick = () => { slow = slow === 1 ? 0.35 : 1; $('slow').classList.toggle('on', slow !== 1); };
 // 360° orbit: drag to spin around her (any angle), pinch / wheel to zoom; double-tap to go back behind her
 const ptrs = new Map();

@@ -382,7 +382,7 @@ function restyleBreeze(vrm) {
   // legs: softer toon terminator + warm rim so knees, calves and thighs read as rounded forms in any light
   for (const m of matsByName(vrm, 'Body')) { if (!/Outline/.test(m.name)) legForm(m); }
   for (const m of matsByName(vrm, 'Body')) { const u = m.uniforms; if (!u) continue;
-    if (u.shadingToonyFactor) u.shadingToonyFactor.value = 0.42; if (u.shadingShiftFactor) u.shadingShiftFactor.value = -0.05;
+    if (u.shadingToonyFactor) u.shadingToonyFactor.value = 0.78; if (u.shadingShiftFactor) u.shadingShiftFactor.value = -0.12;   /* Cheney: a clear light/shade line on the legs that follows the sun */
     if (u.shadeColorFactor) u.shadeColorFactor.value.set(0.86, 0.68, 0.64);
     if (u.parametricRimColorFactor) u.parametricRimColorFactor.value.set(0.55, 0.42, 0.36); if (u.parametricRimFresnelPowerFactor) u.parametricRimFresnelPowerFactor.value = 3.2; if (u.parametricRimLiftFactor) u.parametricRimLiftFactor.value = 0.05; }
 }
