@@ -297,7 +297,7 @@ scene.add(petals);
 
 // ---------------- girl ----------------
 let vrm, rider, skirt, skirt2 = null, hair, hat;
-const ctx = { holes: HOLES, cruise: 3.5, vmax: 6.0, wind: new THREE.Vector3(), lookEvery: RD ? undefined : 999, camera };
+const ctx = { holes: HOLES, cruise: 6.4, vmax: 8.3, vFloor: 20 / 3.6, wind: new THREE.Vector3(), lookEvery: RD ? undefined : 999, camera };
 async function init() {
   const M = { shino: './models/shino.vrm', sample: './models/girl.vrm', a: './models/cand/AvatarSample_A.vrm', b: './models/sample_b.vrm', vita: './models/cand/Vita.vrm', vic: './models/cand/Victoria_Rubin.vrm' };
   vrm = await loadGirl(M[Q.get('m') || (OUTFIT === 'breeze' || OUTFIT === 'native' ? 'b' : 'shino')] || M.shino);
@@ -380,8 +380,20 @@ function trickHUD() { const r = rider, P = r.trickProg || { stam: r.stam, speed:
   $('trV').setAttribute('stroke-dashoffset', (213.6 * (1 - P.speed)).toFixed(1));
   $('trS').setAttribute('stroke', P.stam >= 0.95 ? '#ff8a5c' : '#6cbfb0');
   el.classList.toggle('ready', !!P.ready); $('trL').textContent = P.ready ? '转板!' : r.ollie?.kind === 'shove' ? '✨' : P.stam >= 0.95 ? '再快点' : '蓄力'; }
+// BRAIN panel (debug only): what she sees and why she does what she does
+function brainHUD() { const r = rider, el = $('brainNow'); if (!el || document.body.classList.contains('nodbg')) return;
+  if ((brainHUD.k = (brainHUD.k || 0) + 1) % 6) return;
+  const g = track.at(r.s).grade, pl = r.plan || {}, kmh = (r.v * 3.6).toFixed(1);
+  const act = r.rest ? (r.rest.sit ? '坐着休息' : '准备休息') : r.mode === 'walk' ? '拿板走路' : r.mode === 'on' ? '上板中' : r.mode === 'off' ? '下板中' : r.push ? '推板' : r.pump ? 'pump' : r.ollie ? (r.ollie.kind === 'shove' ? '转板' : 'ollie') : '滑行';
+  const planTxt = { flat: '前方平路/下坡', coast: '惯性就能过', carry: '借速度冲上去', push: '推板上坡', pushThenWalk: '先推，没力就走', walk: '太陡，要下板走' }[pl.kind] || '-';
+  el.innerHTML = `<b>${act}</b> · ${kmh} km/h · 坡 ${(Math.atan(g) * 57.3).toFixed(1)}°<br>体力 <b>${Math.round(r.stam * 100)}%</b> · 劳累 ${Math.round((1 - r.stam) * 100)}%<br>计划：<b>${planTxt}</b>` +
+    (pl.start !== undefined ? `<br>前方 ${pl.start}m 起坡 ${pl.L ?? '?'}m · 爬高 ${(pl.dh ?? 0).toFixed(1)}m · 最陡 ${(Math.atan(pl.maxG || 0) * 57.3).toFixed(0)}°` : '') +
+    (pl.need !== undefined ? `<br>需要 ${(pl.need / 1000).toFixed(1)}kJ / 有 ${(pl.have / 1000).toFixed(1)}kJ` + (pl.hCarry !== undefined ? ` · 冲坡高度 ${pl.hCarry}m` : '') : '') +
+    `<br>花样：${r.trickReady ? '<b>可以</b>' : r.stam < 0.7 ? '体力<70%' : r.v < 2.6 ? '速度不够' : r.v > (ctx.vmax ?? 6) + 1.2 ? '太快不安全' : '不合适'}`;
+  const L = (r.dlog || []).slice().reverse().slice(0, 14);
+  $('brainLog').innerHTML = L.map((d) => `<div>${Math.round(d.s)}m · ${d.msg}</div>`).join(''); }
 function stamHUD() {
-  trickHUD();
+  trickHUD(); brainHUD();
   const r = rider, f = r.stam;
   $('stamF').style.width = (f * 100).toFixed(1) + '%';
   const vm = ctx.vmax ?? 6, sp = Math.min(1, (r.v * r.v) / (vm * vm));   // speed bar = kinetic energy share of the top speed

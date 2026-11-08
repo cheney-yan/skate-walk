@@ -195,31 +195,39 @@ export class Rider {
       if (this.mode === 'ride') {
         const gdeg = Math.atan(grade) / D, cruise = (ctx.cruise ?? 3.0) * (gdeg > 2 ? clamp(1 - (gdeg - 2) * 0.1, 0.6, 1) : 1), vmax = ctx.vmax ?? 5.2;
         const holeSoon = (ctx.holes || []).some((h) => h - this.s > 0 && h - this.s < this.v * 0.42 + 0.35 + this.v * 1.3 + 0.5);
-        const needGo = !this.dance && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < cruise - 1.8 || (grade > 0.03 && this.v < cruise - 0.8));
+        const carrying = this.plan?.kind === 'carry' && grade > 0.02;
+        const pc0 = this.plan, climbAhead = pc0 && (pc0.kind === 'carry' || pc0.kind === 'push' || pc0.kind === 'pushThenWalk') && pc0.start !== undefined && pc0.start < 60;
+        const vFloor = (ctx.vFloor ?? 20 / 3.6) * (climbAhead && grade < 0.02 ? 1.55 : 1); this.vFloor = vFloor; this.vTarget = vFloor;   /* climb ahead: charge to ~31 km/h on the run-in */   /* Cheney: below ~20 km/h she works (pump / push) to bring it back */
+        const needGo = !this.dance && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < vFloor - 0.15 || (carrying && this.v < cruise));
         // PUMP (S-carve): rhythmic weight shifts through the turns convert body work into forward speed. Real pumping needs
         // speed to work (~>7 km/h) and is less efficient than a push, but feet stay on the board: she prefers it on the flat
         // and on gentle climbs (<3.5°) when she already rolls; below that speed (or steeper) she pushes.
-        const canPump = this.v > 1.9 && grade < 0.06 && Math.abs(kappa) < 0.06 && !this.push && !this.ollie && this.air <= 0 && !this.dance && this.stam > 0.05 && !holeSoon;
+        const canPump = this.v > 10 / 3.6 && grade < (carrying ? 0.12 : 0.06) && Math.abs(kappa) < 0.4 && !this.push && !this.ollie && this.air <= 0 && !this.dance && this.stam > 0.05 && !holeSoon;   /* pumping through bends too (carving IS the pump) */
         // The body steers the board: shoulders turn first, the hips follow, the board follows the hips. Intensity I sets the
         // style: elegant = slow, small, upright, rhythmic (gliding on the flat / downhill, I≈0.15); power = faster & bigger
         // when she needs speed (I→1). Steep climbs are never elegant: she pushes or walks.
-        const pumpGo = canPump && (needGo || (this.pump && this.pump.I > 0.4 && this.v < cruise - 0.6));
+        const pumpGo = canPump && (needGo || (this.pump && this.v < vFloor + 0.4));   /* keep pumping until a little above the floor */
         const wantPump = pumpGo;   // no idle pumping: when she has speed she stands tall and GLIDE-CARVES with her centre of mass
         const carveGo = !pumpGo && !this.push && !this.ollie && this.air <= 0 && this.v > 2.0 && Math.abs(kappa) < 0.08 && !holeSoon && grade < 0.04;
         this.glideA = damp(this.glideA || 0, carveGo ? 1 : 0, 0.8, dt); this.glidePh = (this.glidePh || 0) + 2 * Math.PI * 0.125 * dt;   // slow: one S every 8 s
-        const Itgt = pumpGo ? clamp(0.45 + (cruise - this.v) * 0.35 + Math.max(0, grade) * 8, 0.45, 1) : 0.15;
-        if (wantPump && !this.pump) this.pump = { t: 0, ph: 0, I: Itgt, A: 0 };
+        const Itgt = pumpGo ? clamp(0.35 + (vFloor - this.v) * 0.45 + Math.max(0, grade) * 9, 0.35, 1) : 0.15;   /* further below the floor / steeper -> harder, faster pumping */
+        if (wantPump && !this.pump) { this.pump = { t: 0, ph: 0, I: Itgt, A: 0 }; this.decide(carrying ? '借冲坡的速度上坡 + pump' : 'pump 补速度'); }
         if (this.pump) { const P = this.pump; P.t += dt; P.I = damp(P.I, Itgt, 0.8, dt); P.ph += 2 * Math.PI * (0.42 + 0.5 * P.I) * dt;
           P.A = damp(P.A, wantPump ? 1 : 0, 1.6, dt); if (!wantPump && P.A < 0.05) this.pump = null; }
-        if (!this.push && !(this.pump && pumpGo) && needGo && this.pushCool <= 0) { this.pump = null; this.startPush(grade); }
+        if (!this.push && !(this.pump && pumpGo) && needGo && this.v < 10 / 3.6 + 0.2 && this.pushCool <= 0) { this.pump = null; this.startPush(grade); }   /* push only below ~10 km/h, kick after kick; above that she pumps */
         if (this.pump) { const P = this.pump, ph = Math.sin(P.ph - 1.1) ** 2;   // propulsion peaks as the board loads mid-carve, twice per S
-          const pa = P.A * P.I * P.I * (0.2 + 0.36 * ph) * clamp((this.v - 1.2) / 1.2, 0, 1); a += pa; spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
+          const def = Math.max(0, (this.vFloor || 5.5) - this.v);
+          const pa = P.A * P.I * (0.25 + 0.35 * ph) * (0.6 + 0.5 * Math.min(1, def)) * clamp((this.v - 1.2) / 1.2, 0, 1) + P.A * P.I * Math.max(0, g * Math.sin(theta)) * 0.9; a += pa;   /* ~0.3-0.5 m/s² on the flat: 14->20 km/h in ~5 s; uphill adds what the slope takes away (and bills it) */   /* uphill she also pumps against the slope (costs proportionally more) */ spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
         const BASE = 110;   // W metabolic just standing balanced on a rolling board
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
         spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0) - (!this.push && !this.pump ? 25 : 0)) * dt;   // gliding = resting   // rolling downhill is the best rest: the bar fills fastest there
-        if (this.v > vmax) a -= (this.pump ? 1.1 : 1.6) * (this.v - vmax) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
+        this.ctxV = vmax; const pc = this.plan, upSoon = pc && pc.kind !== 'flat' && pc.start !== undefined && pc.start < 12 + this.v * 5;
+        const vCap = upSoon ? vmax + 2.2 : vmax;   /* a climb ahead: keep the speed, she'll spend it going up */
+        if (this.v > vCap) a -= (this.pump ? 1.1 : 1.6) * (this.v - vCap) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
         this.trickReady = this.mode === 'ride' && !holeSoon && this.stam >= 0.7 && grade < 0.035 && grade > -0.09 && this.v > 2.6 && this.v < vmax + 1.2 && !this.ollie && !this.push && this.air <= 0 && !this.dance && (this.trickCool ?? 0) <= 0;
         this.trickProg = { stam: this.stam, speed: clamp(this.v / 2.6, 0, 1), fast: this.v >= vmax + 1.2, ready: this.trickReady };
+        if (this.trickReady && !this._trWas) this.decide('蓄力够 + 速度合适：等你点转板'); this._trWas = this.trickReady;
+        if (upSoon && this.v > vmax && !this._upWas) this.decide('前方上坡：不刹车，留着速度冲上去'); this._upWas = upSoon && this.v > vmax;
         if (this.trickReq) { this.trickReq = false; if (this.trickReady) { this.startTrick('full'); this.look = null; } }
         this.pushCool -= dt; this.trickCool = (this.trickCool ?? 6) - dt; this.danceCool = (this.danceCool ?? 10) - dt;
         if (this.dance) { this.dance.t += dt * 0.75; if (this.dance.t > DANCE_T) { this.dance = null; this.danceCool = 14 + Math.random() * 8; } }
@@ -395,6 +403,7 @@ export class Rider {
   // and decides: momentum carries it -> just roll; bar covers it (with 25% margin) and it is not too steep
   // FOR ITS LENGTH -> push up; otherwise -> get off before it and walk.
   planClimb(track) {
+    { let v2 = this.v * this.v; for (let d = 0; d < 60; d += 2) { const gr = track(this.s + d).grade; if (gr > 0.01) break; v2 = Math.max(0, v2 + 2 * 9.81 * (-gr - CRR) * 2); } this.vPeakSoon = Math.min(Math.sqrt(v2), (this.ctxV || 5.2) + 2); }
     const m = 52, g = 9.81, Crr = CRR, vc = 2.0;
     let s = this.s, start = null, end = null, dh = 0, maxG = 0, L = 0;
     for (let d = 0; d <= 150; d += 1) {
@@ -413,17 +422,23 @@ export class Rider {
     // steepness limit depends on how long it is: a 6 m ramp can be pushed at ~10°, a long hill only up to ~6°
     const lim = Math.tan((steepLen <= 6 ? 10 : steepLen <= 15 ? 8 : 6) * D);
     const have = this.stam * EMAX;
+    // MOMENTUM (Cheney: use the run-in from the descent): height her speed can carry her up, after rolling/air losses
+    // over the distance to the top; plus what a few pumps add. If that covers the climb (or nearly), she rides it up.
+    const vNow = Math.max(this.v, this.vPeakSoon || 0), hCarry = (vNow * vNow) / (2 * g) - (Crr * L + 0.5 * 1.2 * CDA * vc * vc * L / (m * g)) * 0.8;
+    const pumpH = Math.min(have, 2500) * EFF * 0.6 / (m * g);   // a few pumps' worth of height
     let kind;
     if (work <= ke * 0.9) kind = 'coast';
+    else if (hCarry + pumpH * 0.7 >= dh && maxG < Math.tan(12 * D)) kind = 'carry';   // ride it up on her run-in speed (+ pumps), step off only if she stalls
     else if (maxG > lim) kind = 'walk';
     else if (have >= need * 1.25) kind = 'push';
     else kind = 'pushThenWalk';   // gentle but long: push while the bar lasts, step off when it runs dry (the 'tired' rule), walk the rest
-    return { kind, start, L, dh, maxG, need, have, steepLen };
+    return { kind, start, L, dh, maxG, need, have, steepLen, hCarry: +hCarry.toFixed(1) };
   }
+  decide(msg) { const L = this.dlog || (this.dlog = []); if (L.length && L[L.length - 1].msg === msg) return; L.push({ t: this.t, s: this.s, msg }); if (L.length > 40) L.shift(); }
   lookAhead(track, L) { let up = 0, down = 0; for (let d = 2; d <= L; d += 2) { const gr = track(this.s + d).grade; if (gr > 0.03) up += 2; if (gr < -0.02) down += 2; } return { up: up > L * 0.3, down: down > L * 0.4 }; }
   // REST (Cheney): energy at zero -> she stops at the roadside, puts the board down and sits on it; resting refills
   // fastest; she gets up at ~60% and carries on (walking, or back on the board if the road allows).
-  startRest() { this.rest = { t: 0, sit: false, s0: this.s }; this.ev.push(['rest', this.s]); }
+  startRest() { this.decide('体力 0：路边坐下休息'); this.rest = { t: 0, sit: false, s0: this.s }; this.ev.push(['rest', this.s]); }
   updateRest(dt) { const R = this.rest; if (!R) return; R.t += dt;
     R.sit = R.t > 1.2 && this.stam < 0.6; this.sitW = damp(this.sitW || 0, R.t > 1.0 && this.stam < 0.6 ? 1 : 0, 2.2, dt);
     if (this.stam >= 0.6 && this.sitW < 0.05) { this.rest = null; this.modeT = 0; } }
@@ -432,12 +447,13 @@ export class Rider {
     this.board.position.lerp(p, k); this.board.quaternion.slerp(q, k); this.board.updateMatrixWorld(true); }
   // ---------------- mode sequences ----------------
   startOff(why) {
+    this.decide('下板：' + ({ steep: '前面太陡（>6°）', long: '前面长坡，体力不够推', slow: '速度没了', tired: '体力耗尽' }[why] || why));
     this.push = null; this.dance = null;   /* pump keeps decaying smoothly through the brake, never frozen */ this.offWhy = why; this.mode = 'off'; this.modeT = 0;
     const r = Math.random(), kind = this.v > 3.2 ? (r < 0.6 ? 'slide' : 'heel') : (r < 0.34 ? 'slide' : r < 0.67 ? 'heel' : 'roll');
     this.seq = { kind, ph: 'brake', t: 0, decel: { slide: 2.6, heel: 1.4, roll: 0.45 }[kind] };
     this.ev.push(['off', this.s, kind, why]);
   }
-  startOn() { this.mode = 'on'; this.modeT = 0; const bs = this.s + 0.75; this.seq = { ph: 'drop', t: 0, bs }; this.slowT = 0; this.ev.push(['on', this.s]); }
+  startOn() { this.decide('上板：前面能滑（体力 ' + Math.round(this.stam * 100) + '%）'); this.mode = 'on'; this.modeT = 0; const bs = this.s + 0.75; this.seq = { ph: 'drop', t: 0, bs }; this.slowT = 0; this.ev.push(['on', this.s]); }
   requestTrick() { this.trickReq = true; return !!this.trickReady; }
   startTrick(why) {
     this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 6 : 20;   /* player-triggered: short cooldown, the 70% bar is the real limit */
@@ -640,7 +656,7 @@ export class Rider {
     const L = (j) => lerp(a[j], b[j], f), arc = (j) => (a[j] !== b[j] ? Math.sin(f * Math.PI) * 0.07 : 0);
     return { lz: L(1), rz: L(2), ly: arc(1) + L(3), ry: arc(2) + L(4), lx: L(5), rx: L(6), k: i };
   }
-  startPush(grade) {
+  startPush(grade) { this.decide(grade > 0.03 ? '上坡推板' : '速度低，推板');
     const T = grade > 0.03 ? 1.0 : 1.3;
     this.push = { t: 0, T, contact: null };
     this.pushCount++;
@@ -650,7 +666,8 @@ export class Rider {
     // contact window inside the cycle
     const c0 = 0.3 * p.T, c1 = c0 + clamp(0.6 / Math.max(this.v, 0.6), 0.22, 0.45);   // a long stroke: the foot stays on the road while the body rolls past
     p.c0 = c0; p.c1 = c1;
-    return p.t > c0 && p.t < c1 && !p.abort ? PUSH_F / MASS : 0;
+    const gr = this.gradeNow || 0, def = Math.max(0, (this.vFloor || 5.5) - this.v), F = clamp(PUSH_F + 70 * def + MASS * 9.81 * Math.max(0, Math.sin(Math.atan(gr))) * 1.6, 120, 380);
+    p.F = F; return p.t > c0 && p.t < c1 && !p.abort ? F / MASS : 0;   /* harder kick when slower / uphill; the work F·v is billed to the stamina bar */
   }
 
   stateWeights(dt, grade, ctx) {
@@ -658,7 +675,7 @@ export class Rider {
     if (this.push) {
       this.push.t += dt;
       if (this.push.t >= this.push.T) {
-        this.push = null; this.pushCool = 0.7;   // one breath between kicks: push, ride, push — never a scramble
+        this.push = null; this.pushCool = this.v < 10 / 3.6 ? 0.05 : 0.7;   /* still slow: next kick straight away (蹬蹬蹬) */
       }
     }
     w.push = damp(w.push, this.push ? 1 : 0, 7, dt);
