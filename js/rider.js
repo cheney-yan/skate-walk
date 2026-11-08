@@ -233,8 +233,11 @@ export class Rider {
            (dance steps, hair, look-back) — recovers, fast. Not when it's fast (>= noRestKmh you're working to stay balanced;
            full rate at <= restFullKmh). Pushing / pumping / spins cost as before. */
         const EN = PROFILE.energy, kmhN = this.v * 3.6, calm = !this.push && !this.pump && !this.ollie && this.air <= 0;
-        const rideRest = calm ? EN.rideRestW * clamp((EN.noRestKmh - kmhN) / (EN.noRestKmh - EN.restFullKmh), 0, 1) : 0;
-        spend += (BASE - P_AERO - rideRest + Math.max(0, theta - EN.restGradeDeg * D) / D * 30) * dt;   /* gliding above the 6° line costs a little */   // gliding = resting   // rolling downhill is the best rest: the bar fills fastest there
+        const rideRest = calm ? (EN.rideRestW ?? EN.walkRestW) * clamp((EN.noRestKmh - kmhN) / (EN.noRestKmh - EN.restFullKmh), 0, 1) : 0;
+        /* Cheney: standing on the board doing nothing costs NOTHING; at normal speeds it recovers exactly like walking on the flat
+           (rideRestW defaults to walkRestW). Only very fast (>= noRestKmh) the recovery fades to zero — never a cost. */
+        if (calm) spend -= rideRest * dt;
+        else spend += (BASE - P_AERO + Math.max(0, theta - EN.restGradeDeg * D) / D * 30) * dt;   /* gliding above the 6° line costs a little */   // gliding = resting   // rolling downhill is the best rest: the bar fills fastest there
         this.ctxV = vmax; const pc = this.plan, upSoon = pc && pc.climbAt !== undefined && pc.climbAt !== null && pc.climbAt < 12 + this.v * 8;
         const vCap = upSoon ? vmax + 2.2 : vmax;   /* a climb ahead: keep the speed, she'll spend it going up */
         if (this.v > vCap) a -= (this.pump ? 1.1 : 1.6) * (this.v - vCap) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
