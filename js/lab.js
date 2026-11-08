@@ -597,8 +597,10 @@ function sunFollow(base) {
 
 // ---------------- loop ----------------
 let slow = 1, paused = false;
+let REFV = null;   /* ?ref=<move>[/<sample>] skeleton replay (js/refview.js) */
 function step(dt) {
   simT += dt; seaU.uT.value = simT; envU.uT.value = simT;
+  if (REFV) REFV.step(dt);
   // events by position
   if (lookIdx < LOOKS.length && rider.s > LOOKS[lookIdx]) { rider.nextLook = 0; lookIdx++; }
   windNow.lerp(LAB_WIND.v || windTarget(rider.s), 1 - Math.exp(-dt * 1.2));   // LAB_WIND.v: test override (world m/s)
@@ -660,13 +662,24 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 await init();
+if (Q.get('ref')) { try { REFV = await (await import('./refview.js')).attach({ renderer, camera, THREE, Q }); window.REFV = REFV; } catch (e) { console.error('refview', e); } }
 requestAnimationFrame(frame);
 
 document.querySelectorAll('[data-cam]').forEach((b) => b.onclick = () => { camMode = b.dataset.cam; camInit = false; document.querySelectorAll('[data-cam]').forEach((x) => x.classList.toggle('on', x === b)); });
 $('restart').onclick = restart;
 // ---- MAP VIEW (Cheney): our own baked data drawn top-down — terrain hillshade, sea, coast/cliffs, buildings, the route
 // (coloured by grade) and where she is; drag to pan, pinch/wheel to zoom. Links open the same spot in Google Maps / Earth 3D.
-const MAP = { on: false, z: 1.2, cx: 0, cy: 0, base: null };
+// Modes: 'ours' (2D baked data) | 'o3d' (the real three.js scene rendered straight down, orthographic, same view) |
+// 'sat' (open aerial imagery tiles, display only) | 'cmp' (swipe: left = ours 2D/3D, right = imagery, drag the bar).
+// Imagery is for VISUAL comparison only; nothing is read back from it (Google's terms forbid deriving content; NSW
+// Spatial Services imagery is CC BY 4.0, Esri World Imagery needs its attribution line).
+const MAP = { on: false, z: 1.2, cx: 0, cy: 0, base: null, mode: 'ours', left: 'ours', split: 0.5, lines: false, src: 'nsw', tiles: new Map(), c3: null, v3: null, t3: 0 };
+const SAT = {
+  nsw: { url: (z, y, x) => `https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/${z}/${y}/${x}`, max: 21, attr: 'Imagery © Spatial Services NSW, Dept of Customer Service (CC BY 4.0)' },
+  esri: { url: (z, y, x) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`, max: 19, attr: 'Imagery: Esri, Maxar, Earthstar Geographics, and the GIS User Community' },
+};
+/* local projection used by every bake script (build_route.py / terrain.py): x = (lon-lon0)*kx, y(north) = (lat-lat0)*ky */
+const MPROJ = RD ? { lat0: RD.start[0], lon0: RD.start[1], kx: 111320 * Math.cos(RD.start[0] * Math.PI / 180), ky: 110540 } : null;
 function routeLatLon(s) { if (!RD) return null; const P = RD.pts, f = s / track.total * RD.length; let k = 0; while (k < P.length - 2 && P[k + 1].s < f) k++;
   const a = P[k], b = P[k + 1], t = b.s > a.s ? Math.min(1, Math.max(0, (f - a.s) / (b.s - a.s))) : 0; return { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t }; }
 function mapBase() { if (MAP.base || !RD) return MAP.base; const T = RD.terrain, H = terrainFn(T), W = T.nx, Hh = T.ny, c = document.createElement('canvas'); c.width = W; c.height = Hh;
@@ -676,34 +689,88 @@ function mapBase() { if (MAP.base || !RD) return MAP.base; const T = RD.terrain,
     let r, gg, b; if (h <= 0.2) { r = 150; gg = 196; b = 224; } else { const k = Math.min(1, h / 80); r = 196 - 60 * k; gg = 214 - 50 * k; b = 168 - 50 * k; }
     im.data[o] = r * shade; im.data[o + 1] = gg * shade; im.data[o + 2] = b * shade; im.data[o + 3] = 255; }
   g.putImageData(im, 0, 0); MAP.base = c; return c; }
+/* route line coloured by grade (green down .. grey flat .. orange up .. red too steep) */
+function mapRoute(g, P, w = 4, plain = null) { g.lineWidth = w; g.lineCap = 'round'; const col = (gr) => gr < -0.035 ? '#3b8f6a' : gr < -0.01 ? '#6cbfb0' : gr <= 0.01 ? '#888' : gr <= Math.tan(6 * Math.PI / 180) ? '#d08a3c' : '#c4512f';
+  for (let s = 0; s < track.total - 2; s += 2) { const a = track.at(s).p, b = track.at(s + 2).p; g.strokeStyle = plain || col(track.at(s + 1).grade); g.globalAlpha = plain ? 0.9 : s < rider.s ? 0.45 : 1; g.beginPath(); g.moveTo(...P(a.x, a.z)); g.lineTo(...P(b.x, b.z)); g.stroke(); }
+  g.globalAlpha = 1; }
+function mapCoast(g, P, thin = false) { for (const c of RD.coast || []) { g.strokeStyle = thin ? (c.kind === 'cliff' ? '#ff9a3c' : '#ffe14a') : c.kind === 'cliff' ? '#8a6a4a' : '#e8d6a0'; g.lineWidth = thin ? 1.4 : c.kind === 'cliff' ? 2 : 1.5;
+  g.beginPath(); c.line.forEach(([x, y], i) => { const [a, b2] = P(x, -y); i ? g.lineTo(a, b2) : g.moveTo(a, b2); }); g.stroke(); } }
+function mapOurs2D(g, P, sc, Wc, Hc) { g.fillStyle = '#96c4e0'; g.fillRect(0, 0, Wc, Hc); if (!RD) return;
+  const T = RD.terrain, b = mapBase(); const [x0, y0] = P(T.x0, -(T.y0 + (T.ny - 1) * T.step)); g.imageSmoothingEnabled = true; g.drawImage(b, x0, y0, (T.nx - 1) * T.step * sc, (T.ny - 1) * T.step * sc);
+  g.fillStyle = 'rgba(214,196,170,.95)'; g.strokeStyle = 'rgba(120,100,80,.6)'; g.lineWidth = 0.6;
+  for (const bd of RD.buildings || []) { g.beginPath(); bd.poly.forEach(([x, y], i) => { const [a, c] = P(x, -y); i ? g.lineTo(a, c) : g.moveTo(a, c); }); g.closePath(); g.fill(); g.stroke(); }
+  mapCoast(g, P); mapRoute(g, P); }
+/* the actual 3D scene seen straight down (orthographic, north up, same centre/scale); re-rendered when the view settles,
+   the last render is reused (shifted/scaled) while dragging */
+function map3DRender(Wc, Hc) { const cam = MAP.ocam || (MAP.ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 3000)), hw = Wc / 2 / MAP.z, hh = Hc / 2 / MAP.z;
+  cam.left = -hw; cam.right = hw; cam.top = hh; cam.bottom = -hh; cam.position.set(MAP.cx, 520, MAP.cy); cam.up.set(0, 0, -1); cam.lookAt(MAP.cx, 0, MAP.cy); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+  const fog = scene.fog; scene.fog = null; renderer.render(scene, cam); scene.fog = fog;
+  const d = devicePixelRatio || 1, c = MAP.c3 || (MAP.c3 = document.createElement('canvas')); c.width = Wc * d; c.height = Hc * d; c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height);
+  MAP.v3 = { cx: MAP.cx, cy: MAP.cy, z: MAP.z, W: Wc, H: Hc }; MAP.t3 = performance.now(); }
+function mapOurs3D(g, P, sc, Wc, Hc) { const v = MAP.v3, fresh = v && v.cx === MAP.cx && v.cy === MAP.cy && v.z === MAP.z && v.W === Wc && v.H === Hc;
+  if (!fresh && (!MAP.drag || !v)) { map3DRender(Wc, Hc); }
+  else if (!fresh) { clearTimeout(MAP.t3h); MAP.t3h = setTimeout(() => { if (MAP.on) drawMap(); }, 180); }
+  else if (MAP.follow && performance.now() - MAP.t3 > 1000) map3DRender(Wc, Hc);
+  const u = MAP.v3; g.fillStyle = '#7fa9c4'; g.fillRect(0, 0, Wc, Hc); const [x0, y0] = P(u.cx - u.W / 2 / u.z, u.cy - u.H / 2 / u.z); g.drawImage(MAP.c3, x0, y0, u.W / u.z * sc, u.H / u.z * sc); }
+/* web-mercator tiles placed through the same lat/lon <-> local metres projection (piecewise per tile, < 1 cm error) */
+function mapSat(g, P, sc, Wc, Hc, ox, oy) { const S = SAT[MAP.src], M = MPROJ, d = devicePixelRatio || 1; g.fillStyle = '#3b4a52'; g.fillRect(0, 0, Wc, Hc); if (!M) return;
+  const z = Math.max(10, Math.min(S.max, Math.round(Math.log2(156543.034 * Math.cos(M.lat0 * Math.PI / 180) * sc * d)))), n = 2 ** z;
+  const lonOf = (X) => M.lon0 + X / M.kx, latOf = (Z) => M.lat0 - Z / M.ky;
+  const tx = (lon) => (lon + 180) / 360 * n, ty = (lat) => (1 - Math.asinh(Math.tan(lat * Math.PI / 180)) / Math.PI) / 2 * n;
+  const lonT = (x) => x / n * 360 - 180, latT = (y) => Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
+  const X0 = -ox / sc, X1 = (Wc - ox) / sc, Z0 = -oy / sc, Z1 = (Hc - oy) / sc;
+  const i0 = Math.floor(tx(lonOf(X0))), i1 = Math.floor(tx(lonOf(X1))), j0 = Math.floor(ty(latOf(Z0))), j1 = Math.floor(ty(latOf(Z1)));
+  const get = (zz, x, y) => { const k = MAP.src + '/' + zz + '/' + y + '/' + x; let t = MAP.tiles.get(k);
+    if (!t) { if (MAP.tiles.size > 400) MAP.tiles.delete(MAP.tiles.keys().next().value); t = new Image(); t.crossOrigin = 'anonymous'; t.onload = () => { t.ok = true; if (MAP.on) drawMap(); }; t.src = S.url(zz, y, x); MAP.tiles.set(k, t); }
+    return t; };
+  const peek = (zz, x, y) => MAP.tiles.get(MAP.src + '/' + zz + '/' + y + '/' + x);
+  g.imageSmoothingEnabled = true;
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { if (j1 - j0 > 24 || i1 - i0 > 24) break;
+    const [ax, ay] = P((lonT(i) - M.lon0) * M.kx, -(latT(j) - M.lat0) * M.ky), [bx, by] = P((lonT(i + 1) - M.lon0) * M.kx, -(latT(j + 1) - M.lat0) * M.ky);
+    const t = get(z, i, j); if (t.ok) { g.drawImage(t, ax, ay, bx - ax + 0.5, by - ay + 0.5); continue; }
+    /* placeholder: crop of an already-loaded parent tile */
+    for (let up = 1; up <= 5; up++) { const f = 2 ** up, p = peek(z - up, Math.floor(i / f), Math.floor(j / f)); if (p && p.ok) { const s = 256 / f; g.drawImage(p, (i % f) * s, (j % f) * s, s, s, ax, ay, bx - ax + 0.5, by - ay + 0.5); break; } } }
+  MAP.satZ = z; }
 function drawMap() { const cv = $('mapC'), d = devicePixelRatio || 1; cv.width = cv.clientWidth * d; cv.height = cv.clientHeight * d; const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
-  const Wc = cv.clientWidth, Hc = cv.clientHeight; g.fillStyle = '#96c4e0'; g.fillRect(0, 0, Wc, Hc);
-  const pos = track.at(rider.s).p, sc = MAP.z, ox = Wc / 2 - (MAP.cx) * sc, oy = Hc / 2 - (MAP.cy) * sc;   // world X east, world Z south (-north)
+  const Wc = cv.clientWidth, Hc = cv.clientHeight, pos = track.at(rider.s).p, sc = MAP.z, ox = Wc / 2 - (MAP.cx) * sc, oy = Hc / 2 - (MAP.cy) * sc;
+  /* world X east, world Z south (-north) */
   const P = (X, Z) => [ox + X * sc, oy + Z * sc];
-  if (RD) { const T = RD.terrain, b = mapBase(); const [x0, y0] = P(T.x0, -(T.y0 + (T.ny - 1) * T.step)); g.imageSmoothingEnabled = true; g.drawImage(b, x0, y0, (T.nx - 1) * T.step * sc, (T.ny - 1) * T.step * sc);
-    g.fillStyle = 'rgba(214,196,170,.95)'; g.strokeStyle = 'rgba(120,100,80,.6)'; g.lineWidth = 0.6;
-    for (const bd of RD.buildings || []) { g.beginPath(); bd.poly.forEach(([x, y], i) => { const [a, c] = P(x, -y); i ? g.lineTo(a, c) : g.moveTo(a, c); }); g.closePath(); g.fill(); g.stroke(); }
-    for (const c of RD.coast || []) { g.strokeStyle = c.kind === 'cliff' ? '#8a6a4a' : '#e8d6a0'; g.lineWidth = c.kind === 'cliff' ? 2 : 1.5; g.beginPath(); c.line.forEach(([x, y], i) => { const [a, b2] = P(x, -y); i ? g.lineTo(a, b2) : g.moveTo(a, b2); }); g.stroke(); } }
-  // route, coloured by grade (green down .. grey flat .. orange up .. red too steep)
-  g.lineWidth = 4; g.lineCap = 'round'; const col = (gr) => gr < -0.035 ? '#3b8f6a' : gr < -0.01 ? '#6cbfb0' : gr <= 0.01 ? '#888' : gr <= Math.tan(6 * Math.PI / 180) ? '#d08a3c' : '#c4512f';
-  for (let s = 0; s < track.total - 2; s += 2) { const a = track.at(s).p, b = track.at(s + 2).p; g.strokeStyle = col(track.at(s + 1).grade); g.globalAlpha = s < rider.s ? 0.45 : 1; g.beginPath(); g.moveTo(...P(a.x, a.z)); g.lineTo(...P(b.x, b.z)); g.stroke(); }
-  g.globalAlpha = 1;
-  // her: dot + heading
+  const left = (MAP.mode === 'o3d' || (MAP.mode === 'cmp' && MAP.left === 'o3d')) ? mapOurs3D : mapOurs2D;
+  if (MAP.mode === 'sat') { mapSat(g, P, sc, Wc, Hc, ox, oy); if (MAP.lines && RD) { mapCoast(g, P, true); mapRoute(g, P, 1.6, '#ff3df0'); } }
+  else if (MAP.mode === 'cmp') { const sx = Math.round(Wc * MAP.split); left(g, P, sc, Wc, Hc);
+    g.save(); g.beginPath(); g.rect(sx, 0, Wc - sx, Hc); g.clip(); mapSat(g, P, sc, Wc, Hc, ox, oy); if (MAP.lines && RD) { mapCoast(g, P, true); mapRoute(g, P, 1.6, '#ff3df0'); } g.restore();
+    g.fillStyle = '#fff'; g.fillRect(sx - 1.5, 0, 3, Hc); g.beginPath(); g.arc(sx, Hc / 2, 15, 0, Math.PI * 2); g.fill(); g.fillStyle = '#3d3630'; g.font = '600 13px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('⇆', sx, Hc / 2 + 1); }
+  else left(g, P, sc, Wc, Hc);
+  /* her: dot + heading */
   const [hx, hy] = P(pos.x, pos.z), dir = track.at(rider.s).dir; g.fillStyle = '#ff5a8a'; g.strokeStyle = '#fff'; g.lineWidth = 2.5; g.beginPath(); g.arc(hx, hy, 7, 0, Math.PI * 2); g.fill(); g.stroke();
   g.strokeStyle = '#ff5a8a'; g.lineWidth = 3; g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + dir.x * 20, hy + dir.z * 20); g.stroke();
+  /* scale bar */
+  { const m = [5, 10, 20, 50, 100, 200, 500, 1000].find((v) => v * sc > 60) || 1000; g.fillStyle = 'rgba(255,250,240,.85)'; g.fillRect(8, Hc - 54, m * sc + 16, 20); g.fillStyle = '#3d3630'; g.fillRect(16, Hc - 42, m * sc, 3); g.font = '600 10px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(m + ' m', 18, Hc - 45); }
   const ll = routeLatLon(rider.s); $('mapInfo').textContent = `${rider.s.toFixed(0)}/${track.total.toFixed(0)} m` + (ll ? ` · ${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}` : ' · 练习场');
   if (ll) { $('mapG').href = `https://www.google.com/maps/@${ll.lat},${ll.lon},19z`; $('mapE').href = `https://earth.google.com/web/@${ll.lat},${ll.lon},40a,300d,35y,0h,60t,0r`; }
-  $('mapG').style.display = $('mapE').style.display = ll ? '' : 'none'; }
+  $('mapG').style.display = $('mapE').style.display = ll ? '' : 'none';
+  const satOn = MAP.mode === 'sat' || MAP.mode === 'cmp'; $('mapAttr').textContent = satOn ? SAT[MAP.src].attr + ' · 仅供目视对比' : (MAP.mode === 'o3d' || (MAP.mode === 'cmp' && MAP.left === 'o3d')) ? '我们的 3D 场景俯视' : '我们的烘焙数据';
+  document.querySelectorAll('#map [data-mm]').forEach((b) => b.classList.toggle('on', b.dataset.mm === MAP.mode || (MAP.mode === 'cmp' && b.dataset.mm === MAP.left)));
+  $('mapSrc').textContent = MAP.src === 'nsw' ? 'NSW 航拍' : 'Esri'; $('mapSrc').style.display = $('mapLn').style.display = satOn ? '' : 'none'; $('mapLn').classList.toggle('on', MAP.lines); }
 function mapLoop() { if (!MAP.on) return; if (MAP.follow) { const p = track.at(rider.s).p; MAP.cx = p.x; MAP.cy = p.z; } drawMap(); setTimeout(() => requestAnimationFrame(mapLoop), 200); }
 $('mapBtn').onclick = (e) => { e.stopPropagation(); MAP.on = !MAP.on; $('map').classList.toggle('on', MAP.on); $('mapBtn').classList.toggle('on', MAP.on); if (MAP.on) { MAP.follow = true; mapLoop(); } };
 $('mapX').onclick = (e) => { e.stopPropagation(); MAP.on = false; $('map').classList.remove('on'); $('mapBtn').classList.remove('on'); };
-{ const mp = new Map(); let pd = 0; const cv = $('mapC');
-  cv.addEventListener('pointerdown', (e) => { mp.set(e.pointerId, { x: e.clientX, y: e.clientY }); cv.setPointerCapture(e.pointerId); });
-  cv.addEventListener('pointermove', (e) => { const p = mp.get(e.pointerId); if (!p) return; if (mp.size === 1) { MAP.follow = false; MAP.cx -= (e.clientX - p.x) / MAP.z; MAP.cy -= (e.clientY - p.y) / MAP.z; }
-    else if (mp.size === 2) { const [a, b] = [...mp.values()], d0 = Math.hypot(a.x - b.x, a.y - b.y); p.x = e.clientX; p.y = e.clientY; const [c, f] = [...mp.values()], d1 = Math.hypot(c.x - f.x, c.y - f.y); if (d0 > 0) MAP.z = Math.min(12, Math.max(0.15, MAP.z * d1 / d0)); }
+document.querySelectorAll('#map [data-mm]').forEach((b) => b.onclick = (e) => { e.stopPropagation(); const m = b.dataset.mm;
+  if (m === 'ours' || m === 'o3d') { MAP.left = m; if (MAP.mode !== 'cmp') MAP.mode = m; } else if (m === 'cmp') MAP.mode = MAP.mode === 'cmp' ? MAP.left : 'cmp'; else MAP.mode = 'sat';
+  MAP.v3 = null; drawMap(); });
+window.__MAP = MAP; window.__drawMap = drawMap; window.__mapProj = MPROJ;
+$('mapSrc').onclick = (e) => { e.stopPropagation(); MAP.src = MAP.src === 'nsw' ? 'esri' : 'nsw'; drawMap(); };
+$('mapLn').onclick = (e) => { e.stopPropagation(); MAP.lines = !MAP.lines; drawMap(); };
+{ const mp = new Map(); const cv = $('mapC');
+  cv.addEventListener('pointerdown', (e) => { mp.set(e.pointerId, { x: e.clientX, y: e.clientY }); cv.setPointerCapture(e.pointerId); MAP.drag = true;
+    const r = cv.getBoundingClientRect(); MAP.splitDrag = MAP.mode === 'cmp' && mp.size === 1 && Math.abs(e.clientX - r.left - r.width * MAP.split) < 24; });
+  cv.addEventListener('pointermove', (e) => { const p = mp.get(e.pointerId); if (!p) return;
+    if (MAP.splitDrag && mp.size === 1) { const r = cv.getBoundingClientRect(); MAP.split = Math.min(0.97, Math.max(0.03, (e.clientX - r.left) / r.width)); }
+    else if (mp.size === 1) { MAP.follow = false; MAP.cx -= (e.clientX - p.x) / MAP.z; MAP.cy -= (e.clientY - p.y) / MAP.z; }
+    else if (mp.size === 2) { const [a, b] = [...mp.values()], d0 = Math.hypot(a.x - b.x, a.y - b.y); p.x = e.clientX; p.y = e.clientY; const [c, f] = [...mp.values()], d1 = Math.hypot(c.x - f.x, c.y - f.y); if (d0 > 0) MAP.z = Math.min(16, Math.max(0.15, MAP.z * d1 / d0)); }
     p.x = e.clientX; p.y = e.clientY; drawMap(); });
-  const up = (e) => mp.delete(e.pointerId); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-  cv.addEventListener('wheel', (e) => { e.preventDefault(); MAP.z = Math.min(12, Math.max(0.15, MAP.z * Math.exp(-e.deltaY * 0.0015))); drawMap(); }, { passive: false });
+  const up = (e) => { mp.delete(e.pointerId); if (!mp.size) { MAP.drag = false; MAP.splitDrag = false; drawMap(); } }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); MAP.z = Math.min(16, Math.max(0.15, MAP.z * Math.exp(-e.deltaY * 0.0015))); drawMap(); }, { passive: false });
   cv.addEventListener('dblclick', () => { MAP.follow = true; }); }
 /* pause / resume (Cheney): freezes the simulation; camera still orbits so you can look around */
 const setPause = (p) => { paused = p; $('pause').textContent = p ? '▶' : '⏸'; $('pause').classList.toggle('on', p); };
@@ -763,7 +830,7 @@ let hideT; addEventListener('pointerdown', () => { $('ui').style.opacity = 1; cl
 // deterministic recording hooks
 window.LAB = {
   scene, THREE, rider: () => rider, hairState: () => hair.state, setWind: (v) => { LAB_WIND.v = v; }, track, skirt: () => skirt, skirt2: () => skirt2, vrm: () => vrm, camera,
-  drone: () => drone,
+  drone: () => drone, ref: () => REFV,
   setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },

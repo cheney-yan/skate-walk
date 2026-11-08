@@ -50,6 +50,8 @@
   #map .mbar{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top) + 8px);display:flex;gap:6px;align-items:center;padding:0 10px;flex-wrap:wrap}
   #map .mbar>*{background:rgba(255,250,240,.9);border-radius:16px;padding:7px 11px;font-size:12px;font-weight:600;color:#3d3630;text-decoration:none;border:0;box-shadow:0 1px 6px rgba(0,0,0,.12)}
   #mapX{margin-left:auto}
+  #map .mmode{top:calc(env(safe-area-inset-top) + 46px)} #map .mbar button.on{background:#3d3630;color:#fff8ec}
+  #mapAttr{position:absolute;right:6px;bottom:calc(env(safe-area-inset-bottom) + 6px);max-width:70%;font-size:10px;color:#3d3630;background:rgba(255,250,240,.82);padding:3px 7px;border-radius:8px;text-align:right}
 </style>
 </head>
 <body>
@@ -69,7 +71,7 @@
 <div id="stam"><div class="bar"><div id="spdF" class="fill"></div></div><div id="spdT" class="bt">💨</div><div class="bar" id="stamB"><div id="stamF" class="fill"></div></div><div id="stamT" class="bt">🪶</div></div>
 <div id="brain"><div class="tabs"><button data-t="girl" class="on">女孩</button><button data-t="nature">自然</button><button data-t="mind">决策</button><button data-t="map">全图</button></div><div class="pane" id="brainPane"></div></div>
 <div id="corner"><button id="pause" aria-label="暂停">⏸</button><button id="restart2" aria-label="重开">↺</button><button id="mapBtn" aria-label="地图">🗺</button><button id="snd">🔇</button><button id="dbg">debug</button></div>
-<div id="map"><canvas id="mapC"></canvas><div class="mbar"><span id="mapInfo"></span><a id="mapG" target="_blank" rel="noopener">Google 地图 ↗</a><a id="mapE" target="_blank" rel="noopener">Google Earth 3D ↗</a><button id="mapX">✕</button></div></div>
+<div id="map"><canvas id="mapC"></canvas><div class="mbar"><span id="mapInfo"></span><a id="mapG" target="_blank" rel="noopener">Google 地图 ↗</a><a id="mapE" target="_blank" rel="noopener">Google Earth 3D ↗</a><button id="mapX">✕</button></div><div class="mbar mmode"><button data-mm="ours" class="on">我们 2D</button><button data-mm="o3d">我们 3D</button><button data-mm="sat">卫星</button><button data-mm="cmp">对比</button><button id="mapSrc">NSW 航拍</button><button id="mapLn">叠线</button></div><div id="mapAttr"></div></div>
 <div id="load">加载女孩模型（10MB）…</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 <script type="module" src="./js/lab.js"></script>

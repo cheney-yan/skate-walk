@@ -21,7 +21,7 @@ Output data/env.json:
                b then columns a) = height change in cm vs the bilinear coarse surface (cut under/beside the road,
                embankment fill so the road always sits on land). See 'ground mesh height' below.
 """
-import json, base64, math, os, random
+import json, base64, math, os, random, zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SEED = 20261108
@@ -149,6 +149,21 @@ try:   # OSM parks (lawns): Bondi Park, Marks Park, Tamarama/Bronte Park ...
             P = [((g['lon'] - lon0) * kx, (g['lat'] - lat0) * ky) for g in e['geometry']]
             if len(P) > 3: PARK.append((P, bbox(P)))
 except FileNotFoundError: pass
+# open land cover (tools/landcover.py -> data/landcover.json): ESA WorldCover 2021 class fractions + Sentinel-2 median
+# true colour per terrain vertex. Missing file -> the old height/sea-distance rules alone (LC = None).
+LC = S2 = None
+try:
+    _L = json.load(open(f'{ROOT}/data/landcover.json'))
+    if _L['nx'] == NX and _L['ny'] == NY and not os.environ.get('ENV_NO_LC'):
+        _lc, _s2 = zlib.decompress(base64.b64decode(_L['lc'])), zlib.decompress(base64.b64decode(_L['s2']))
+        LC = {f: [_lc[k * 6 + n] / 255 for k in range(NX * NY)] for n, f in enumerate(_L['fields'])}
+        S2 = [(_s2[k * 3], _s2[k * 3 + 1], _s2[k * 3 + 2]) for k in range(NX * NY)]
+        print('landcover: WorldCover + Sentinel-2 (%d scenes)' % len(_L['s2_scenes']))
+except FileNotFoundError: print('landcover: data/landcover.json missing -> rule-based ground only')
+def s2_green(k):
+    """Sentinel-2 vegetation tone at a vertex -> 0 straw/brown .. 1 lush green (excess-green index, smoothed 10 m)"""
+    r, g, b = S2[k]; t = r + g + b or 1; exg = (2 * g - r - b) / t
+    return clamp((exg - 0.02) / 0.3, 0, 1) * clamp((330 - t) / 120, 0.35, 1)    # bright pixels (roofs/sand) read as dry
 def inside_any(L, x, y, m=0.0):
     for P, (a, b, c, d) in L:
         if a - m <= x <= b + m and c - m <= y <= d + m and poly_contains(P, x, y): return True
@@ -206,12 +221,43 @@ for j in range(NY):
         d *= (1 - 0.65 * park) * (1 - s) * (1 - r)
         # green-ness: Aussie coastal grass = mix of green / olive / straw; parks are watered and mown
         g = 0.5 + 0.55 * (fbm(x / 70, y / 70, 13) - 0.5) * 2 + 0.35 * park - 0.25 * sstep(110, 35, ds) - 0.15 * sstep(0.25, 0.6, sl)
+        if LC:
+            # WorldCover drives the classes; the old rules only split 'bare' into sand vs rock and add texture noise.
+            tr, shb, gr, bu, ba, wa = (LC[f][k] for f in ('tree', 'shrub', 'grass', 'built', 'bare', 'water'))
+            veg = tr + shb + gr
+            # bare ground (60) / 'water' on our land cells (wave-washed rock shelves, the pools) next to the sea:
+            # low + flat + beach-ish -> sand, otherwise sandstone
+            open_ = clamp(ba + wa * sstep(60, 15, ds), 0, 1)
+            sandy = max(1.0 if beach else 0.0, sstep(7.5, 3.5, h + 1.5 * nz) * sstep(0.38, 0.18, sl) * sstep(60, 20, dse))
+            s2_ = open_ * sandy
+            if beach: s2_ = max(s2_, sstep(9, 5, h))
+            r2 = open_ * (1 - sandy)
+            r2 = max(r2, sstep(14, 4, cd + 4 * nz) * sstep(2, 6, h) * (1 - 0.6 * gr), 0.85 * sstep(0.85, 1.4, sl))   # OSM cliff edges
+            s, r = clamp(s2_, 0, 1), clamp(r2 * (1 - s2_), 0, 1)
+            # dirt: worn patches inside grass, garden beds / paving joints in built-up blocks, steep banks
+            d = (sstep(0.7, 0.82, dn) * 0.7 * gr + 0.35 * bu * sstep(0.45, 0.7, dn) + sstep(0.45, 0.85, sl) * 0.35) * (1 - s) * (1 - r)
+            # green-ness from the real Sentinel-2 colour where WorldCover says vegetation; built-up blocks = mixed
+            # garden/verge (a bit drier), small noise so the 8 m grid never shows
+            gs = s2_green(k); gw = clamp(veg * 1.4, 0, 1)
+            g = gw * gs + (1 - gw) * (0.35 + 0.2 * (fbm(x / 70, y / 70, 13) - 0.5) * 2) + 0.08 * (fbm(x / 18, y / 18, 17) - 0.5) + 0.12 * tr
         SAND[k], ROCK[k], DIRT[k], GREEN[k] = clamp(s, 0, 1), clamp(r, 0, 1), clamp(d, 0, 1), clamp(g, 0, 1)
 q4 = lambda v: int(round(clamp(v, 0, 1) * 15))
 gb = bytearray()
 for k in range(NX * NY):
     gb.append(q4(SAND[k]) << 4 | q4(ROCK[k])); gb.append(q4(DIRT[k]) << 4 | q4(GREEN[k]))
-print('ground: sand %.0f%% rock %.0f%% of land' % tuple(100 * sum(1 for k in range(NX * NY) if not SEA[k] and F[k] > 0.5) / max(1, SEA.count(False)) for F in (SAND, ROCK)))
+def ground_stats(near=None):
+    """dominant class share of land vertices (all, or only those listed in near) + mean grass green-ness"""
+    L = [k for k in (near if near is not None else range(NX * NY)) if not SEA[k]]; c = {'sand': 0, 'rock': 0, 'dirt': 0, 'grass': 0}
+    for k in L:
+        if SAND[k] > 0.5: c['sand'] += 1
+        elif ROCK[k] > 0.5: c['rock'] += 1
+        elif DIRT[k] > 0.5: c['dirt'] += 1
+        else: c['grass'] += 1
+    gl = [GREEN[k] for k in L if SAND[k] <= 0.5 and ROCK[k] <= 0.5 and DIRT[k] <= 0.5]
+    return {**{a: round(100 * b / max(1, len(L)), 1) for a, b in c.items()}, 'green_mean': round(sum(gl) / max(1, len(gl)), 3), 'n': len(L)}
+print('ground (land vertices, % dominant):', ground_stats())
+_NEAR = [idx(i, j) for j in range(NY) for i in range(NX) if path_near(X0 + i * ST, -(Y0 + j * ST), 30)[0] < 30]
+print('ground within 30 m of the path:', ground_stats(_NEAR))
 
 # ---------------- ground mesh height (replicates lab.js: hSea shelf, low-land sink, fine road corridor) ----------------
 # Coarse 8 m grid = raw terrain (per vertex: hSea, clamp -4, land below 1.3 m sunk by 2.5 m). Every 8 m cell within
@@ -420,6 +466,9 @@ for x, y in candidates(7.0, 230):
     exposed = sstep(140, 50, ds)                       # salt wind near the sea: gums give way to banksia/heath
     park = inside_any(PARK, x, y)
     if park: dens *= 0.35                              # parks are mostly open lawn
+    if LC:   # WorldCover tree cover decides where the groves are; open grass / bare / built-up keep only a few trees
+        tc = field(LC['tree'], x, y)
+        dens = (0.85 * sstep(0.15, 0.6, tc) + 0.05 * field(LC['grass'], x, y) * grove + 0.06 * field(LC['built'], x, y) * grove) * (1.0 if d < 120 else 0.7)
     if rng.random() > dens: continue
     sp = 'banksia' if rng.random() < 0.25 + 0.6 * exposed else 'gum'
     if not ok_site(x, y, sp, 4.5 if sp == 'gum' else 5.5) or not free(x, y, sp): continue
@@ -432,6 +481,11 @@ for x, y in candidates(2.6, 70):
     heath = sstep(0.4, 0.7, fbm(x / 22 + 9, y / 22, 31))
     dens = (0.12 + 0.55 * sstep(160, 40, ds) * heath + 0.35 * sstep(0.1, 0.35, rk) * (1 - sstep(0.45, 0.6, rk))) * (1.0 if d < 25 else 0.55)
     if inside_any(PARK, x, y): dens *= 0.25
+    if LC:   # heath where WorldCover has shrub / tree edges and on the rock fringe; mown grass + built-up stay open
+        tc, sb, gr, bu = (field(LC[f], x, y) for f in ('tree', 'shrub', 'grass', 'built'))
+        edge = tc * (1 - tc) * 4
+        dens = (0.7 * sb + 0.35 * edge * heath + 0.3 * sstep(0.1, 0.35, rk) * (1 - sstep(0.45, 0.6, rk)) + 0.06 * gr * heath + 0.05 * bu * heath) * (1.0 if d < 25 else 0.55)
+        if inside_any(PARK, x, y): dens *= 0.4
     if rng.random() > dens: continue
     sc = 0.6 + rng.random() * 1.0    # shrub crown radius ~0.85*scale: keep it off the road + 0.6 m and behind the kerb
     if ok_site(x, y, 'shrub', 2.6 + 0.85 * sc) and free(x, y, 'shrub'): add('shrub', x, y, sc, lean=0.1)

@@ -2,3 +2,5 @@ data/cache/
 data/osm_raw.json
 node_modules/
 models/cand/
+refs/moves/**/*.mp4
+tools/cache/
