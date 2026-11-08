@@ -9,11 +9,14 @@ Pure stdlib (PIL only for the optional debug map). Same seed -> byte-identical o
 Output data/env.json:
   ground.b64   per terrain vertex (row-major j*nx+i, same grid as route.terrain), 2 bytes = four 4-bit weights
                byte0 = sand<<4 | rock, byte1 = dirt<<4 | green (0..15). green: 0 = dry straw .. 15 = lush mown.
-  trees        {pine|gum|banksia|shrub: flat [x, y, z, scale, rotY, leanX, leanZ, tint, nX, nZ] * n}
+  trees        {pine|gum|banksia|shrub|fig: flat [x, y, z, scale, rotY, leanX, leanZ, tint, nX, nZ] * n}
+  treesW       {species: [crown-width multiplier per instance]} (optional; horizontal scale on top of 'scale')
                three.js coords (x east, y up, z = -north); y = ground mesh height at the foot; n = ground normal xz.
   decals       [[s, off, kind, size, rot]]  s = metres along the browser's smoothed track (same maths as
                lab.js routeTrack), off = metres to the left of travel (+ = left lane), kind 0 bike, 1 pedestrian,
                2 arrow, 3 stain, 4 bike+pedestrian pair; rot = 0 faces +s, 1 faces -s (for stains: any angle).
+  shelf        {k, v}: sparse intertidal rock-shelf strength per terrain vertex: k = vertex index deltas (j*nx+i),
+               v = strength 0..255 (js/env.js buildShelf draws low sandstone slabs above the water plane there)
   kerb         flat [x, y, z, yaw, length, height, width, tint] * n  rounded sandstone blocks lining the road edge
                where the ground beside it rises above the road (cut banks); y = block base (slightly sunk).
   corridor     {fs, cells, dcm}: 8 m terrain cells near the road (k = j*(nx-1)+i, sorted) that lab.js draws as an
@@ -220,13 +223,14 @@ try:   # OSM parks (lawns): Bondi Park, Marks Park, Tamarama/Bronte Park ...
 except FileNotFoundError: pass
 # open land cover (tools/landcover.py -> data/landcover.json): ESA WorldCover 2021 class fractions + Sentinel-2 median
 # true colour per terrain vertex. Missing file -> the old height/sea-distance rules alone (LC = None).
-LC = S2 = None
+LC = S2 = RK = None
 try:
     _L = json.load(open(f'{ROOT}/data/landcover.json'))
     if _L['nx'] == NX and _L['ny'] == NY and not os.environ.get('ENV_NO_LC'):
         _lc, _s2 = zlib.decompress(base64.b64decode(_L['lc'])), zlib.decompress(base64.b64decode(_L['s2']))
         LC = {f: [_lc[k * 6 + n] / 255 for k in range(NX * NY)] for n, f in enumerate(_L['fields'])}
         S2 = [(_s2[k * 3], _s2[k * 3 + 1], _s2[k * 3 + 2]) for k in range(NX * NY)]
+        RK = list(zlib.decompress(base64.b64decode(_L['rk']))) if 'rk' in _L else None    # coastal rock index 0..255
         print('landcover: WorldCover + Sentinel-2 (%d scenes)' % len(_L['s2_scenes']))
 except FileNotFoundError: print('landcover: data/landcover.json missing -> rule-based ground only')
 def s2_green(k):
@@ -316,6 +320,8 @@ for j in range(NY):
                 # land right on the waterline outside the beaches is wave-washed platform, not grass
                 r2 = max(r2, sstep(18, 6, ds) * (1 - sandy) * (1 - 0.6 * sstep(0.3, 0.7, can_low(x, y) + can_low(x, y, 'tallA') if CAN else 0)))
                 r2 = max(r2, sstep(0.45, 0.9, sl) * sstep(60, 20, ds) * (1 - sandy))      # steep sea-facing slopes = cliff face
+                if RK and not near_building(x, y, 2.0):   # Sentinel-2 ochre/brown-grey rock right by the sea (headland flanks, Tamarama)
+                    r2 = max(r2, sstep(0.3, 0.65, RK[k] / 255) * max(sstep(45, 15, ds), sstep(80, 35, ds) * sstep(0.18, 0.4, sl)) * (1 - sandy) * (1 - 0.7 * gr) * (1 - 0.8 * tr))
             else:
                 sandy = max(1.0 if beach else 0.0, sstep(7.5, 3.5, h + 1.5 * nz) * sstep(0.38, 0.18, sl) * sstep(60, 20, dse))
                 s2_ = open_ * sandy
@@ -479,11 +485,53 @@ def mesh_n(x, y):
     e = 1.0; gx = (mesh_h(x + e, y) - mesh_h(x - e, y)) / (2 * e); gy = (mesh_h(x, y + e) - mesh_h(x, y - e)) / (2 * e)
     n = math.sqrt(gx * gx + gy * gy + 1); return -gx / n, gy / n          # three xz of the normal (z = -north)
 
+# ---------------- intertidal rock shelves (drawn as their own low mesh above the water plane: lab.js sinks the sea
+# floor and all land below 1.3 m, so platforms would otherwise read as open water) ----------------
+# strength 0..1 per terrain vertex: Sentinel-2 coastal rock index within ~30 m of the coastline, OSM bare_rock / rocks,
+# and a minimum wave-washed band (~10 m) in front of rocky (non-beach) land; never on/at the beaches, never within
+# 6 m of the walking path. env.js turns it into 2 m sandstone slabs 0.15-0.8 m above the water with noisy edges.
+SHELF = [0.0] * (NX * NY)
+ROCKL = [not SEA[k] and ROCK[k] > 0.5 for k in range(NX * NY)]
+def rocky_land_near(i, j, r=2):
+    return any(ROCKL[idx(ii, jj)] for ii in range(max(0, i - r), min(NX, i + r + 1)) for jj in range(max(0, j - r), min(NY, j + r + 1)))
+nsh = {'s2': 0, 'osm': 0, 'band': 0, 'low_land': 0}
+if LC and OSMP['beach'] and not os.environ.get('ENV_NO_SHELF'):
+    for j in range(NY):
+        for i in range(NX):
+            k = idx(i, j); x, y = X0 + i * ST, Y0 + j * ST
+            d = SH[k] / 4 if SEA[k] else 0.0                     # metres seaward of the OSM coastline (0 on land)
+            if SEA[k] and d > 34: continue
+            if not SEA[k] and H[k] >= 1.3: continue             # land above 1.3 m is drawn by the ground mesh itself
+            bd = poly_dist(OSMP['beach'], x, y, 20.0); osm = inside_any(OSMP['rock'], x, y, 2.0)
+            if bd < 5 and not osm: continue
+            rk = (RK[k] / 255) if RK else 0.0
+            v = sstep(0.25, 0.6, rk) * sstep(34, 12, d); src = 's2' if v > 0.3 else None
+            if osm: v = 1.0; src = 'osm'
+            if SEA[k] and d <= 28 and rocky_land_near(i, j, 3) and bd >= 19.9:     # (bd is capped at 20 m)
+                # wave-washed platform: in front of rocky land the S2 median composite is grey-bright (wet rock + surf
+                # over it, sum ~300-450) where open water is navy (~110); plus a minimum ~10 m lip at every rocky shore
+                t_ = sum(S2[k]); b_ = max(0.62 * sstep(12, 3, d), 0.85 * sstep(190, 320, t_) * sstep(28, 14, d))
+                if b_ > v: v, src = b_, 'band'
+            if not SEA[k]:
+                lv = max(ROCK[k], 0.8 * sstep(0.2, 0.5, rk)) * sstep(3, 9, bd)
+                if lv > v: v, src = lv, 'low_land'
+            v *= sstep(3, 8, bd) if not osm else 1.0
+            if v < 0.2: continue
+            if path_near(x, -y, 14)[0] < 6.0: continue
+            SHELF[k] = v; nsh[src] = nsh.get(src, 0) + 1
+print('rock shelf vertices', sum(1 for v in SHELF if v > 0), nsh)
+for k in range(NX * NY):        # shelf vertices carry sandstone in the ground classes too (wet edges under the slabs)
+    if SHELF[k] > 0.3: ROCK[k] = max(ROCK[k], min(1.0, SHELF[k] + 0.3)); SAND[k] *= 1 - ROCK[k]
+gb = bytearray()
+for k in range(NX * NY):
+    gb.append(q4(SAND[k]) << 4 | q4(ROCK[k])); gb.append(q4(DIRT[k]) << 4 | q4(GREEN[k]))
+
 # ---------------- trees & shrubs ----------------
 rng = random.Random(SEED + 1)
-TREES = {'pine': [], 'gum': [], 'banksia': [], 'shrub': []}
-MIND = {'pine': 10.0, 'gum': 6.5, 'banksia': 4.2, 'shrub': 1.7}
-RAD = {'pine': 3.0, 'gum': 3.5, 'banksia': 2.2, 'shrub': 0.8}   # trunk/crown clearance against others
+TREES = {'pine': [], 'gum': [], 'banksia': [], 'shrub': [], 'fig': []}
+TREEW = {k: [] for k in TREES}     # per-instance crown-width multiplier (1 = model's own), ENV.treesW
+MIND = {'pine': 10.0, 'gum': 6.5, 'banksia': 4.2, 'shrub': 1.7, 'fig': 9.0}
+RAD = {'pine': 3.0, 'gum': 3.5, 'banksia': 2.2, 'shrub': 0.8, 'fig': 5.0}   # trunk/crown clearance against others
 occ = {}
 def free(x, y, sp):
     m = MIND[sp]; ci, cj = math.floor(x / 10), math.floor(y / 10)
@@ -506,7 +554,7 @@ def ok_site(x, y, sp, clear):
     if near_building(x, y, 2.5 if sp != 'shrub' else 1.2): return False
     return True
 SEAF = [1.0 if s else 0.0 for s in SEA]
-def add(sp, x, y, scale, lean=0.0, tint=None):
+def add(sp, x, y, scale, lean=0.0, tint=None, w=1.0):
     hy = ground_h(x, y); nx_, nz_ = mesh_n(x, y)
     lx = lz = 0.0
     if lean:   # lean away from the sea breeze (down the sea-distance gradient = inland)
@@ -514,6 +562,7 @@ def add(sp, x, y, scale, lean=0.0, tint=None):
         lx, lz = lean * gx / gl, -lean * gy / gl
     TREES[sp].append([round(x, 2), round(hy, 2), round(-y, 2), round(scale, 3), round(rng.random() * 6.283, 2), round(lx, 3), round(lz, 3),
                       round(tint if tint is not None else rng.random(), 2), round(nx_, 3), round(nz_, 3)])
+    TREEW[sp].append(round(w, 2))
     occ.setdefault((math.floor(x / 10), math.floor(y / 10)), []).append((x, y, sp))
 
 xs = [q['x'] for q in TP]; ys = [-q['z'] for q in TP]
@@ -532,25 +581,39 @@ if CAN:
     # species by height + setting: tall (>= 13 m) crowns in the beach parks / promenade = Norfolk Island pines (and OSM
     # needleleaved nodes); 6.5 m+ = coastal gums / figs (gum model); 3-6.5 m = banksia / tea-tree; exposed cliff tops
     # keep only low growth (heath shrubs from the CHM's 0.7-3.5 m cover below). Crown size = the measured height.
-    Cw = CAN['crowns']; nc = {'kept': 0, 'pushed': 0, 'dropped_road': 0, 'dropped_site': 0, 'far': 0}
+    Cw = CAN['crowns']; nc = {'kept': 0, 'pushed': 0, 'dropped_road': 0, 'dropped_site': 0, 'far': 0, 'fig': 0, 'row_pine': 0}
+    # natural crown radius of each model per metre of instance height (env.js geometry): width multiplier = measured
+    # crown radius (canopy.py) / model radius, so dense park masses close up the way the canopy map shows them
+    MODEL_R = {'gum': 0.45, 'fig': 0.58, 'banksia': 0.5}
     for k in range(0, len(Cw), 5):
         x, y, h, cr, fl = Cw[k] / 10, Cw[k + 1] / 10, Cw[k + 2] / 10, Cw[k + 3] / 10, Cw[k + 4]
         d, q = path_near(x, -y, 280)
         if d > 270: nc['far'] += 1; continue
-        ds = field(DS, x, y); park = inside_any(PARK, x, y)
-        pine = bool(fl & 2) or (h >= 10 and ds < 260 and (park or poly_dist(OSMP['beach'], x, y, 140) < 140))   # the 1 m CHM reads Norfolk pines at only 10-15 m
-        sp = 'pine' if pine else 'gum' if h >= 6.5 else 'banksia'
+        ds = field(DS, x, y); park = inside_any(PARK, x, y); bdist = poly_dist(OSMP['beach'], x, y, 140) if OSMP['beach'] else 140
+        # Norfolk Island pines: OSM needleleaved, OSM planted rows behind the beaches (Campbell Pde / Bondi Park edge,
+        # Bronte), or tall crowns in the beach parks (the 1 m CHM reads them at only 10-15 m)
+        row_pine = bool(fl & 8) and bdist < 110 and ds < 220
+        pine = bool(fl & 2) or row_pine or (h >= 10 and ds < 260 and (park or bdist < 140) and not fl & 16)
+        sp = 'pine' if pine else 'fig' if fl & 16 and h >= 7 else 'gum' if h >= 6.5 else 'banksia'
         # path clearance (>= road edge + 0.6 m): trunk + low crown parts; tall crowns may overhang above head height
-        clear = {'pine': 4.2, 'gum': 3.6, 'banksia': 1.6 + 0.6 + 0.45 * min(6.0, h) * 0.55}[sp]
+        clear = {'pine': 4.2, 'gum': 3.6, 'fig': 4.4, 'banksia': 1.6 + 0.6 + 0.45 * min(6.0, h) * 0.55}[sp]
         if d < clear:
+            if sp == 'fig': sp, clear = 'gum', 3.6
             if d < clear - 3.0 or q is None: nc['dropped_road'] += 1; continue
-            ux, uz = (x - q['x']) / (d or 1), (-y - q['z']) / (d or 1); x, y = q['x'] + ux * (clear + 0.05), -(q['z'] + uz * (clear + 0.05)); nc['pushed'] += 1
+            ux, uz = (x - q['x']) / (d or 1), (-y - q['z']) / (d or 1); x, y = q['x'] + ux * (clear + 0.05), -(q['z'] + uz * (clear + 0.05)); d = clear + 0.05; nc['pushed'] += 1
         if not (X0 + 2 < x < X0 + (NX - 1) * ST - 2 and Y0 + 2 < y < Y0 + (NY - 1) * ST - 2) or field(SEAF, x, y) > 0.01 or mesh_h(x, y) < 0.6 \
            or field(SAND, x, y) > 0.5 or field(SL, x, y) > 1.1 or near_building(x, y, 0.8) or path_near(x, -y, clear + 8)[0] < clear:
             nc['dropped_site'] += 1; continue
-        if sp == 'pine': add('pine', x, y, clamp(h * 1.55, 15, 26))
-        elif sp == 'gum': add('gum', x, y, clamp(h, 6.5, 17) * (1 - 0.15 * sstep(120, 30, ds)), lean=0.04 * sstep(120, 30, ds))
-        else: add('banksia', x, y, clamp(h * 0.95, 3.0, 6.2), lean=0.06 + 0.1 * sstep(140, 40, ds))
+        if sp == 'pine': add('pine', x, y, clamp(h * 1.55, 15, 26)); nc['row_pine'] += row_pine
+        elif sp in ('gum', 'fig'):
+            sc = clamp(h, 6.5, 17) * (1 - 0.15 * sstep(120, 30, ds)) if sp == 'gum' else clamp(h * 0.95, 7, 16)
+            w = clamp(cr / (MODEL_R[sp] * sc), 0.75, 1.7)
+            # the low crown must stay >= 0.6 m off the road edge: crown parts below ~3 m reach ~0.85 x radius
+            lowR = MODEL_R[sp] * sc * w * (0.85 if sp == 'fig' else 0.55)
+            if d < 2.2 + lowR: w = max(0.75, w * (d - 2.2) / lowR)
+            if sp == 'fig': add('fig', x, y, sc, tint=rng.random(), w=w); nc['fig'] += 1
+            else: add('gum', x, y, sc, lean=0.04 * sstep(120, 30, ds), w=w)
+        else: add('banksia', x, y, clamp(h * 0.95, 3.0, 6.2), lean=0.06 + 0.1 * sstep(140, 40, ds), w=clamp(cr / (0.5 * clamp(h * 0.95, 3.0, 6.2)), 0.8, 1.4))
         nc['kept'] += 1
     print('real crowns ->', nc)
     # ---- low scrub / coastal heath where the CHM has 0.7-3.5 m vegetation (cliff edges, gullies, hedges), plus OSM scrub ----
@@ -688,7 +751,9 @@ ENV = {'note': 'baked by tools/env.py (seed %d); see its docstring for the forma
        'ground': {'nx': NX, 'ny': NY, 'b64': base64.b64encode(bytes(gb)).decode()},
        'road': {'width': 3.2, 'joint': 2.4, 'trackTotal': round(TOTAL, 2)},
        'trees': {k: [v for t in L for v in t] for k, L in TREES.items()},
+       'treesW': {k: L for k, L in TREEW.items() if any(abs(v - 1) > 0.01 for v in L)},
        'decals': DEC,
+       'shelf': (lambda K: {'k': [K[0]] + [K[n] - K[n - 1] for n in range(1, len(K))] if K else [], 'v': [int(round(clamp(SHELF[k], 0, 1) * 255)) for k in K]})([k for k in range(NX * NY) if SHELF[k] > 0]),
        'kerb': [v for t in KERB for v in t],
        'corridor': {'fs': FS, 'cells': CELL_LIST, 'dcm': base64.b64encode(b''.join(int(v).to_bytes(2, 'little', signed=True) for v in FD)).decode()}}
 json.dump(ENV, open(f'{ROOT}/data/env.json', 'w'), separators=(',', ':'))
@@ -710,7 +775,7 @@ try:
     im = im.resize((NX * 4, NY * 4), Image.NEAREST); dr = ImageDraw.Draw(im)
     P = lambda x, y: ((x - X0) / ST * 4, (NY - 1 - (y - Y0) / ST) * 4)
     dr.line([P(q['x'], -q['z']) for q in TP[::8]], fill=(250, 250, 250), width=2)
-    for sp, col in (('pine', (10, 60, 20)), ('gum', (90, 120, 60)), ('banksia', (60, 90, 40)), ('shrub', (110, 130, 70))):
+    for sp, col in (('pine', (10, 60, 20)), ('gum', (90, 120, 60)), ('fig', (30, 80, 30)), ('banksia', (60, 90, 40)), ('shrub', (110, 130, 70))):
         for t in TREES[sp]:
             a, b = P(t[0], -t[2]); r = 3 if sp == 'pine' else 2 if sp != 'shrub' else 1
             dr.ellipse((a - r, b - r, a + r, b + r), fill=col)

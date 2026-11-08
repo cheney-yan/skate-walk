@@ -16,6 +16,7 @@ Output data/landcover.json (derived, compact; read by tools/env.py, NOT by the b
           built(50)  (bare(60) = remainder of land, water(80) separately below)
     4     bare(60) fraction 0..255           5     water(80) fraction 0..255
   plus s2.b64 (zlib+base64): 3 bytes per vertex = median S2 true colour (sRGB 0..255), gaussian-smoothed sigma 1 px.
+  plus rk.b64 (zlib+base64): 1 byte per vertex = coastal rock index 0..255 (see below; optional for readers).
 """
 import json, math, os, zlib, base64
 import numpy as np, rasterio
@@ -71,6 +72,13 @@ ex, ny_ = warp_xy('EPSG:4326', scrs, LON.ravel().tolist(), LAT.ravel().tolist())
 scol = ((np.array(ex) - stf[2]) / stf[0] - 0.5).reshape(LON.shape); srow = ((np.array(ny_) - stf[5]) / stf[4] - 0.5).reshape(LON.shape)
 RGB = [samp(ndimage.gaussian_filter(S2[c].astype(np.float32), 1.0, mode='nearest'), srow, scol) for c in range(3)]
 
+# coastal rock index (0..1) from the UNSMOOTHED S2 pixels: ochre / brown-grey (red > blue), mid brightness (not dark
+# water, not white surf or sand), not green; max over 3x3 px (~15 m) so narrow intertidal shelves survive the 8 m grid.
+# env.py uses it only within a few tens of metres of the sea (inland roofs and roads score high too).
+_r, _g, _b = S2.astype(np.float32); _sm = _r + _g + _b + 1e-3; _exg = (2 * _g - _r - _b) / _sm
+RKP = np.clip((_r - _b - 4) / 26, 0, 1) * np.clip((_sm - 180) / 120, 0, 1) * np.clip((720 - _sm) / 120, 0, 1) * np.clip((0.16 - _exg) / 0.08, 0, 1)
+RK = samp(ndimage.maximum_filter(RKP, size=3), srow, scol)
+
 # ---------------- write (grid order j*nx+i, j north = row 0 is the SOUTH edge) ----------------
 q8 = lambda F: np.clip(np.round(F * 255), 0, 255).astype(np.uint8)
 lc = np.stack([q8(FR['tree']), q8(FR['shrub']), q8(FR['grass']), q8(FR['built']), q8(FR['bare']), q8(FR['water'])], -1)
@@ -78,7 +86,8 @@ s2 = np.stack([np.clip(np.round(c), 0, 255).astype(np.uint8) for c in RGB], -1)
 out = {'note': 'derived by tools/landcover.py from ESA WorldCover 2021 v200 (CC BY 4.0) and Copernicus Sentinel-2 L2A '
                '(contains modified Copernicus Sentinel data 2024-2025); see docs/data-sources.md',
        'nx': NX, 'ny': NY, 'fields': ['tree', 'shrub', 'grass', 'built', 'bare', 'water'], 's2_scenes': [str(i) for i in z['ids']],
-       'lc': base64.b64encode(zlib.compress(lc.tobytes(), 9)).decode(), 's2': base64.b64encode(zlib.compress(s2.tobytes(), 9)).decode()}
+       'lc': base64.b64encode(zlib.compress(lc.tobytes(), 9)).decode(), 's2': base64.b64encode(zlib.compress(s2.tobytes(), 9)).decode(),
+       'rk': base64.b64encode(zlib.compress(q8(RK).tobytes(), 9)).decode()}
 json.dump(out, open(f'{ROOT}/data/landcover.json', 'w'), separators=(',', ':'))
 print('wrote data/landcover.json', os.path.getsize(f'{ROOT}/data/landcover.json') // 1024, 'KB')
 try:

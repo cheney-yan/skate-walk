@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { loadGirl, setupHair, Skirt, Hat, OUTFIT, addWristGuards, flutterUpdate } from './girl.js';
 import { Rider, EMAX } from './rider.js';
-import { envU, roadMaterial, roadEdges, roadDecals, groundAttr, groundMaterial, buildTrees, corridorGround, buildKerb } from './env.js';
+import { envU, roadMaterial, roadEdges, roadDecals, groundAttr, groundMaterial, buildTrees, corridorGround, buildKerb, buildShelf } from './env.js';
 import { buildBuildings } from './buildings.js';
+import { buildStreets } from './streets.js';
 
 const Q = new URLSearchParams(location.search);
 const REC = Q.has('rec');
@@ -12,6 +13,8 @@ const RD = Q.get('route') ? await (await fetch('./data/route.json')).json() : nu
 const ENV = RD ? await (await fetch('./data/env.json')).json() : null;
 /* all building footprints (tools/buildings.py: OSM + Microsoft ML footprints, merged blocks); ?bld=old -> the 218 route.json polys */
 const BLDD = RD && Q.get('bld') !== 'old' ? await fetch('./data/buildings.json').then((r) => r.ok ? r.json() : null).catch(() => null) : null;
+/* OSM streets / car parks / footpaths draped on the ground (tools/streets.py -> data/streets.json, js/streets.js); ?streets=0 hides them */
+const STRD = RD && Q.get('streets') !== '0' ? await fetch('./data/streets.json').then((r) => r.ok ? r.json() : null).catch(() => null) : null;
 if (REC) document.body.classList.add('rec');
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -290,9 +293,9 @@ if (RD) {
     col.set(groundAttr(ENV, T, x, y), k * 4);   // baked sand / rock / dirt / green weights
   }
   geo.setAttribute('aCls', new THREE.BufferAttribute(col, 4)); geo.computeVertexNormals();
-  const gMat = groundMaterial(), grounds = [];
+  const gMat = groundMaterial(), grounds = []; let cor = null;
   if (ENV?.corridor) {
-    const cor = corridorGround(ENV, T, rawH, gMat), src = geo.index.array, keep = [];
+    cor = corridorGround(ENV, T, rawH, gMat); const src = geo.index.array, keep = [];
     for (let iy = 0; iy < T.ny - 1; iy++) for (let ix = 0; ix < T.nx - 1; ix++) { if (cor.skip.has((T.ny - 2 - iy) * (T.nx - 1) + ix)) continue;
       const o = 6 * (iy * (T.nx - 1) + ix); for (let q = 0; q < 6; q++) keep.push(src[o + q]); }
     geo.setIndex(keep); scene.add(cor.mesh); grounds.push(cor.mesh);
@@ -300,6 +303,8 @@ if (RD) {
   }
   const ground = new THREE.Mesh(geo, gMat); ground.receiveShadow = true; scene.add(ground); grounds.push(ground);
   window.__grounds = grounds;
+  if (STRD) { try { window.__streets = buildStreets(scene, STRD, { T, rawH, cor }); } catch (e) { console.warn('streets', e); } }
+  if (ENV?.shelf) window.__shelf = buildShelf(scene, ENV, T, gMat);   /* intertidal sandstone platforms above the water (env.py 'shelf') */
   const skirtG = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshStandardMaterial({ color: '#bfd3a0', roughness: 1 }));   // land beyond the data edge
   skirtG.rotation.x = -Math.PI / 2; skirtG.position.y = -0.5; scene.add(skirtG);
   // buildings: soft off-white blocks, slightly lighter roofs, the way Apple Maps draws a city before photo-3D loads
@@ -773,6 +778,10 @@ function mapCoast(g, P, thin = false) { for (const c of RD.coast || []) { g.stro
   g.beginPath(); c.line.forEach(([x, y], i) => { const [a, b2] = P(x, -y); i ? g.lineTo(a, b2) : g.moveTo(a, b2); }); g.stroke(); } }
 function mapOurs2D(g, P, sc, Wc, Hc) { g.fillStyle = '#96c4e0'; g.fillRect(0, 0, Wc, Hc); if (!RD) return;
   const T = RD.terrain, b = mapBase(); const [x0, y0] = P(T.x0, -(T.y0 + (T.ny - 1) * T.step)); g.imageSmoothingEnabled = true; g.drawImage(b, x0, y0, (T.nx - 1) * T.step * sc, (T.ny - 1) * T.step * sc);
+  if (STRD) { const SC = ['#8d8f92', '#9a9c9e', '#7f9a74', '#d6d0c4', '#d2d0ca', '#c9c5bb'];   /* OSM streets / car parks / courts / plazas / footpaths */
+    for (const p of STRD.p) { g.fillStyle = SC[p[0]] || '#999'; g.beginPath();
+      for (const r of p.slice(1)) { let x = 0, y = 0; for (let i = 0; i < r.length; i += 2) { x += r[i]; y += r[i + 1]; const [a, c] = P(x / 10, -y / 10); i ? g.lineTo(a, c) : g.moveTo(a, c); } g.closePath(); }
+      g.fill('evenodd'); } }
   g.fillStyle = 'rgba(214,196,170,.95)'; g.strokeStyle = 'rgba(120,100,80,.6)'; g.lineWidth = 0.6;
   for (const bd of window.__bld ? window.__bld.list : RD.buildings || []) { g.beginPath(); (bd.P || bd.poly).forEach(([x, y], i) => { const [a, c] = P(x, -y); i ? g.lineTo(a, c) : g.moveTo(a, c); }); g.closePath(); g.fill(); g.stroke(); }
   mapCoast(g, P); mapRoute(g, P); }

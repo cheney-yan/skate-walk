@@ -52,6 +52,7 @@ const gritTex = () => canvasTex(256, (g, N) => {
 });
 
 const NOISE = noiseTex(), GRASS = grassTex(), GRIT = gritTex();
+export const envTex = { NOISE, GRIT };
 const SHADER_NOISE = `uniform sampler2D uNoise; uniform sampler2D uDet;
   float aaBand(float d, float w){ float f = fwidth(d) * 0.9 + 1e-4; return 1. - smoothstep(w - f, w + f, abs(d)); }`;
 
@@ -258,7 +259,42 @@ export function corridorGround(ENV, T, rawH, material) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aCls', new THREE.Float32BufferAttribute(at, 4));
   g.setIndex(idx); g.computeVertexNormals();
   const m = new THREE.Mesh(g, material); m.receiveShadow = true;
-  return { mesh: m, skip: new Set(C.cells) };
+  /* h(I, J): drawn height of fine lattice vertex (I, J) (fine steps from the grid origin, J north) or undefined */
+  return { mesh: m, skip: new Set(C.cells), fs: FS, h: (I, J) => { const n = map.get(I * 100000 + J); return n === undefined ? undefined : pos[n * 3 + 1]; } };
+}
+
+// ---------------- intertidal rock shelves (baked: ENV.shelf, sparse strength per terrain vertex) ----------------
+// The coarse ground sinks the sea floor and all land below 1.3 m under the water plane, so the real sandstone
+// platforms read as open water. Where the bake found shelf rock, a 2 m lattice is drawn above the water: slab top
+// 0.12-0.7 m by strength, broken into bedding steps, with ragged edges (strength + value noise) that dip below the
+// water so the platform has a wet lip. Same ground shader (rock class); userData.shelf marks it for probes.
+function vnoise2(seed) { const H = (i, j) => { let h = (i * 374761393 + j * 668265263 + seed * 1442695041) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  return (x, y) => { const i = Math.floor(x), j = Math.floor(y); let u = x - i, v = y - j; u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v);
+    return H(i, j) * (1 - u) * (1 - v) + H(i + 1, j) * u * (1 - v) + H(i, j + 1) * (1 - u) * v + H(i + 1, j + 1) * u * v; }; }
+export function buildShelf(scene, ENV, T, material) {
+  const S = ENV.shelf; if (!S || !S.k || !S.k.length) return null;
+  const NX = T.nx, NY = T.ny, st = T.step, SV = new Float32Array(NX * NY); let k = 0;
+  S.k.forEach((d, n) => { k += d; SV[k] = S.v[n] / 255; });
+  const n1 = vnoise2(3), n2 = vnoise2(9), SUB = 4, ss = st / SUB, pos = [], cls = [], idx = [], vmap = new Map();
+  const str = (x, y) => { const fi = (x - T.x0) / st, fj = (y - T.y0) / st, i = Math.min(NX - 2, Math.max(0, Math.floor(fi))), j = Math.min(NY - 2, Math.max(0, Math.floor(fj))), u = fi - i, v = fj - j;
+    return SV[j * NX + i] * (1 - u) * (1 - v) + SV[j * NX + i + 1] * u * (1 - v) + SV[(j + 1) * NX + i] * (1 - u) * v + SV[(j + 1) * NX + i + 1] * u * v; };
+  const vert = (I, J) => { const key = I * 100000 + J; let n = vmap.get(key); if (n !== undefined) return n; n = vmap.size; vmap.set(key, n);
+    const x = T.x0 + I * ss, y = T.y0 + J * ss, s0 = str(x, y), e = s0 + (n1(x / 7, y / 7) - 0.5) * 0.55 + (n2(x / 2.3, y / 2.3) - 0.5) * 0.22;
+    const top = 0.12 + 0.5 * Math.min(1, Math.max(0, (e - 0.35) / 0.6)), step = Math.floor(n2(x / 11 + 5, y / 11) * 3) * 0.1;
+    const h = e > 0.35 ? top + step : -0.25 - 0.6 * Math.min(1, (0.35 - e) / 0.3);
+    pos.push(x, h, -y); cls.push(0, 1, 0, 0); return n; };
+  const up = [];
+  for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) {
+    if (!(SV[j * NX + i] || SV[j * NX + i + 1] || SV[(j + 1) * NX + i] || SV[(j + 1) * NX + i + 1])) continue;
+    for (let b = 0; b < SUB; b++) for (let a = 0; a < SUB; a++) { const I = i * SUB + a, J = j * SUB + b;
+      const p00 = vert(I, J), p10 = vert(I + 1, J), p01 = vert(I, J + 1), p11 = vert(I + 1, J + 1);
+      for (const t of [[p00, p10, p11], [p00, p11, p01]]) if (t.some((q) => pos[q * 3 + 1] > 0)) idx.push(...t); }
+  }
+  if (!idx.length) return null;
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aCls', new THREE.Float32BufferAttribute(cls, 4));
+  g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere();
+  const m = new THREE.Mesh(g, material); m.receiveShadow = true; m.userData.shelf = true; scene.add(m);
+  return { mesh: m, tris: idx.length / 3, verts: S.k.length };
 }
 
 // ---------------- stone kerb along cut banks (baked: ENV.kerb) ----------------
@@ -387,11 +423,30 @@ function shrubGeo() {       // coastal heath shrub (westringia / coastal rosemar
     parts.push(part(new THREE.OctahedronGeometry(0.045, 0).translate(x + Math.cos(th) * Math.cos(ph) * r * 1.1, y + Math.sin(ph) * r * 0.9, z + Math.sin(th) * Math.cos(ph) * r * 1.05), (c) => c.set('#ece8f2'))); }
   return mergeGeometries(parts);
 }
+function figGeo() {         // Moreton Bay / Port Jackson fig, 12 m: short massive grey buttressed trunk, low heavy limbs, broad dark glossy dome ~14 m wide
+  const parts = [], rnd = prng(83), V = (x, y, z) => new THREE.Vector3(x, y, z), bark = C('#7d776c'), barkL = C('#9a948a');
+  const bc = (c, x, y) => c.copy(bark).lerp(barkL, 0.5 + 0.5 * Math.sin(y * 3 + x * 4));
+  parts.push(part(new THREE.CylinderGeometry(0.75, 1.25, 3.6, 9, 1, true).translate(0, 1.3, 0), bc));
+  const ends = [];
+  for (let k = 0; k < 4; k++) { const a = k / 4 * Math.PI * 2 + rnd() * 0.5, L = 3.4 + rnd() * 1.4, e = V(Math.cos(a) * L, 4.8 + rnd() * 1.4, Math.sin(a) * L); ends.push(e);
+    parts.push(part(limb(V(0, 2.8, 0), e, 0.5, 0.22, 5), bc)); }
+  const dk = C('#2c4a26'), mid = C('#3f6331'), lt = C('#5d7f44');
+  // broad dome of overlapping heavy clumps: an outer ring low and wide, an inner ring higher, a crown cap
+  const cl = [];
+  for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + rnd() * 0.4, R = 4.4 + rnd() * 0.8; cl.push([Math.cos(a) * R, 6.3 + rnd() * 0.9, Math.sin(a) * R, 3.0 + rnd() * 0.5]); }
+  for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2 + rnd() * 0.6, R = 1.8 + rnd() * 0.6; cl.push([Math.cos(a) * R, 8.6 + rnd() * 0.7, Math.sin(a) * R, 3.0 + rnd() * 0.4]); }
+  cl.forEach(([x, y, z, r], i) => { const g = blob(r, 1.25, 0.7, 1.25, x, y, z, 400 + i);
+    const pp = g.attributes.position; for (let j = 0; j < pp.count; j++) { const dy = pp.getY(j) - y; if (dy < 0) pp.setY(j, pp.getY(j) + dy * 0.35); }
+    g.computeVertexNormals();
+    parts.push(part(g, (c, px, py, pz) => { const t = (py - y) / r; c.copy(dk).lerp(mid, 0.5 + t * 0.6).lerp(lt, Math.max(0, t) * 0.5 * (0.6 + 0.4 * Math.sin(px * 1.9 + pz * 2.3))); }, { x, y, z, r })); });
+  return mergeGeometries(parts);
+}
 const SPECIES = {
   pine: { geo: pineGeo, H: 20, sway: 0.18, tint: ['#f2fff0', '#ffffff'], shadow: true },
   gum: { geo: gumGeo, H: 11.5, sway: 0.16, tint: ['#eef6f0', '#fff6e2'], shadow: true },
   banksia: { geo: banksiaGeo, H: 5, sway: 0.07, tint: ['#eef8e8', '#ffffff'], shadow: true },
   shrub: { geo: shrubGeo, H: 1, sway: 0.03, tint: ['#dfeacc', '#fff2dc'], shadow: true },
+  fig: { geo: figGeo, H: 12, sway: 0.05, tint: ['#e8f2e2', '#ffffff'], shadow: true },
 };
 function treeMaterial(H, sway) {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -409,13 +464,13 @@ export function buildTrees(scene, ENV) {
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), qy = new THREE.Quaternion(), ql = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), ax = new THREE.Vector3(), col = new THREE.Color(), stats = {};
   for (const [sp, def] of Object.entries(SPECIES)) {
     const A = ENV.trees[sp] || [], n = A.length / 10; stats[sp] = n; if (!n) continue;
-    const geo = def.geo(), mat = treeMaterial(def.H, def.sway), tiles = new Map();
+    const geo = def.geo(), mat = treeMaterial(def.H, def.sway), tiles = new Map(), WW = ENV.treesW && ENV.treesW[sp];   /* optional crown-width multipliers */
     for (let i = 0; i < n; i++) { const k = Math.floor(A[i * 10] / 400) + "," + Math.floor(A[i * 10 + 2] / 400); if (!tiles.has(k)) tiles.set(k, []); tiles.get(k).push(i); }
     const t0 = new THREE.Color(def.tint[0]), t1 = new THREE.Color(def.tint[1]);
     for (const list of tiles.values()) {
       const im = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach((i, j) => {
-        const o = i * 10, [x, y, z, sc, ry, lx, lz, tn] = A.slice(o, o + 8), s = sc / def.H, xz = 0.9 + (tn * 7.3 % 1) * 0.2;
+        const o = i * 10, [x, y, z, sc, ry, lx, lz, tn] = A.slice(o, o + 8), s = sc / def.H, xz = (0.9 + (tn * 7.3 % 1) * 0.2) * (WW ? WW[i] || 1 : 1);
         qy.setFromAxisAngle(up, ry); const L = Math.hypot(lx, lz);
         if (L > 1e-4) { ax.set(lz, 0, -lx).normalize(); ql.setFromAxisAngle(ax, -L); q.copy(ql).multiply(qy); } else q.copy(qy);
         m4.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(s * xz, s, s * xz)); im.setMatrixAt(j, m4);

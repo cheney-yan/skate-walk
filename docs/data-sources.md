@@ -37,3 +37,23 @@ quadkey file from `dataset-links.csv` (Location=Australia, QuadKey=311230133). G
 v3 coverage is Africa / South & SE Asia / Latin America — no Australia). The NSW aerial was used only to *check*
 (display, and a pixel test of where crowns land — nothing baked from it). `ENV_NO_CANOPY=1` / `ENV_OLD_BLD=1` fall back
 to the procedural groves / the 218 route.json polygons; `lab.html?bld=old` draws the old blocks.
+
+
+Streets / denser canopies / rock shelves / facades (2026-11-09):
+
+    GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR tools/cache/.venv/bin/python tools/streets.py    # -> data/streets.json (shapely in the venv)
+    GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR tools/cache/.venv/bin/python tools/landcover.py  # adds 'rk' (coastal rock index) to data/landcover.json
+    GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR tools/cache/.venv/bin/python tools/canopy.py     # dense-cluster crowns, fig / pine-row flags
+    python3 tools/env.py                                                                    # figs, crown widths (treesW), rock shelves (shelf)
+
+| Data | Used for | Licence |
+|---|---|---|
+| OpenStreetMap `highway=*` (carriageway width from `width` / `lanes` tags or class defaults), `amenity=parking`, footways / sidewalks, `highway=pedestrian` areas, `leisure=pitch` (same raw.json dump) | `data/streets.json`: asphalt roads + car parks, concrete footpaths, paving, courts draped on the ground (`js/streets.js`); everything cut back >= 1.85 m from the walking path | ODbL 1.0, © OpenStreetMap contributors |
+| OpenStreetMap `natural=tree` rows (PCA-linear groups of mapped trees), `leisure=park/garden` polygons | Norfolk Island pine rows behind the beaches; broad-crowned park trees drawn as Moreton Bay / Port Jackson figs | ODbL 1.0 |
+| Meta/WRI canopy height (already above) | connected canopy clusters: longer crown radius rays + gap-fill crowns in clusters >= 150 m2 | CC BY 4.0 |
+| Sentinel-2 median (already above) | coastal rock index (ochre/brown-grey, mid brightness, not green; per pixel, 3x3 max) and wave-washed grey-bright platform tone next to rocky land -> intertidal rock shelves (`env.json` `shelf`) and wider sandstone on sea-facing slopes | Copernicus open data |
+| OSM `natural=bare_rock` / `rocks` (already above) | always shelf / rock | ODbL 1.0 |
+
+Nothing in these steps reads the NSW / Esri / Google imagery; the aerial is still only the 对比 comparison view.
+Building facades (window bands, roof colour variety) are procedural in `js/buildings.js` from the existing height / tint
+fields — no new data.
