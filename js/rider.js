@@ -694,14 +694,20 @@ export class Rider {
     const hipDrop = lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);   // walking: nearly straight knees (a lady's walk), small bob
     const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
-    b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
+    // model walk: hips shift a little over the standing foot each step (pelvis side sway ~1.6 cm) — in the walk frame the
+    // model's +x is her LEFT when facing forward (F=1); stance foot alternates with phi (left planted around phi≈0.28)
+    const walkW = this.mode === 'walk' ? M * F : 0, hsw = walkW * 0.022 * Math.sin(this.phi * Math.PI * 2 - 0.3);
+    this.hipSw = walkW * Math.sin(this.phi * Math.PI * 2 - 0.3);
+    b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip + hsw, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
     const open = (30 * D + reach * 34 * D + w.tuck * 6 * D + dn * 45 * D) * (1 - F);
     const lb = w.look;
     const leanIn = -this.windSideLean() ;
     const tw = this.gazeTwist || 0;   // extra torso twist the head could not reach last frame (look-back toward camera)
     const tall = 1 - 0.6 * (this.pump?.A || 0);
-    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0), leanIn * 0.3);
+    // pelvis: swing-side hip drops a touch (~3°) and rotates forward with the swinging leg (~5°); the chest counters it
+    const hsW = this.hipSw || 0, pYaw = (this.mode === 'walk' ? M * F : 0) * Math.cos(this.phi * Math.PI * 2) * 5 * D;
+    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0) + pYaw, leanIn * 0.3 + hsW * 4 * D);
     const walkLean = M * (-0.03 + Math.min(0.1, Math.max(0, this.gradeNow || 0) * 0.8)) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
     const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 * (1 - M) + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     const ptw = this.pumpTwist || 0;
@@ -927,12 +933,18 @@ export class Rider {
       const wf = (side, s) => { const sg = side === 'left' ? 1 : -1, c = Math.sin(ph + (side === 'left' ? 0 : Math.PI));
         const G = gaitOn ? gait(side === 'left' ? 0 : 0.5) : null;
         const lift = G ? G.lift : Math.max(0, Math.cos(ph + (side === 'left' ? 0 : Math.PI))) * 0.09 * (st > 0 ? 1 : 0);
-        let z = G ? G.z : c * st, x = sg * 0.09; if (side === 'left' && kick) { z += kick * 0.25; }
+        // MODEL WALK (catwalk line): each foot lands on the centre line (a hair across it), not in two hip-wide tracks —
+        // from behind the legs close into a slim line instead of a bow-legged straddle. During swing the foot passes close
+        // by the standing ankle (x ≈ 3 cm) and reaches across to land. Toes point straight ahead / a touch out (~4°).
+        let z = G ? G.z : c * st, x = sg * 0.09;
+        if (G && this.mode === 'walk') { const u = ((this.phi + (side === 'left' ? 0 : 0.5)) % 1 + 1) % 1, w = u < SF ? 0 : (u - SF) / (1 - SF);
+          const land = -0.008, pass = 0.03; x = sg * (u < SF ? land : lerp(land, pass, Math.sin(Math.PI * w)) ); }
+        if (side === 'left' && kick) { z += kick * 0.25; }
         if (bend) { z += side === 'left' ? 0.12 * bend : -0.1 * bend; }
         const p = this.walkF.localToWorld(new V(x, 0, z)); p.y = (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y) + ANK + lift + (side === 'left' ? kick * 0.04 : 0); return p; };
       const wl = wf('left'), wr = wf('right');
       const deckL = lf.clone(), deckR = rf.clone();
-      lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); lYaw = lerp(lYaw, -90 * D, M); rYaw = lerp(rYaw, -90 * D, M);
+      lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); const tOut = this.mode === 'walk' ? 4 * D : 0; lYaw = lerp(lYaw, -90 * D - tOut * this.flip, M); rYaw = lerp(rYaw, -90 * D + tOut * this.flip, M);
       // HOP-ON: the feet used to be a blend of two unrelated poses (gait feet -> deck feet) while the run gait switched off,
       // so they jumped. Now each foot has its own path from where it really is: the front foot steps up onto the front
       // bolts first (0-0.28 s, small arc); the back foot pushes off the road (stays planted, heel rising) and swings onto
