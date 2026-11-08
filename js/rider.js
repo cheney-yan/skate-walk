@@ -410,7 +410,7 @@ export class Rider {
   }
   // ---------------- mode sequences ----------------
   startOff(why) {
-    this.push = null; this.dance = null;   // pump keeps decaying smoothly through the brake (see below), never frozen this.offWhy = why; this.mode = 'off'; this.modeT = 0;
+    this.push = null; this.dance = null;   /* pump keeps decaying smoothly through the brake, never frozen */ this.offWhy = why; this.mode = 'off'; this.modeT = 0;
     const r = Math.random(), kind = this.v > 3.2 ? (r < 0.6 ? 'slide' : 'heel') : (r < 0.34 ? 'slide' : r < 0.67 ? 'heel' : 'roll');
     this.seq = { kind, ph: 'brake', t: 0, decel: { slide: 2.6, heel: 1.4, roll: 0.45 }[kind] };
     this.ev.push(['off', this.s, kind, why]);
