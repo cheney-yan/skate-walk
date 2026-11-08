@@ -1177,7 +1177,10 @@ export class Rider {
         if (!p.rec) { p.rec = (this._rfLast || this.footPlant).clone(); p.recT = tt; }
         const u0 = clamp((tt - p.recT) / Math.max(0.05, p.T * 0.98 - p.recT), 0, 1), u = 0.5 - 0.5 * Math.cos(Math.PI * u0);   // sine ease: no velocity spike
         const back = deck(-0.01, -0.21);
-        rf = p.rec.clone().lerp(back, u); rf.y += Math.sin(u0 * Math.PI) * this.MV.push.recoveryLift;   /* push.json recoveryLift: 10 cm (Cheney's style; ref 30 cm) */ rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
+        rf = p.rec.clone().lerp(back, u);
+        { /* recoveryLift = how high the foot rises above the ROAD at most (Cheney 10 cm), not an arc stacked on the climb to the deck (was 17-25 cm) */
+          const gyR = (this.groundFn ? this.groundFn(rf.x, rf.z) : p.rec.y - ANK) + ANK, top = gyR + this.MV.push.recoveryLift, lin = rf.y;
+          const arc = Math.sin(u0 * Math.PI); rf.y = Math.max(lin, lerp(lin, Math.max(top, back.y), arc * (u0 < 0.5 ? 1 : 1 - (u0 - 0.5) * 2 * 0.0))); if (rf.y > back.y && u0 > 0.5) rf.y = lerp(rf.y, back.y, (u0 - 0.5) * 2); }   /* push.json recoveryLift: 10 cm (Cheney's style; ref 30 cm) */ rYaw = lerp(-5 * D, -78 * D, u); rPitch = lerp(-0.35, 0, u);
       }
     }
     { // load the deck where the feet actually are: front/back positions and weight share (pumping shifts weight fore/aft,
