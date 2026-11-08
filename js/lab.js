@@ -299,7 +299,7 @@ if (RD) {
     for (let iy = 0; iy < T.ny - 1; iy++) for (let ix = 0; ix < T.nx - 1; ix++) { if (cor.skip.has((T.ny - 2 - iy) * (T.nx - 1) + ix)) continue;
       const o = 6 * (iy * (T.nx - 1) + ix); for (let q = 0; q < 6; q++) keep.push(src[o + q]); }
     geo.setIndex(keep); scene.add(cor.mesh); grounds.push(cor.mesh);
-    window.__kerb = buildKerb(scene, ENV);
+    window.__kerb = new URLSearchParams(location.search).get('kerb') === '1' ? buildKerb(scene, ENV) : 0;   /* stone kerb off by default (Cheney 11/09): the ground is already cut below the road; ?kerb=1 brings it back */
   }
   const ground = new THREE.Mesh(geo, gMat); ground.receiveShadow = true; scene.add(ground); grounds.push(ground);
   window.__grounds = grounds;
@@ -678,9 +678,18 @@ function sunFollow(base) {
 }
 
 // ---------------- loop ----------------
-let slow = 1, paused = false;
+let slow = 1, paused = false, FF = 1;
+const FFS = [1, 4, 10, 25];
+function ffTick() { /* while fast-forwarding: show where she is and what she's doing / deciding */
+  const el = document.getElementById('ffLog'); if (!el || (ffTick.k = (ffTick.k || 0) + 1) % 6) return;
+  const L = (rider.dlog || []).slice(-4).reverse(), mode = { ride: '滑行', walk: '走路', off: '下板', on: '上板' }[rider.mode] || rider.mode;
+  const act = rider.sit ? '路边休息' : rider.dance ? (rider.dance.kind === 'cross' ? '交叉步' : '小舞步') : rider.trick ? '花样' : rider.pump ? 'pump' : rider.push ? '蹬地' : mode;
+  el.innerHTML = '<b>⏩ ' + FF + '×</b> · ' + Math.round(rider.s) + ' m · ' + (rider.v * 3.6).toFixed(0) + ' km/h · 体力 ' + Math.round(rider.stam * 100) + '% · <b>' + act + '</b>'
+    + L.map((d) => '<div>' + Math.round(d.s) + ' m　' + d.msg + '</div>').join(''); }
+function setFF(i) { FF = FFS[i]; const b = document.getElementById('ff'); if (b) { b.textContent = FF > 1 ? '⏩' + FF + '×' : '⏩'; b.classList.toggle('on', FF > 1); }
+  const el = document.getElementById('ffLog'); if (el) el.style.display = FF > 1 ? 'block' : 'none'; if (SND && AC) SND.mute = FF > 1; }
 let REFV = null;   /* ?ref=<move>[/<sample>] skeleton replay (js/refview.js) */
-function step(dt) {
+function step(dt, lite = false) {
   simT += dt; seaU.uT.value = simT; envU.uT.value = simT;
   if (REFV) REFV.step(dt);
   // events by position
@@ -692,7 +701,8 @@ function step(dt) {
   windGust.copy(windNow).multiplyScalar(0.75 + 0.45 * gust + 0.8 * puff);
   rider.gust = puff;
   ctx.wind = windGust;
-  rider.update(dt, (s) => track.at(s), ctx);
+  ctx.lite = lite; rider.update(dt, (s) => track.at(s), ctx); ctx.lite = false;
+  if (lite) { if (rider.s > track.total - 2) restart(); return; }   /* fast-forward sub-step: physics + decisions only; cloth/hair/camera run once per frame */
   { // body kinematics for the hair/cloth rig: travel direction, lateral (centripetal) accel v²κ, vertical accel
     const tr = track.at(rider.s), hp = vrm.scene.position; const vy = (hp.y - (_hk.y0 ?? hp.y)) / dt; _hk.y0 = hp.y;
     const ay = (vy - (_hk.vy ?? vy)) / dt; _hk.vy = vy; _hk.ay += (Math.max(-20, Math.min(20, ay)) - _hk.ay) * 0.2;
@@ -739,7 +749,10 @@ addEventListener('resize', resize); resize();
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000) * slow; last = now;
-  if (rider && !REC && !paused) { step(dt); sndTick(); }
+  if (rider && !REC && !paused) { /* fast-forward: FF sub-steps per frame (each a normal dt, so physics stays stable), capped by a ~14 ms budget */
+    if (FF === 1) step(dt); else { /* sub-steps of up to 1/30 s (the rider is stable there), ~25 ms budget, then one full step for cloth/camera */
+      const t0 = performance.now(), dS = 1 / 30; let todo = dt * FF - dt; while (todo > 1e-4 && performance.now() - t0 < 25) { const d = Math.min(dS, todo); step(d, true); todo -= d; } step(dt); }
+    sndTick(); if (FF > 1) ffTick(); }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -862,7 +875,8 @@ $('mapLn').onclick = (e) => { e.stopPropagation(); MAP.lines = !MAP.lines; drawM
 const setPause = (p) => { paused = p; $('pause').textContent = p ? '▶' : '⏸'; $('pause').classList.toggle('on', p); };
 $('pause').onclick = (e) => { e.stopPropagation(); setPause(!paused); };
 $('restart2').onclick = (e) => { e.stopPropagation(); restart(); setPause(false); };
-addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); setPause(!paused); } });
+addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); setPause(!paused); } if (e.key === 'f' || e.key === 'F') setFF((FFS.indexOf(FF) + 1) % FFS.length); });
+$('ff').onclick = (e) => { e.stopPropagation(); setFF((FFS.indexOf(FF) + 1) % FFS.length); };
 // debug switch: hides everything except the stamina bar (and the switch itself)
 const setDbg = (on) => { document.body.classList.toggle('nodbg', !on); $('dbg').classList.toggle('on', on); localStorage.sw_dbg = on ? '1' : '0'; };
 setDbg(Q.has('debug') ? Q.get('debug') !== '0' : localStorage.sw_dbg !== '0');
@@ -902,7 +916,7 @@ function startAudio() {
   SND = { wf, wg, rf, rg, lastJ: 0 };
 }
 let SND = null;
-function sndTick() { if (!SND || !AC || AC.state !== 'running' || !rider) return; const t = AC.currentTime, v = rider.v, on = rider.mode === 'ride' ? 1 : 0;
+function sndTick() { if (!SND || !AC || AC.state !== 'running' || !rider) return; if (FF > 1) { SND.wg.gain.setTargetAtTime(0, AC.currentTime, 0.1); SND.rg.gain.setTargetAtTime(0, AC.currentTime, 0.1); return; } const t = AC.currentTime, v = rider.v, on = rider.mode === 'ride' ? 1 : 0;
   const air = rider.airRel ? rider.airRel.length() : v, a = Math.min(1, air / 9);
   SND.wg.gain.setTargetAtTime(0.02 + 0.22 * a * a, t, 0.15); SND.wf.frequency.setTargetAtTime(300 + 1500 * a, t, 0.2);
   const rv = Math.min(1, v / 8) * on; SND.rg.gain.setTargetAtTime(0.18 * rv, t, 0.08); SND.rf.frequency.setTargetAtTime(90 + 260 * rv, t, 0.1);
@@ -937,6 +951,8 @@ window.LAB = {
   setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
+  stepLite(d) { step(d, true); },
+  ff(x) { const i = FFS.indexOf(x); setFF(i < 0 ? 0 : i); return FF; },
   light(o) { Object.assign(LT, o || {}); girlShading.key = null; return LT; },
   get renderer() { return renderer; },
   restart, jumpTo(s) { restart(); for (let i = 0; i < 4000 && rider.s < s; i++) step(1 / 30); },

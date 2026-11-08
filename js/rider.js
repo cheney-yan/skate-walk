@@ -398,7 +398,7 @@ export class Rider {
       this.deck.quaternion.copy(qR);
       this.deck.position.copy(PIV).sub(PIV.clone().applyQuaternion(qR));
     } else if (this.seq?.bPos && this.boardFixed && !(this.mode === 'off' && this.seq.ph === 'pick' && this.seq.pick === 'kick')) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); this.deck.quaternion.identity(); this.deck.position.set(0, 0, 0); }
-    { const f = this.flex || 0, L = DECKLOAD, key = f + L.a * 3 + L.b * 7 + L.wa * 11 + L.twist * 13; if (Math.abs(key - (this.flexDrawn || 0)) > 0.0003) { this.flexDrawn = key;
+    { const f = this.flex || 0, L = DECKLOAD, key = f + L.a * 3 + L.b * 7 + L.wa * 11 + L.twist * 13; if (!ctx.lite && Math.abs(key - (this.flexDrawn || 0)) > 0.0003) { this.flexDrawn = key;
         // bend in the BOARD's frame: the bottom graphic is rotated 180° about x (its local y points down), so its sign flips —
         // before, it bent the opposite way, poked up through the grip at the ends (wrong colour) and looked like the edges curling down.
         // Normals are recomputed so the bent deck shades correctly.
@@ -438,7 +438,7 @@ export class Rider {
     this.solveLegs(dt);
     this.placeHeldBoard(); this.restBoard();
     this.events(dt, ctx);
-    this.vrm.update(dt);
+    if (!ctx.lite) this.vrm.update(dt);   /* fast-forward sub-steps skip spring bones / expressions (the next full step catches up) */
   }
 
   // ---------------- climb planner ----------------

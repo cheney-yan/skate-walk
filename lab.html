@@ -26,6 +26,8 @@
   #corner{position:fixed;right:10px;top:calc(env(safe-area-inset-top) + 10px);display:flex;gap:6px;z-index:5}
   #corner button{min-height:36px;min-width:36px;border-radius:18px;border:0;background:rgba(255,250,240,.8);font-size:14px;font-weight:600}
   #corner button.on{background:#ff8a5c;color:#fff}
+  #ffLog{display:none;position:fixed;left:10px;right:10px;top:calc(env(safe-area-inset-top) + 54px);z-index:5;font:12px/1.5 system-ui,sans-serif;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none}
+  #ffLog div{opacity:.85}
   body.rec #corner,body.rec #stam{display:none}
   #brain{position:fixed;right:8px;top:calc(env(safe-area-inset-top) + 54px);width:min(56vw,280px);height:62vh;display:flex;flex-direction:column;background:rgba(255,250,240,.86);border-radius:12px;font-size:10.5px;line-height:1.38;color:#3d3630;box-shadow:0 2px 10px rgba(0,0,0,.12);z-index:6;overflow:hidden}
   #brain .tabs{display:flex;border-bottom:1px solid rgba(0,0,0,.1)} #brain .tabs button{flex:1;border:0;background:none;padding:6px 0;font-size:11px;font-weight:600;color:#7a6e63}
@@ -70,7 +72,8 @@
 <button id="trick" aria-label="花式"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="rgba(255,250,240,.88)"/><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="8"/><circle id="trS" cx="50" cy="50" r="44" fill="none" stroke="#6cbfb0" stroke-width="8" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="276.5" stroke-dashoffset="276.5"/><circle id="trV" cx="50" cy="50" r="34" fill="none" stroke="#9cc3e6" stroke-width="4" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="213.6" stroke-dashoffset="213.6"/></svg><div class="lbl" id="trL">蓄力</div></button>
 <div id="stam"><div class="bar"><div id="spdF" class="fill"></div></div><div id="spdT" class="bt">💨</div><div class="bar" id="stamB"><div id="stamF" class="fill"></div></div><div id="stamT" class="bt">🪶</div></div>
 <div id="brain"><div class="tabs"><button data-t="girl" class="on">女孩</button><button data-t="nature">自然</button><button data-t="light">光影</button><button data-t="mind">决策</button><button data-t="map">全图</button></div><div class="pane" id="brainPane"></div></div>
-<div id="corner"><button id="pause" aria-label="暂停">⏸</button><button id="restart2" aria-label="重开">↺</button><button id="mapBtn" aria-label="地图">🗺</button><button id="snd">🔇</button><button id="dbg">debug</button></div>
+<div id="corner"><button id="pause" aria-label="暂停">⏸</button><button id="restart2" aria-label="重开">↺</button><button id="ff" aria-label="加速">⏩</button><button id="mapBtn" aria-label="地图">🗺</button><button id="snd">🔇</button><button id="dbg">debug</button></div>
+<div id="ffLog"></div>
 <div id="map"><canvas id="mapC"></canvas><div class="mbar"><span id="mapInfo"></span><a id="mapG" target="_blank" rel="noopener">Google 地图 ↗</a><a id="mapE" target="_blank" rel="noopener">Google Earth 3D ↗</a><button id="mapX">✕</button></div><div class="mbar mmode"><button data-mm="ours" class="on">我们 2D</button><button data-mm="o3d">我们 3D</button><button data-mm="sat">卫星</button><button data-mm="cmp">对比</button><button id="mapSrc">NSW 航拍</button><button id="mapLn">叠线</button></div><div id="mapAttr"></div></div>
 <div id="load">加载女孩模型（10MB）…</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
