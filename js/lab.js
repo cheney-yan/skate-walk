@@ -398,7 +398,7 @@ function caption() {
 // When both are met she waits and looks at us; tap the ring / Space / Enter / click the scene to release the trick (board spin).
 { const fire = (e) => { if (e) e.preventDefault?.(); rider.requestTrick && rider.requestTrick(); };
   $('trick')?.addEventListener('click', (e) => { e.stopPropagation(); fire(e); });
-  addEventListener('keydown', (e) => { if (e.code === 'Space' || e.code === 'Enter') fire(e); });
+  addEventListener('keydown', (e) => { if (e.code === 'Enter') fire(e); });   /* Space = pause now */
   let down = null; $('c').addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
   $('c').addEventListener('pointerup', (e) => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8 && performance.now() - down.t < 300) fire(); down = null; }); }
 function trickHUD() { const r = rider, P = r.trickProg || { stam: r.stam, speed: 0, ready: false }, el = $('trick'); if (!el) return;
@@ -664,6 +664,47 @@ requestAnimationFrame(frame);
 
 document.querySelectorAll('[data-cam]').forEach((b) => b.onclick = () => { camMode = b.dataset.cam; camInit = false; document.querySelectorAll('[data-cam]').forEach((x) => x.classList.toggle('on', x === b)); });
 $('restart').onclick = restart;
+// ---- MAP VIEW (Cheney): our own baked data drawn top-down — terrain hillshade, sea, coast/cliffs, buildings, the route
+// (coloured by grade) and where she is; drag to pan, pinch/wheel to zoom. Links open the same spot in Google Maps / Earth 3D.
+const MAP = { on: false, z: 1.2, cx: 0, cy: 0, base: null };
+function routeLatLon(s) { if (!RD) return null; const P = RD.pts, f = s / track.total * RD.length; let k = 0; while (k < P.length - 2 && P[k + 1].s < f) k++;
+  const a = P[k], b = P[k + 1], t = b.s > a.s ? Math.min(1, Math.max(0, (f - a.s) / (b.s - a.s))) : 0; return { lat: a.lat + (b.lat - a.lat) * t, lon: a.lon + (b.lon - a.lon) * t }; }
+function mapBase() { if (MAP.base || !RD) return MAP.base; const T = RD.terrain, H = terrainFn(T), W = T.nx, Hh = T.ny, c = document.createElement('canvas'); c.width = W; c.height = Hh;
+  const g = c.getContext('2d'), im = g.createImageData(W, Hh);
+  for (let j = 0; j < Hh; j++) for (let i = 0; i < W; i++) { const x = T.x0 + i * T.step, y = T.y0 + j * T.step, h = H(x, y), dx = H(x + T.step, y) - H(x - T.step, y), dy = H(x, y + T.step) - H(x, y - T.step);
+    const shade = Math.max(0.55, Math.min(1.25, 1 + (-dx * 0.7 + dy * 0.7) / (2 * T.step) * 2.2)), o = ((Hh - 1 - j) * W + i) * 4;
+    let r, gg, b; if (h <= 0.2) { r = 150; gg = 196; b = 224; } else { const k = Math.min(1, h / 80); r = 196 - 60 * k; gg = 214 - 50 * k; b = 168 - 50 * k; }
+    im.data[o] = r * shade; im.data[o + 1] = gg * shade; im.data[o + 2] = b * shade; im.data[o + 3] = 255; }
+  g.putImageData(im, 0, 0); MAP.base = c; return c; }
+function drawMap() { const cv = $('mapC'), d = devicePixelRatio || 1; cv.width = cv.clientWidth * d; cv.height = cv.clientHeight * d; const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0);
+  const Wc = cv.clientWidth, Hc = cv.clientHeight; g.fillStyle = '#96c4e0'; g.fillRect(0, 0, Wc, Hc);
+  const pos = track.at(rider.s).p, sc = MAP.z, ox = Wc / 2 - (MAP.cx) * sc, oy = Hc / 2 - (MAP.cy) * sc;   // world X east, world Z south (-north)
+  const P = (X, Z) => [ox + X * sc, oy + Z * sc];
+  if (RD) { const T = RD.terrain, b = mapBase(); const [x0, y0] = P(T.x0, -(T.y0 + (T.ny - 1) * T.step)); g.imageSmoothingEnabled = true; g.drawImage(b, x0, y0, (T.nx - 1) * T.step * sc, (T.ny - 1) * T.step * sc);
+    g.fillStyle = 'rgba(214,196,170,.95)'; g.strokeStyle = 'rgba(120,100,80,.6)'; g.lineWidth = 0.6;
+    for (const bd of RD.buildings || []) { g.beginPath(); bd.poly.forEach(([x, y], i) => { const [a, c] = P(x, -y); i ? g.lineTo(a, c) : g.moveTo(a, c); }); g.closePath(); g.fill(); g.stroke(); }
+    for (const c of RD.coast || []) { g.strokeStyle = c.kind === 'cliff' ? '#8a6a4a' : '#e8d6a0'; g.lineWidth = c.kind === 'cliff' ? 2 : 1.5; g.beginPath(); c.line.forEach(([x, y], i) => { const [a, b2] = P(x, -y); i ? g.lineTo(a, b2) : g.moveTo(a, b2); }); g.stroke(); } }
+  // route, coloured by grade (green down .. grey flat .. orange up .. red too steep)
+  g.lineWidth = 4; g.lineCap = 'round'; const col = (gr) => gr < -0.035 ? '#3b8f6a' : gr < -0.01 ? '#6cbfb0' : gr <= 0.01 ? '#888' : gr <= Math.tan(6 * Math.PI / 180) ? '#d08a3c' : '#c4512f';
+  for (let s = 0; s < track.total - 2; s += 2) { const a = track.at(s).p, b = track.at(s + 2).p; g.strokeStyle = col(track.at(s + 1).grade); g.globalAlpha = s < rider.s ? 0.45 : 1; g.beginPath(); g.moveTo(...P(a.x, a.z)); g.lineTo(...P(b.x, b.z)); g.stroke(); }
+  g.globalAlpha = 1;
+  // her: dot + heading
+  const [hx, hy] = P(pos.x, pos.z), dir = track.at(rider.s).dir; g.fillStyle = '#ff5a8a'; g.strokeStyle = '#fff'; g.lineWidth = 2.5; g.beginPath(); g.arc(hx, hy, 7, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.strokeStyle = '#ff5a8a'; g.lineWidth = 3; g.beginPath(); g.moveTo(hx, hy); g.lineTo(hx + dir.x * 20, hy + dir.z * 20); g.stroke();
+  const ll = routeLatLon(rider.s); $('mapInfo').textContent = `${rider.s.toFixed(0)}/${track.total.toFixed(0)} m` + (ll ? ` · ${ll.lat.toFixed(5)}, ${ll.lon.toFixed(5)}` : ' · 练习场');
+  if (ll) { $('mapG').href = `https://www.google.com/maps/@${ll.lat},${ll.lon},19z`; $('mapE').href = `https://earth.google.com/web/@${ll.lat},${ll.lon},40a,300d,35y,0h,60t,0r`; }
+  $('mapG').style.display = $('mapE').style.display = ll ? '' : 'none'; }
+function mapLoop() { if (!MAP.on) return; if (MAP.follow) { const p = track.at(rider.s).p; MAP.cx = p.x; MAP.cy = p.z; } drawMap(); setTimeout(() => requestAnimationFrame(mapLoop), 200); }
+$('mapBtn').onclick = (e) => { e.stopPropagation(); MAP.on = !MAP.on; $('map').classList.toggle('on', MAP.on); $('mapBtn').classList.toggle('on', MAP.on); if (MAP.on) { MAP.follow = true; mapLoop(); } };
+$('mapX').onclick = (e) => { e.stopPropagation(); MAP.on = false; $('map').classList.remove('on'); $('mapBtn').classList.remove('on'); };
+{ const mp = new Map(); let pd = 0; const cv = $('mapC');
+  cv.addEventListener('pointerdown', (e) => { mp.set(e.pointerId, { x: e.clientX, y: e.clientY }); cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', (e) => { const p = mp.get(e.pointerId); if (!p) return; if (mp.size === 1) { MAP.follow = false; MAP.cx -= (e.clientX - p.x) / MAP.z; MAP.cy -= (e.clientY - p.y) / MAP.z; }
+    else if (mp.size === 2) { const [a, b] = [...mp.values()], d0 = Math.hypot(a.x - b.x, a.y - b.y); p.x = e.clientX; p.y = e.clientY; const [c, f] = [...mp.values()], d1 = Math.hypot(c.x - f.x, c.y - f.y); if (d0 > 0) MAP.z = Math.min(12, Math.max(0.15, MAP.z * d1 / d0)); }
+    p.x = e.clientX; p.y = e.clientY; drawMap(); });
+  const up = (e) => mp.delete(e.pointerId); cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); MAP.z = Math.min(12, Math.max(0.15, MAP.z * Math.exp(-e.deltaY * 0.0015))); drawMap(); }, { passive: false });
+  cv.addEventListener('dblclick', () => { MAP.follow = true; }); }
 /* pause / resume (Cheney): freezes the simulation; camera still orbits so you can look around */
 const setPause = (p) => { paused = p; $('pause').textContent = p ? '▶' : '⏸'; $('pause').classList.toggle('on', p); };
 $('pause').onclick = (e) => { e.stopPropagation(); setPause(!paused); };

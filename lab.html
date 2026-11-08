@@ -37,13 +37,19 @@
   #brain .seg.done{opacity:.45} #brain .bar{height:7px;border-radius:4px;background:rgba(0,0,0,.08);overflow:hidden;margin:2px 0 4px} #brain .bar i{display:block;height:100%}
   body.nodbg #brain,body.rec #brain{display:none}
   #cap,#tip,#stam{display:none !important}
-  #trick{position:fixed;right:calc(env(safe-area-inset-right) + 16px);bottom:calc(env(safe-area-inset-bottom) + 64px);width:74px;height:74px;border-radius:50%;border:0;padding:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;z-index:20}
+  #trick{display:none !important}
+  #trick0{position:fixed;right:calc(env(safe-area-inset-right) + 16px);bottom:calc(env(safe-area-inset-bottom) + 64px);width:74px;height:74px;border-radius:50%;border:0;padding:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;z-index:20}
   #trick svg{width:100%;height:100%;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.18))}
   #trick .lbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#5b5147;text-align:center;line-height:1.1;pointer-events:none}
   #trick.ready{animation:trPulse 1.4s ease-in-out infinite}
   #trick.ready .lbl{color:#c4512f}
   @keyframes trPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
   #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:15px;opacity:.7}
+  #map{position:fixed;inset:0;z-index:30;background:#e9e4d8;display:none}
+  #map.on{display:block} #mapC{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+  #map .mbar{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top) + 8px);display:flex;gap:6px;align-items:center;padding:0 10px;flex-wrap:wrap}
+  #map .mbar>*{background:rgba(255,250,240,.9);border-radius:16px;padding:7px 11px;font-size:12px;font-weight:600;color:#3d3630;text-decoration:none;border:0;box-shadow:0 1px 6px rgba(0,0,0,.12)}
+  #mapX{margin-left:auto}
 </style>
 </head>
 <body>
@@ -62,7 +68,8 @@
 <button id="trick" aria-label="花式"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="rgba(255,250,240,.88)"/><circle cx="50" cy="50" r="44" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="8"/><circle id="trS" cx="50" cy="50" r="44" fill="none" stroke="#6cbfb0" stroke-width="8" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="276.5" stroke-dashoffset="276.5"/><circle id="trV" cx="50" cy="50" r="34" fill="none" stroke="#9cc3e6" stroke-width="4" stroke-linecap="round" transform="rotate(-90 50 50)" stroke-dasharray="213.6" stroke-dashoffset="213.6"/></svg><div class="lbl" id="trL">蓄力</div></button>
 <div id="stam"><div class="bar"><div id="spdF" class="fill"></div></div><div id="spdT" class="bt">💨</div><div class="bar" id="stamB"><div id="stamF" class="fill"></div></div><div id="stamT" class="bt">🪶</div></div>
 <div id="brain"><div class="tabs"><button data-t="girl" class="on">女孩</button><button data-t="nature">自然</button><button data-t="mind">决策</button><button data-t="map">全图</button></div><div class="pane" id="brainPane"></div></div>
-<div id="corner"><button id="pause" aria-label="暂停">⏸</button><button id="restart2" aria-label="重开">↺</button><button id="snd">🔇</button><button id="dbg">debug</button></div>
+<div id="corner"><button id="pause" aria-label="暂停">⏸</button><button id="restart2" aria-label="重开">↺</button><button id="mapBtn" aria-label="地图">🗺</button><button id="snd">🔇</button><button id="dbg">debug</button></div>
+<div id="map"><canvas id="mapC"></canvas><div class="mbar"><span id="mapInfo"></span><a id="mapG" target="_blank" rel="noopener">Google 地图 ↗</a><a id="mapE" target="_blank" rel="noopener">Google Earth 3D ↗</a><button id="mapX">✕</button></div></div>
 <div id="load">加载女孩模型（10MB）…</div>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
 <script type="module" src="./js/lab.js"></script>
