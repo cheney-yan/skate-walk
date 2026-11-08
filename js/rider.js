@@ -89,7 +89,12 @@ export function buildLongboard() {
   const wood = new THREE.MeshStandardMaterial({ color: '#e2c79c', roughness: 0.6 });
   const deck = new THREE.Mesh(deckGeo, wood); deck.position.y = DECK_Y - 0.013; deck.castShadow = true; g.add(deck);
   const gripGeo = sheet(0.97);
-  const grip = new THREE.Mesh(gripGeo, new THREE.MeshStandardMaterial({ color: '#3a3d42', roughness: 0.95 }));
+  // GRIP TAPE: black-grey sandpaper — fine random grit (canvas noise) as colour + bump, fully matte
+  const gripTex = (() => { const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'), im = x.createImageData(N, N);
+    for (let i = 0; i < N * N; i++) { const r = Math.random(), sp = r > 0.985 ? 70 : r > 0.93 ? 22 : 0, v = 34 + Math.random() * 22 + sp; im.data[i * 4] = v; im.data[i * 4 + 1] = v + 1; im.data[i * 4 + 2] = v + 3; im.data[i * 4 + 3] = 255; }
+    x.putImageData(im, 0, 0); const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(3, 12); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 4; return tx; })();
+  { const a = gripGeo.attributes.position, uv = []; for (let i = 0; i < a.count; i++) uv.push(a.getX(i) / 0.24 + 0.5, a.getZ(i) / 1.12 + 0.5); gripGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); }
+  const grip = new THREE.Mesh(gripGeo, new THREE.MeshStandardMaterial({ color: '#ffffff', map: gripTex, bumpMap: gripTex, bumpScale: 1.2, roughness: 1.0, metalness: 0, side: THREE.DoubleSide }));
   grip.position.y = DECK_Y + 0.0006; g.add(grip);
   // bottom graphic: soft wave stripe
   const artGeo = sheet(0.7); { const a = artGeo.attributes.position; for (let i = 0; i < a.count; i++) a.setZ(i, a.getZ(i) * 0.55); a.needsUpdate = true; }
@@ -270,14 +275,14 @@ export class Rider {
       // GLIDE CARVE / DANCE: no pumping — she just shifts her centre of mass a few degrees, slowly; with speed that is enough
       // for a wide, long arc (lean λ -> a = g·tanλ -> κ = a/v²). Dance arcs follow her steps (lean toward the stepping side).
       const gA = riding ? (this.glideA || 0) * (1 - pa0) : 0, dA = riding && this.dance ? (this.dn || 0) : 0;
-      const lamG = (gA * (1 - dA) * 9 * Math.sin(this.glidePh || 0) + dA * 11 * Math.sin((this.dance?.t || 0) * 2 * Math.PI / 4.2)) * D;
+      const lamG = (gA * (1 - dA) * 5 * Math.sin(this.glidePh || 0) + dA * 6 * Math.sin((this.dance?.t || 0) * 2 * Math.PI / 4.2)) * D;
       const lamP = riding ? pa0 * lamAmp * hp + lamG : 0;
       if (!riding) { this.pPsi = 0; this.pLat = 0; }
       const psi = this.pPsi || 0, y = this.pLat || 0;
-      const fbK = 1 - 0.75 * Math.max((this.glideA || 0) * (1 - pa0), this.dance ? 1 : 0);
+      const fbK = 1 - 0.35 * Math.max((this.glideA || 0) * (1 - pa0), this.dance ? 1 : 0);
       const aFb = riding ? -fbK * (1.1 * y + 1.5 * vv * Math.sin(psi)) - (1 - fbK) * (0.35 * y + 0.6 * vv * Math.sin(psi)) : 0;   // steer back to the line (gently when gliding: long arcs)
       const aP = 9.81 * Math.tan(lamP) + aFb, kP = aP / (vv * vv);
-      if (riding) { this.pPsi = clamp(psi + this.v * kP * dt, -0.45, 0.45); this.pLat = clamp(y + this.v * Math.sin(this.pPsi) * dt, -1.2, 1.2); }
+      if (riding) { this.pPsi = clamp(psi + this.v * kP * dt, -0.45, 0.45); this.pLat = clamp(y + this.v * Math.sin(this.pPsi) * dt, -0.45, 0.45); }
       this.pumpYaw = this.pPsi || 0; this.pumpLat = this.pLat || 0;
       const aLat = riding ? this.v * this.v * kappa + aP : 0;                                 // total sideways acceleration
       this.aLat = aLat;
@@ -415,7 +420,7 @@ export class Rider {
   carryQ() {
     // board on edge, long axis along her walking direction, deck facing her leg (grip tape inward)
     const q = this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), Math.PI / 2));
-    if (this.carryStyle === 'under') q.multiply(new Q().setFromAxisAngle(new V(0, 0, 1), -0.35));   // tilted: bottom edge out, rests on the forearm
+    if (this.carryStyle === 'under') q.multiply(new Q().setFromAxisAngle(new V(0, 0, 1), -0.5));   // tilted: bottom edge out, rests on the forearm
     return q;
   }
   stepSeq(dt, track) {
@@ -485,7 +490,7 @@ export class Rider {
     if (this.hold || this.mode === 'walk') { w = 1;
       // top: arm hangs nearly straight by the side, hand just outside the hip; board top rail at hand height -> hangs low beside the leg
       // under: elbow bent ~90°, hand at hip height further out, forearm outside the board
-      this.armIKt.copy(this.walkF.localToWorld(this.carryStyle === 'under' ? new V(-0.33, 0.86, 0.12) : new V(-0.25, 0.70, 0.02))); }
+      this.armIKt.copy(this.walkF.localToWorld(this.carryStyle === 'under' ? new V(-0.37, 0.86, 0.12) : new V(-0.25, 0.70, 0.02))); }
     if (S && this.mode === 'off' && S.ph === 'pick' && !this.hold) {
       const tgt = S.pick === 'bend' ? new V(-0.117, DECK_Y, 0).applyQuaternion(S.bQ).add(S.bPos) : new V(0, DECK_Y, 0.44).applyQuaternion(this.board.quaternion).add(this.board.position);
       if (S.pick === 'kick') { const nose = new V(0, DECK_Y, 0.44).applyQuaternion(S.bQ.clone().multiply(new Q().setFromAxisAngle(new V(1, 0, 0), -80 * D))).add(S.bPos.clone().add(new V(0, 0, 0))); tgt.copy(nose); }
@@ -495,19 +500,51 @@ export class Rider {
     if (this.mode === 'on' && S?.ph === 'step') w = 0;
     this.armIKw = damp(this.armIKw, w, 14, 1 / 30);
   }
+  // NO CLIPPING while carrying: sample the skinned vertices of her right arm, hips, thighs, skirt; any that fall inside the
+  // deck slab (or within 8 mm of it) push the board out along its deck normal, away from her body. The hand's own fingers
+  // are allowed to wrap the rail. Smoothed so the board doesn't jitter.
+  clearBoard() {
+    // forearm/upper-arm vertices that end up inside the deck slab push the board along its deck normal, AWAY from the side
+    // the arm is on (centroid of the arm relative to the deck mid-plane) — the board then rests against the forearm instead
+    // of through it. Fingers may wrap the rail. Body vertices are checked too: if the push would drive the deck into her
+    // hip/thigh, it stops there (and the arm target moves out a little next frame via armOut).
+    const V3 = THREE.Vector3, vrm = this.vrm;
+    if (!this._clr) { this._clr = []; vrm.scene.traverse((o) => { if (!o.isSkinnedMesh || !o.visible) return; const sk = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight, idx = [], arm = [];
+        for (let i = 0; i < o.geometry.attributes.position.count; i += 3) { let bi = sk.getX(i), bw = sw.getX(i); for (const c of ['getY', 'getZ', 'getW']) if (sw[c](i) > bw) { bw = sw[c](i); bi = sk[c](i); }
+          const n = o.skeleton.bones[bi].name; if (/Hand|Index|Middle|Ring|Little|Thumb/.test(n)) continue;
+          if (/R_LowerArm|R_UpperArm/.test(n)) { idx.push(i); arm.push(1); } else if (/Hips|R_UpperLeg|R_LowerLeg|Skirt/.test(n)) { idx.push(i); arm.push(0); } }
+        if (idx.length) this._clr.push({ o, idx, arm }); }); }
+    const MID = DECK_Y - 0.0065, HALF = 0.0075 + 0.006;   // slab half-thickness + 6 mm skin margin
+    let off = this.clrOff || 0;
+    for (let it = 0; it < 3; it++) {
+      this.board.updateMatrixWorld(true); const inv = this.board.matrixWorld.clone().invert(), v = new V3(); let armC = 0, armN = 0, dIn = 0, side = 0, bodyHit = 0;
+      const pts = [];
+      for (const { o, idx, arm } of this._clr) for (let k = 0; k < idx.length; k++) { o.getVertexPosition(idx[k], v); v.applyMatrix4(o.matrixWorld).applyMatrix4(inv); pts.push([v.x, v.y, v.z, arm[k]]); if (arm[k]) { armC += v.y - MID; armN++; } }
+      side = armC >= 0 ? -1 : 1;   // board moves to the side opposite the arm
+      for (const [x, y, z, a] of pts) { const hw = 0.125 * Math.min(1, 1.6 * (1 - Math.abs(z) / 0.57) + 0.3); if (Math.abs(z) > 0.57 || Math.abs(x) > hw) continue;
+        const d = (y - MID) * -side;   // distance on the side the board moves toward (positive = in the way)
+        if (Math.abs(y - MID) < HALF) { if (a) dIn = Math.max(dIn, HALF + (y - MID) * side); else bodyHit = Math.max(bodyHit, HALF - Math.abs(y - MID)); } }
+      if (dIn <= 0.0005) break;
+      const step = Math.min(dIn, 0.03); off += step;
+      this.board.position.addScaledVector(new V3(0, side, 0).applyQuaternion(this.board.quaternion), step);
+    }
+    this.clrOff = off * 0.0;   // recomputed every frame from the placed pose (no drift)
+    this.board.updateMatrixWorld(true);
+  }
   placeHeldBoard() {
     const H = this.hold; if (!H) return;
     H.t += 1 / 30; const u = sstep(0, H.T, H.t), du = H.drop;
     const hand = this.b.rightHand.getWorldPosition(new V());
     // grip point in board-local coords. top: fingers over the UPPER rail (x=-rail after the 90° roll -> up), board hangs from the hand.
     // under: hand cups the LOWER rail from below, forearm runs along the outside of the deck.
-    const gTo = this.carryStyle === 'under' ? new V(0.117, DECK_Y - 0.03, 0.05) : new V(-0.117, DECK_Y - 0.004, 0);
+    const gTo = this.carryStyle === 'under' ? new V(0.117, DECK_Y - 0.03, 0.05) : new V(-0.117, DECK_Y - 0.004, 0);   // carry frame: board +x points UP. top: fingers hook over the UPPER rail, board hangs below the hand; under: hand cups the LOWER rail
     const tw = H.twirl ? 2 * Math.PI * sstep(0.1, 0.9, H.t / (H.T + 0.5)) : 0;
     const sw = this.mode === 'walk' ? 1 : 0.4, ph2 = this.phi * Math.PI * 2;
     let q = H.qFrom.clone().slerp(this.carryQ().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), Math.sin(ph2) * 0.05 * sw)).multiply(new Q().setFromAxisAngle(new V(0, 1, 0), Math.sin(ph2 - 0.7) * 0.07 * sw)).multiply(new Q().setFromAxisAngle(new V(1, 0, 0), Math.sin(2 * ph2 - 0.9) * 0.03 * sw)), u).multiply(new Q().setFromAxisAngle(new V(0, 0, 1), tw));
     let g = H.gFrom.clone().lerp(gTo, u);
     if (du > 0) { q = q.slerp(this.seq.bQ, du); }
     this.board.quaternion.copy(q); this.board.position.copy(hand).sub(g.clone().applyQuaternion(q));
+    if (du < 0.5 && u > 0.3) this.clearBoard();
     if (du > 0.98) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); }
     this.board.updateMatrixWorld(true);
   }
@@ -599,7 +636,7 @@ export class Rider {
     this.dn = dn;
     const runB = this.mode === 'on' && this.seq?.ph === 'run', gB = this.mode === 'walk' || runB, uB = ((this.phi % 1) + 1) % 1, SFB = runB ? 0.42 : 0.56;
     const M = this.m, F = this.face, bob = gB ? (0.5 + 0.5 * Math.cos(4 * Math.PI * (uB - SFB / 2))) * (runB ? 0.05 : 0.045) * M : Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
-    const hipDrop = lerp(0.028 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.062 - bob + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);
+    const hipDrop = lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + reach * 0.2 + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03, M);   // walking: nearly straight knees (a lady's walk), small bob
     const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + reach * 0.06 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
     b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
@@ -610,13 +647,13 @@ export class Rider {
     const tw = this.gazeTwist || 0;   // extra torso twist the head could not reach last frame (look-back toward camera)
     const tall = 1 - 0.6 * (this.pump?.A || 0);
     this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0), leanIn * 0.3);
-    const walkLean = M * (0.06 + Math.min(0.5, Math.max(0, this.gradeNow || 0) * 3.6)) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
-    const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
+    const walkLean = M * (-0.03 + Math.min(0.1, Math.max(0, this.gradeNow || 0) * 0.8)) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
+    const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 * (1 - M) + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     const ptw = this.pumpTwist || 0;
-    this.rot('spine', fwd * 0.45 * tall + breathe, open * 0.2 + tw * 0.25 + ptw * 0.3, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
+    this.rot('spine', fwd * 0.45 * tall + breathe - M * 0.12, open * 0.2 + tw * 0.25 + ptw * 0.3, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
     this.rot('chest', fwd * 0.35 * tall - breathe * 0.5, open * 0.2 + tw * 0.35 + ptw * 0.4, leanIn * 0.3);
     const gaitTw = (this.mode === 'walk' ? 1 : 0) * M * Math.cos(this.phi * Math.PI * 2) * 0.07;   // shoulders counter the hips
-    this.rot('upperChest', fwd * 0.2 - breathe, tw * 0.25 + ptw * 0.3 + gaitTw, 0);
+    this.rot('upperChest', fwd * 0.2 - breathe + M * 0.02, tw * 0.25 + ptw * 0.3 + gaitTw, 0);   // walking: chest lifted (sternum up), shoulders back
     // head: GAZE solver. Riding = eyes on the road a few metres ahead (follows the curve).
     // Look-back = she turns to look into the lens (the player), wherever the camera is.
     this.solveGaze(dt, ctx, lb, fwd, w);
@@ -676,11 +713,11 @@ export class Rider {
     for (const k in rest) { tgt[k] = lerp(rest[k], act[k], up); if (k[0] === 'r' && hair[k] !== undefined) tgt[k] = lerp(tgt[k], hair[k], hh); }
     // follow-through: elbows/wrists lag the upper arm, so the hand trails when the arm rises or falls
     for (const k in tgt) A[k] = A[k] === undefined ? tgt[k] : damp(A[k], tgt[k], k.endsWith('w') ? 2.6 : k.endsWith('e') ? 3.8 : 5.5, dt);
-    this.rot('leftShoulder', 0, 0, -0.04 * bal);
+    this.rot('leftShoulder', 0, -0.08 * M, -0.04 * bal);   // shoulder blades back: no rounded shoulders
     this.rot('leftUpperArm', A.lx, A.ly, A.lz);
     this.rot('leftLowerArm', 0, A.le, 0);
     this.rot('leftHand', 0.25, -0.1, A.lw - 0.15);
-    this.rot('rightShoulder', 0, 0, 0.05 * hh);
+    this.rot('rightShoulder', 0, 0.08 * M, 0.05 * hh);
     this.rot('rightUpperArm', A.rx, A.ry, A.rz);
     this.rot('rightLowerArm', 0, A.re, 0);
     this.rot('rightHand', 0.25 * (1 - hh), lerp(0.1, 0.5, hh), A.rw + 0.15 * (1 - hh));
@@ -958,7 +995,9 @@ export function twoBoneIK(up, lo, ft, target, pole) {
   up.updateMatrixWorld(true);
   const A = up.getWorldPosition(new V()), Bp = lo.getWorldPosition(new V()), C = ft.getWorldPosition(new V());
   const a = A.distanceTo(Bp), b = Bp.distanceTo(C);
-  let d = A.distanceTo(target); d = clamp(d, 0.05, a + b - 0.004);
+  // soft reach limit: the knee can straighten to ~175° (beautiful stance line) but never pops/locks — the last cm of
+  // reach is eased with tanh instead of a hard clamp (the old 4 mm clamp held every stance knee at ~168°)
+  let d = A.distanceTo(target); const K0 = a + b - 0.012; if (d > K0) d = K0 + 0.0105 * Math.tanh((d - K0) / 0.0105); d = Math.max(d, 0.05);
   const dir = target.clone().sub(A).normalize();
   const cosA = clamp((a * a + d * d - b * b) / (2 * a * d), -1, 1), sinA = Math.sqrt(1 - cosA * cosA);
   const pv = pole.clone().sub(A); const perp = pv.sub(dir.clone().multiplyScalar(pv.dot(dir))).normalize();

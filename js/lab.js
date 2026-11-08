@@ -401,6 +401,7 @@ function stamHUD() {
 // ---------------- camera ----------------
 let camMode = Q.get('cam') || 'chase', camInit = false;
 const drone = { t: 0, next: 8, on: false, side: 1, u: 0 };
+const frameK = { back: 0, aim: 0 }; const dampF = (a, b, k, dt) => a + (b - a) * (1 - Math.exp(-k * dt));
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 const orbit = { yaw: Math.PI, pitch: 0.18, dist: 3.2, drag: null, pinch: null };
 // DRONE anchor: a point on the path that glides along with her progress (critically damped), never the board itself,
@@ -487,6 +488,16 @@ function updateCamera(dt) {
   spring(camS, 'lx', oL.x, WL, dt); spring(camS, 'ly', oL.y, WL * 0.8, dt); spring(camS, 'lz', oL.z, WL, dt);
   camPos.set(camS.px, camS.py, camS.pz).add(base); camLook.set(camS.lx, camS.ly, camS.lz).add(base);
   camera.position.copy(camPos); camera.lookAt(camLook);
+  // KEEP HER IN FRAME (Cheney: not centred on her, but always on screen — if needed pull back): project her head, hips,
+  // feet and board ends; if any falls outside a safe margin, ease the camera back along its view line (and re-aim a bit
+  // toward her). The pull-back relaxes slowly when she is comfortably inside again.
+  { camera.updateMatrixWorld(); const pts = [rider.b.head, rider.b.hips, rider.b.leftFoot, rider.b.rightFoot].map((o) => o.getWorldPosition(new THREE.Vector3()));
+    rider.board.updateMatrixWorld(); pts.push(rider.board.localToWorld(new THREE.Vector3(0, 0.1, 0.56)), rider.board.localToWorld(new THREE.Vector3(0, 0.1, -0.56)));
+    let worst = 0, cx = 0, cy = 0; for (const q of pts) { const n = q.clone().project(camera); cx += n.x / pts.length; cy += n.y / pts.length; const o = Math.max(Math.abs(n.x) - 0.82, Math.abs(n.y) - 0.86, n.z > 1 ? 1 : 0); worst = Math.max(worst, o); }
+    frameK.back = worst > 0 ? Math.min(6, frameK.back + worst * 6 * dt * 10) : Math.max(0, frameK.back - dt * 0.25);
+    frameK.aim = dampF(frameK.aim, worst > 0 ? 1 : 0, worst > 0 ? 3 : 0.5, dt);
+    if (frameK.back > 0 || frameK.aim > 0.01) { const vd = camLook.clone().sub(camPos).normalize(); camPos.addScaledVector(vd, -frameK.back).add(new THREE.Vector3(0, frameK.back * 0.35, 0));
+      const hip = pts[1]; camLook.lerp(hip, 0.5 * frameK.aim); camera.position.copy(camPos); camera.lookAt(camLook); } }
   if (BLD.length) { const a = camera.position, b = rider.board.position.clone().add(new THREE.Vector3(0, 1, 0)), ab = b.clone().sub(a), l2 = ab.lengthSq();
     // hide blocks that sit on the sight line camera -> her -> ~14 m beyond her (they would wall off the view she rides into)
     const far = a.clone().addScaledVector(ab, 1 + 14 / Math.sqrt(l2)), af = far.clone().sub(a), lf = af.lengthSq();
