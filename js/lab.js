@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { loadGirl, setupHair, Skirt, Hat, OUTFIT, addWristGuards, flutterUpdate } from './girl.js';
 import { Rider, EMAX } from './rider.js';
 import { envU, roadMaterial, roadEdges, roadDecals, groundAttr, groundMaterial, buildTrees, corridorGround, buildKerb } from './env.js';
+import { buildBuildings } from './buildings.js';
 
 const Q = new URLSearchParams(location.search);
 const REC = Q.has('rec');
@@ -9,6 +10,8 @@ const REC = Q.has('rec');
 const RD = Q.get('route') ? await (await fetch('./data/route.json')).json() : null;
 // baked environment (tools/env.py): ground classes, tree/shrub instances, road symbols & stains
 const ENV = RD ? await (await fetch('./data/env.json')).json() : null;
+/* all building footprints (tools/buildings.py: OSM + Microsoft ML footprints, merged blocks); ?bld=old -> the 218 route.json polys */
+const BLDD = RD && Q.get('bld') !== 'old' ? await fetch('./data/buildings.json').then((r) => r.ok ? r.json() : null).catch(() => null) : null;
 if (REC) document.body.classList.add('rec');
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -302,7 +305,8 @@ if (RD) {
   // buildings: soft off-white blocks, slightly lighter roofs, the way Apple Maps draws a city before photo-3D loads
   const side = new THREE.MeshStandardMaterial({ color: '#f4f2ee', roughness: 0.95 }), top = new THREE.MeshStandardMaterial({ color: '#fbfaf8', roughness: 0.9 });
   const sideAlt = new THREE.MeshStandardMaterial({ color: '#eef0f3', roughness: 0.95 });
-  for (const b of RD.buildings) {
+  if (BLDD) { window.__bld = buildBuildings(scene, BLDD); BLD.gpu = window.__bld.U; }
+  for (const b of BLDD ? [] : RD.buildings) {
     if (b.poly.length < 4) continue;
     const g = new THREE.ExtrudeGeometry(new THREE.Shape(b.poly.map(([x, y]) => new THREE.Vector2(x, y))), { depth: Math.max(3, b.h), bevelEnabled: false });
     g.rotateX(-Math.PI / 2);
@@ -580,6 +584,9 @@ function updateCamera(dt) {
     frameK.aim = dampF(frameK.aim, worst > 0 ? 1 : 0, worst > 0 ? 3 : 0.5, dt);
     if (frameK.back > 0 || frameK.aim > 0.01) { const vd = camLook.clone().sub(camPos).normalize(); camPos.addScaledVector(vd, -frameK.back).add(new THREE.Vector3(0, frameK.back * 0.35, 0));
       const hip = pts[1]; camLook.lerp(hip, 0.5 * frameK.aim); camera.position.copy(camPos); camera.lookAt(camLook); } }
+  if (BLD.gpu) { const a = camera.position, b = rider.board.position.clone().add(new THREE.Vector3(0, 1, 0)), ab = b.clone().sub(a);
+    /* same rule as below, evaluated per building in the vertex shader (merged meshes) */
+    BLD.gpu.uCamA.value.copy(a); BLD.gpu.uCamF.value.copy(a).addScaledVector(ab, 1 + 14 / Math.max(ab.length(), 1e-3)); BLD.gpu.uHide.value = 1; }
   if (BLD.length) { const a = camera.position, b = rider.board.position.clone().add(new THREE.Vector3(0, 1, 0)), ab = b.clone().sub(a), l2 = ab.lengthSq();
     // hide blocks that sit on the sight line camera -> her -> ~14 m beyond her (they would wall off the view she rides into)
     const far = a.clone().addScaledVector(ab, 1 + 14 / Math.sqrt(l2)), af = far.clone().sub(a), lf = af.lengthSq();
@@ -725,7 +732,7 @@ addEventListener('resize', resize); resize();
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000) * slow; last = now;
-  if (rider && !REC && !paused) step(dt);
+  if (rider && !REC && !paused) { step(dt); sndTick(); }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
@@ -766,13 +773,13 @@ function mapCoast(g, P, thin = false) { for (const c of RD.coast || []) { g.stro
 function mapOurs2D(g, P, sc, Wc, Hc) { g.fillStyle = '#96c4e0'; g.fillRect(0, 0, Wc, Hc); if (!RD) return;
   const T = RD.terrain, b = mapBase(); const [x0, y0] = P(T.x0, -(T.y0 + (T.ny - 1) * T.step)); g.imageSmoothingEnabled = true; g.drawImage(b, x0, y0, (T.nx - 1) * T.step * sc, (T.ny - 1) * T.step * sc);
   g.fillStyle = 'rgba(214,196,170,.95)'; g.strokeStyle = 'rgba(120,100,80,.6)'; g.lineWidth = 0.6;
-  for (const bd of RD.buildings || []) { g.beginPath(); bd.poly.forEach(([x, y], i) => { const [a, c] = P(x, -y); i ? g.lineTo(a, c) : g.moveTo(a, c); }); g.closePath(); g.fill(); g.stroke(); }
+  for (const bd of window.__bld ? window.__bld.list : RD.buildings || []) { g.beginPath(); (bd.P || bd.poly).forEach(([x, y], i) => { const [a, c] = P(x, -y); i ? g.lineTo(a, c) : g.moveTo(a, c); }); g.closePath(); g.fill(); g.stroke(); }
   mapCoast(g, P); mapRoute(g, P); }
 /* the actual 3D scene seen straight down (orthographic, north up, same centre/scale); re-rendered when the view settles,
    the last render is reused (shifted/scaled) while dragging */
 function map3DRender(Wc, Hc) { const cam = MAP.ocam || (MAP.ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 3000)), hw = Wc / 2 / MAP.z, hh = Hc / 2 / MAP.z;
   cam.left = -hw; cam.right = hw; cam.top = hh; cam.bottom = -hh; cam.position.set(MAP.cx, 520, MAP.cy); cam.up.set(0, 0, -1); cam.lookAt(MAP.cx, 0, MAP.cy); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
-  const fog = scene.fog; scene.fog = null; renderer.render(scene, cam); scene.fog = fog;
+  const fog = scene.fog, bh = BLD.gpu ? BLD.gpu.uHide.value : 0; scene.fog = null; if (BLD.gpu) BLD.gpu.uHide.value = 0; renderer.render(scene, cam); scene.fog = fog; if (BLD.gpu) BLD.gpu.uHide.value = bh;
   const d = devicePixelRatio || 1, c = MAP.c3 || (MAP.c3 = document.createElement('canvas')); c.width = Wc * d; c.height = Hc * d; c.getContext('2d').drawImage(renderer.domElement, 0, 0, c.width, c.height);
   MAP.v3 = { cx: MAP.cx, cy: MAP.cy, z: MAP.z, W: Wc, H: Hc }; MAP.t3 = performance.now(); }
 function mapOurs3D(g, P, sc, Wc, Hc) { const v = MAP.v3, fresh = v && v.cx === MAP.cx && v.cy === MAP.cy && v.z === MAP.z && v.W === Wc && v.H === Hc;
@@ -874,7 +881,24 @@ function startAudio() {
   const gw = AC.createGain(); gw.gain.value = .25; const lfo = AC.createOscillator(); lfo.frequency.value = .11; const lg = AC.createGain(); lg.gain.value = .18;
   lfo.connect(lg); lg.connect(gw.gain); src.connect(f); f.connect(gw); gw.connect(master); src.start(); lfo.start();
   music();
+  /* SPEED SOUNDS (Cheney): wind rush around her ears and the wheels' roll, both driven by speed every frame (sndTick).
+     wind: band-passed noise, louder + brighter with airspeed (her speed + real wind); wheels: low rumble whose pitch/level
+     follow speed, plus a soft click at each concrete expansion joint (every 2.4 m). */
+  const nb = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  const mk = () => { const s = AC.createBufferSource(); s.buffer = nb; s.loop = true; s.start(); return s; };
+  const wf = AC.createBiquadFilter(); wf.type = 'bandpass'; wf.Q.value = 0.6; const wg = AC.createGain(); wg.gain.value = 0; mk().connect(wf); wf.connect(wg); wg.connect(master);
+  const rf = AC.createBiquadFilter(); rf.type = 'lowpass'; rf.Q.value = 3; const rg = AC.createGain(); rg.gain.value = 0; mk().connect(rf); rf.connect(rg); rg.connect(master);
+  SND = { wf, wg, rf, rg, lastJ: 0 };
 }
+let SND = null;
+function sndTick() { if (!SND || !AC || AC.state !== 'running' || !rider) return; const t = AC.currentTime, v = rider.v, on = rider.mode === 'ride' ? 1 : 0;
+  const air = rider.airRel ? rider.airRel.length() : v, a = Math.min(1, air / 9);
+  SND.wg.gain.setTargetAtTime(0.02 + 0.22 * a * a, t, 0.15); SND.wf.frequency.setTargetAtTime(300 + 1500 * a, t, 0.2);
+  const rv = Math.min(1, v / 8) * on; SND.rg.gain.setTargetAtTime(0.18 * rv, t, 0.08); SND.rf.frequency.setTargetAtTime(90 + 260 * rv, t, 0.1);
+  const j = Math.floor(rider.s / 2.4); if (on && j !== SND.lastJ && v > 1.5) { const o = AC.createOscillator(), g = AC.createGain(); o.type = 'square'; o.frequency.value = 70 + 40 * Math.random();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05 * Math.min(1, v / 6), t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05); o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.06);
+    setTimeout(() => { if (!AC) return; const t2 = AC.currentTime, o2 = AC.createOscillator(), g2 = AC.createGain(); o2.type = 'square'; o2.frequency.value = 65; g2.gain.setValueAtTime(0.0001, t2); g2.gain.exponentialRampToValueAtTime(0.04 * Math.min(1, v / 6), t2 + 0.004); g2.gain.exponentialRampToValueAtTime(0.0001, t2 + 0.05); o2.connect(g2); g2.connect(master); o2.start(t2); o2.stop(t2 + 0.06); }, 0.8 / Math.max(v, 0.5) * 1000); }   /* front then back trucks over the joint */
+  SND.lastJ = j; }
 const sndUI = () => { $('snd').textContent = AC && AC.state === 'running' ? '🔊' : '🔇'; };
 $('snd').onclick = (e) => { e.stopPropagation(); if (!AC) startAudio(); else if (AC.state === 'running') AC.suspend(); else AC.resume(); setTimeout(sndUI, 50); };
 if (!REC) addEventListener('pointerdown', function first() { removeEventListener('pointerdown', first); if (!AC) { startAudio(); setTimeout(sndUI, 50); } }, { once: true });   // browsers need a tap before audio
