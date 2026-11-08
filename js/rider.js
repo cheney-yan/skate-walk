@@ -218,6 +218,9 @@ export class Rider {
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
         spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0)) * dt;   // rolling downhill is the best rest: the bar fills fastest there
         if (this.v > vmax) a -= (this.pump ? 1.1 : 1.6) * (this.v - vmax) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
+        this.trickReady = this.mode === 'ride' && !holeSoon && this.stam >= 0.95 && Math.abs(grade) < 0.035 && this.v > 2.0 && !this.ollie && !this.push && this.air <= 0 && !this.dance && (this.trickCool ?? 0) <= 0;
+        this.trickProg = { stam: this.stam, speed: clamp(this.v / 2.0, 0, 1), ready: this.trickReady };
+        if (this.trickReq) { this.trickReq = false; if (this.trickReady) { this.startTrick('full'); this.look = null; } }
         this.pushCool -= dt; this.trickCool = (this.trickCool ?? 6) - dt; this.danceCool = (this.danceCool ?? 10) - dt;
         if (this.dance) { this.dance.t += dt * 0.75; if (this.dance.t > DANCE_T) { this.dance = null; this.danceCool = 14 + Math.random() * 8; } }
         if (!this.planT || this.t - this.planT > 0.5) { this.plan = this.planClimb(track); this.planT = this.t; }
@@ -229,8 +232,8 @@ export class Rider {
           else if (this.slowT > 2.2) this.startOff('slow');
           else if (this.stam <= 0.02 && (grade > 0.02 || this.v < 1.0)) this.startOff('tired');
           else if (!holeSoon && this.v > vmax + 0.6 && grade < -0.02 && this.stam > 0.3 && this.trickCool <= 0) this.startTrick('speed');
-          else if (!holeSoon && this.stam >= 0.999 && Math.abs(grade) < 0.03 && this.v > 2.2 && this.trickCool <= 0) this.startTrick('full');
-          else if (!this.dance && !holeSoon && this.stam > 0.35 && Math.abs(grade) < 0.035 && Math.abs(kappa) < 0.06 && this.v > 2.0 && (this.danceCool ?? 6) <= 0 && pl.kind !== 'walk') this.startDance();
+          // full-bar trick is now PLAYER-triggered (tap / Space / Enter): she only gets READY and looks at us
+          else if (!this.dance && !holeSoon && this.stam > 0.35 && Math.abs(grade) < 0.035 && Math.abs(kappa) < 0.06 && this.v > 2.0 && (this.danceCool ?? 6) <= 0 && pl.kind !== 'walk' && this.autoDance) this.startDance();   // Cheney: no tricks on her own (dance kept for later, player-triggered)
         }
       } else a -= this.seq.decel;
       this.v = Math.max(0, this.v + a * dt);
@@ -412,6 +415,7 @@ export class Rider {
     this.ev.push(['off', this.s, kind, why]);
   }
   startOn() { this.mode = 'on'; this.modeT = 0; const bs = this.s + 0.75; this.seq = { ph: 'drop', t: 0, bs }; this.slowT = 0; this.ev.push(['on', this.s]); }
+  requestTrick() { this.trickReq = true; return !!this.trickReady; }
   startTrick(why) {
     this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 40 : 20;
     this.stam = Math.max(0, this.stam - (52 * 9.81 * 0.32 / EFF + 150) / EMAX); this.ev.push(['trick', this.s, why]);
@@ -439,7 +443,7 @@ export class Rider {
         }
       } else if (S.ph === 'step') {
         this.m = sstep(0, 0.7, S.t); this.face = sstep(0.05, 0.75, S.t);
-        if (S.t > 0.8) { S.ph = 'pick'; S.t = 0; S.pick = S.kind === 'slide' || Math.random() < 0.5 ? 'bend' : 'kick'; this.ev.push(['pick', this.s, S.pick]); }
+        if (S.t > 0.8) { S.ph = 'pick'; S.t = 0; S.pick = this.forcePick || 'bend';   // Cheney: the kick-up looked odd; bend & pick for now this.ev.push(['pick', this.s, S.pick]); }
       } else if (S.ph === 'pick') {
         this.m = 1; this.face = 1;
         if (S.pick === 'bend') {
@@ -641,6 +645,7 @@ export class Rider {
     w.wind = damp(w.wind, sstep(1.5, 6, ws), 1.5, dt);
     // look-back: occasionally turn over the trailing (right) shoulder toward the camera
     this.nextLook -= dt;
+    if (this.trickReady && !this.look && !this.ollie) this.nextLook = Math.min(this.nextLook, 0);
     if (!this.look && this.nextLook <= 0 && this.mode !== 'off' && this.mode !== 'on' && !this.push && !this.ollie && Math.abs(this.lean) < 8 * D && w.tuck < 0.3 && w.effort < 0.5) {
       this.look = { t: 0, T: 2.6 }; this.ev.push(['look', this.s]);
     }
@@ -649,6 +654,7 @@ export class Rider {
     if (this.look) {
       this.look.t += dt; const u = this.look.t;
       lk = sstep(0, 0.55, u) * (1 - sstep(this.look.T - 0.6, this.look.T, u));
+      if (this.trickReady && u > 0.8 && u < this.look.T - 0.7) this.look.t = Math.min(this.look.t, 1.2);   // ready: she holds her gaze on us, waiting
       if (u > this.look.T) { this.look = null; this.nextLook = ctx.lookEvery ?? (14 + Math.random() * 8); }
     }
     w.look = lk;
@@ -696,7 +702,7 @@ export class Rider {
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
     // model walk: hips shift a little over the standing foot each step (pelvis side sway ~1.6 cm) — in the walk frame the
     // model's +x is her LEFT when facing forward (F=1); stance foot alternates with phi (left planted around phi≈0.28)
-    const walkW = this.mode === 'walk' ? M * F : 0, hsw = walkW * 0.022 * Math.sin(this.phi * Math.PI * 2 - 0.3);
+    const walkW = this.mode === 'walk' ? M * F : 0, hsw = walkW * 0.011 * Math.sin(this.phi * Math.PI * 2 - 0.3);
     this.hipSw = walkW * Math.sin(this.phi * Math.PI * 2 - 0.3);
     b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip + hsw, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
     // ---- torso: open toward the nose; push opens fully; look-back twists the other way
@@ -706,8 +712,8 @@ export class Rider {
     const tw = this.gazeTwist || 0;   // extra torso twist the head could not reach last frame (look-back toward camera)
     const tall = 1 - 0.6 * (this.pump?.A || 0);
     // pelvis: swing-side hip drops a touch (~3°) and rotates forward with the swinging leg (~5°); the chest counters it
-    const hsW = this.hipSw || 0, pYaw = (this.mode === 'walk' ? M * F : 0) * Math.cos(this.phi * Math.PI * 2) * 5 * D;
-    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0) + pYaw, leanIn * 0.3 + hsW * 4 * D);
+    const hsW = this.hipSw || 0, pYaw = (this.mode === 'walk' ? M * F : 0) * Math.cos(this.phi * Math.PI * 2) * 3 * D;
+    this.rot('hips', 0.0 + w.tuck * 0.15, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0) + pYaw, leanIn * 0.3 + hsW * 1.8 * D);
     const walkLean = M * (-0.03 + Math.min(0.1, Math.max(0, this.gradeNow || 0) * 0.8)) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0);
     const fwd = walkLean - 0.02 - this.dn * 0.06 + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 * (1 - M) + reach * 0.32 + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     const ptw = this.pumpTwist || 0;
@@ -938,13 +944,13 @@ export class Rider {
         // by the standing ankle (x ≈ 3 cm) and reaches across to land. Toes point straight ahead / a touch out (~4°).
         let z = G ? G.z : c * st, x = sg * 0.09;
         if (G && this.mode === 'walk') { const u = ((this.phi + (side === 'left' ? 0 : 0.5)) % 1 + 1) % 1, w = u < SF ? 0 : (u - SF) / (1 - SF);
-          const land = -0.008, pass = 0.03; x = sg * (u < SF ? land : lerp(land, pass, Math.sin(Math.PI * w)) ); }
+          const land = 0.045, pass = 0.055;   /* composed, confident: feet in two close tracks (~9 cm apart), never crossing */ x = sg * (u < SF ? land : lerp(land, pass, Math.sin(Math.PI * w)) ); }
         if (side === 'left' && kick) { z += kick * 0.25; }
         if (bend) { z += side === 'left' ? 0.12 * bend : -0.1 * bend; }
         const p = this.walkF.localToWorld(new V(x, 0, z)); p.y = (this.groundFn ? this.groundFn(p.x, p.z) : this.walkF.position.y) + ANK + lift + (side === 'left' ? kick * 0.04 : 0); return p; };
       const wl = wf('left'), wr = wf('right');
       const deckL = lf.clone(), deckR = rf.clone();
-      lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); const tOut = this.mode === 'walk' ? 4 * D : 0; lYaw = lerp(lYaw, -90 * D - tOut * this.flip, M); rYaw = lerp(rYaw, -90 * D + tOut * this.flip, M);
+      lf = lf.lerp(wl, M); rf = rf.lerp(wr, M); const tOut = this.mode === 'walk' ? 6 * D : 0; lYaw = lerp(lYaw, -90 * D - tOut * this.flip, M); rYaw = lerp(rYaw, -90 * D + tOut * this.flip, M);
       // HOP-ON: the feet used to be a blend of two unrelated poses (gait feet -> deck feet) while the run gait switched off,
       // so they jumped. Now each foot has its own path from where it really is: the front foot steps up onto the front
       // bolts first (0-0.28 s, small arc); the back foot pushes off the road (stays planted, heel rising) and swings onto
