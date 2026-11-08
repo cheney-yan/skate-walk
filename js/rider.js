@@ -256,7 +256,7 @@ export class Rider {
         this.ctxV = vmax; const pc = this.plan, upSoon = pc && pc.climbAt !== undefined && pc.climbAt !== null && pc.climbAt < 12 + this.v * 8;
         const vCap = upSoon ? vmax + 2.2 : vmax;   /* a climb ahead: keep the speed, she'll spend it going up */
         if (this.v > vCap) a -= (this.pump ? 1.1 : 1.6) * (this.v - vCap) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
-        this.trickReady = this.mode === 'ride' && !holeSoon && this.stam >= PROFILE.preference.trickMinStamina && grade < 0.035 && grade > -0.09 && this.v > PROFILE.preference.trickMinKmh / 3.6 && this.v < vmax + 1.2 && !this.ollie && !this.push && this.air <= 0 && !this.dance && !this.piro && (this.trickCool ?? 0) <= 0;
+        this.trickReady = this.mode === 'ride' && !holeSoon && Math.abs(kappa) < 0.02 && Math.abs(this.lean) < 8 * D &&   /* a straight bit: no carve lean */ this.stam >= PROFILE.preference.trickMinStamina && grade < 0.035 && grade > -0.09 && this.v > PROFILE.preference.trickMinKmh / 3.6 && this.v < vmax + 1.2 && !this.ollie && !this.push && this.air <= 0 && !this.dance && !this.piro && (this.trickCool ?? 0) <= 0;
         this.trickProg = { stam: this.stam, speed: clamp(this.v / (PROFILE.preference.trickMinKmh / 3.6), 0, 1), fast: this.v >= vmax + 1.2, ready: this.trickReady };
         if (this.trickReady && !this._trWas) this.decide('蓄力够 + 速度合适：等你点转板'); this._trWas = this.trickReady;
         if (upSoon && this.v > vmax && !this._upWas) this.decide('前方上坡：不刹车，留着速度冲上去'); this._upWas = upSoon && this.v > vmax;
@@ -354,7 +354,7 @@ export class Rider {
       this.pumpYaw = this.pPsi || 0; this.pumpLat = this.pLat || 0;
       const aLat = riding ? this.v * this.v * kappa + aP : 0;                                 // total sideways acceleration
       this.aLat = aLat;
-      const leanT = clamp(Math.atan(aLat / 9.81), -30 * D, 30 * D);                           // the CoM lean that balances it
+      const leanT = clamp(Math.atan(aLat / 9.81), -30 * D, 30 * D) * (this.piro ? 1 - 0.85 * (this.psP?.on || 0) : 1);   /* the CoM lean that balances it; pirouette: she stays upright (the board just runs straight) */
       this.lean = damp(this.lean, leanT, 5, dt);   // a heavier body leans slowly
       const kTot = riding ? kappa + kP : 0;
       this.steerT = Math.atan(kTot * HALF_WB); this.tiltT = clamp(this.steerT / KT, -24 * D, 24 * D); }
@@ -908,7 +908,7 @@ export class Rider {
     const runB = this.jogPh(), gB = this.mode === 'walk' || runB, uB = ((this.phi % 1) + 1) % 1, SFB = runB ? 0.42 : 0.56;
     const M = this.m, F = this.face, bob = gB ? (0.5 + 0.5 * Math.cos(4 * Math.PI * (uB - SFB / 2))) * (runB ? 0.05 : 0.045) * M : Math.abs(Math.sin(this.phi * Math.PI * 2)) * 0.025 * M;
     const sitD = 0;   /* rest pose: hips set below (sitPose) */
-    const piroD = psP ? psP.on * 0.03 + psP.wind * 0.05 - psP.rise * 0.03 + (psP.u >= 1 ? Math.sin(Math.PI * clamp((this.piro.t - this.MV.pirouette.windupT - this.MV.pirouette.spinT) / 0.5, 0, 1)) * 0.035 : 0) : 0;   /* pirouette: knees ~147°, rising to ~163° mid-turn */
+    const piroD = psP ? psP.on * 0.065 + psP.wind * 0.06 + psP.rise * 0.022 + (psP.u >= 1 ? Math.sin(Math.PI * clamp((this.piro.t - this.MV.pirouette.windupT - this.MV.pirouette.spinT) / 0.5, 0, 1)) * 0.035 : 0) : 0;   /* pirouette: knees ~147°, rising to ~163° mid-turn */
     const hipDrop = sitD + piroD - (this.dance?.kind === 'cross' ? dn * (this.xsLift ?? 0.008) : 0) + lerp(0.008 * (1 - 0.8 * (tallG || 0)) + this.oDrop + w.effort * 0.05 * (1 - M) + this.crouch * 0.17 + this.pe * ((this.pushDrop ?? 0.03) + (this.pushExtra || 0)) + breathe * 0.3, 0.014 - bob * 0.45 + this.bend * 0.42 + (this.kickStep || 0) * 0.03 + swingK * 0.05 + Math.max(0, swingK - 1) * 0.25, M);   // walking: nearly straight knees (a lady's walk), small bob
     const hipZ = 0.015 + (this.pumpCs || 0) * 0.06 + this.pe * 0.11 - w.tuck * 0.03 + w.effort * 0.02 - heel * 0.06 + toe * 0.035;
     const dHip = DF ? ((DF.ry > 0.15 ? DF.lz : (DF.lz + DF.rz) / 2) - 0.0) * dn : 0;
@@ -917,6 +917,9 @@ export class Rider {
     const walkW = this.mode === 'walk' ? M * F : 0, hsw = walkW * 0.011 * Math.sin(this.phi * Math.PI * 2 - 0.3);
     this.hipSw = walkW * Math.sin(this.phi * Math.PI * 2 - 0.3);
     b.hips.position.set(this.hipRest.x + (hipX * (1 - M) + dHip) * this.flip + hsw, this.hipRest.y - hipDrop, this.hipRest.z + (hipZ * (1 - M) - this.bend * 0.12 + sway) * this.flip);
+    if (psP && psP.on > 0.01) { /* PIROUETTE: the hips stay right over the gathered feet (deck centre) whatever the body yaw - the riding hip offsets
+        are in the body frame and swung her off-axis as she turned (measured 35° tilt, knee locked at 170°) */
+      const k = psP.on; b.hips.position.x = lerp(b.hips.position.x, this.hipRest.x, k); b.hips.position.z = lerp(b.hips.position.z, this.hipRest.z, k); }
     if (sw > 0) { /* REST: squat-sit back onto the board behind her (hips over the deck centre, bottom on the grip tape) */
       const hs = this.SIT.hipY, hz = -this.SIT.back, e = sw, dip = Math.sin(Math.PI * e) * 0.04;
       b.hips.position.y = lerp(b.hips.position.y, hs, e) - dip * 0; b.hips.position.z = lerp(b.hips.position.z, this.hipRest.z + hz * this.flip, sstep(0.1, 0.85, e)); b.hips.position.x = lerp(b.hips.position.x, this.hipRest.x, e); }
@@ -930,7 +933,7 @@ export class Rider {
     const hsW = this.hipSw || 0, pYaw = (this.mode === 'walk' ? M * F : 0) * Math.cos(this.phi * Math.PI * 2) * 3 * D;
     this.rot('hips', 0.0 + w.tuck * 0.15 + this.pe * (this.pushLeanK ?? 0.9) * this.MV.push.lean * D, open * 0.6 + tw * 0.15 + (this.pumpHipYaw || 0) + pYaw, leanIn * 0.3 + hsW * 1.8 * D + this.pe * (this.pushRoll ?? 12) * D);
     const walkLean = M * (-0.03 + Math.min(0.1, Math.max(0, this.gradeNow || 0) * 0.8)) + this.bend * 0.75 + (brk && brk.kind === 'slide' ? -0.12 : 0) + swingK * (this.TD.lean ?? 0.4) + stepOn * 0.1;
-    const fwd = walkLean - 0.02 + this.dn * this.MV.cross_step.torsoLean * D * (this.danceStep || 0) - this.dn * 0.03 * (1 - (this.danceStep || 0)) + (psP ? psP.wind * this.MV.pirouette.windupLean * D * 0.6 + psP.on * 3 * D : 0) + sitLean + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 * (1 - M) + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
+    const fwd = walkLean - 0.02 + this.dn * this.MV.cross_step.torsoLean * D * (this.danceStep || 0) - this.dn * 0.03 * (1 - (this.danceStep || 0)) + (psP ? psP.wind * this.MV.pirouette.windupLean * D * 0.6 + psP.on * 3 * D * (1 - (psP.spinning ? 1 : 0)) - (psP.spinning ? 0.03 : 0) : 0) + sitLean + heel * 0.28 + toe * 0.05 + w.tuck * 0.48 + w.effort * 0.5 * (1 - M) + crouchO * 0.42 + tuckAir * 0.3 - extend * 0.15 + landAbs * 0.35;
     const ptw = this.pumpTwist || 0;
     this.rot('spine', fwd * 0.45 * tall + breathe - M * 0.12, open * 0.2 + tw * 0.25 + ptw * 0.3, leanIn * 0.4 + Math.sin(t * 0.7) * 0.01);
     this.rot('chest', fwd * 0.35 * tall - breathe * 0.5, open * 0.2 + tw * 0.35 + ptw * 0.4, leanIn * 0.3);
@@ -939,6 +942,12 @@ export class Rider {
     // head: GAZE solver. Riding = eyes on the road a few metres ahead (follows the curve).
     // Look-back = she turns to look into the lens (the player), wherever the camera is.
     this.solveGaze(dt, ctx, lb, fwd, w);
+    { const ps = this.psP; if (ps && ps.spinning) { /* SPOTTING: the head holds the forward view while the body turns, then whips round ahead of it */
+        const bodyYaw = ((ps.yaw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI), lagMax = 75 * D;
+        const want = bodyYaw < Math.PI ? -Math.min(bodyYaw, lagMax) : Math.min(2 * Math.PI - bodyYaw, lagMax) * 0.6;
+        this.spotY = damp(this.spotY ?? 0, want, 18, dt); } else this.spotY = damp(this.spotY ?? 0, 0, 8, dt);
+      if (Math.abs(this.spotY) > 1e-3) { const hd = this.b.head, nk = this.b.neck; const q = new Q().setFromAxisAngle(new V(0, 1, 0), this.spotY * 0.55);
+        if (nk) nk.quaternion.multiply(new Q().setFromAxisAngle(new V(0, 1, 0), this.spotY * 0.45)); hd.quaternion.multiply(q); } }
     // ---- arms: relaxed, swinging; balance out on tuck/landing; right hand to hair in wind
     const bal = clamp(w.tuck * 0.9 + crouchO * 0.5 + tuckAir * 1.2 + landAbs * 0.8 + Math.abs(this.lean) * 1.2 * (1 - 0.8 * (this.pump?.A || 0)) + stepOn * 0.6 + mountAbs * 0.6, 0, 1);
     const swing = this.push ? Math.sin(P * Math.PI * 2) * 0.22 * w.push : Math.sin(t * 1.1) * 0.03;   // arms barely swing on a push
@@ -1007,7 +1016,7 @@ export class Rider {
         for (const k in o) { let v = lerp(o[k], g[k], ps.gather); v = lerp(v, wd[k], reo * (1 - ps.gather)); tgt[k] = lerp(tgt[k], v, ps.open); } } }
     if (this.armOv) Object.assign(tgt, this.armOv);   /* probe hook: force arm targets */
     // follow-through: elbows/wrists lag the upper arm, so the hand trails when the arm rises or falls
-    for (const k in tgt) A[k] = A[k] === undefined ? tgt[k] : damp(A[k], tgt[k], k.endsWith('w') ? 2.6 : k.endsWith('e') ? 3.8 : 5.5, dt);
+    { const fk = this.piro ? 2.6 : 1; for (const k in tgt) A[k] = A[k] === undefined ? tgt[k] : damp(A[k], tgt[k], (k.endsWith('w') ? 2.6 : k.endsWith('e') ? 3.8 : 5.5) * fk, dt); }   /* pirouette: arms gather/open crisply */
     this.rot('leftShoulder', 0, -0.08 * M, -0.04 * bal);   // shoulder blades back: no rounded shoulders
     this.rot('leftUpperArm', A.lx, A.ly, A.lz);
     this.rot('leftLowerArm', 0, A.le, 0);
