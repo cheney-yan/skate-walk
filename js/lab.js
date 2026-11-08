@@ -129,8 +129,17 @@ async function loadWeather() { try {
   NAT.wind = new THREE.Vector3(Math.sin(to) * sp, 0, -Math.cos(to) * sp); NAT.cloud = (c.cloud_cover ?? 20) / 100; NAT.raw = c; NAT.src = 'Open-Meteo ' + (c.time || ''); } catch (e) { NAT.src = '天气读取失败，用默认海风'; } }
 if (!REC) loadWeather();
 const rimLight = new THREE.DirectionalLight('#ffb978', 0); scene.add(rimLight, rimLight.target);
-sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 0.5, far: 30 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);   /* near cascade: her and the road around her, sharp */
+Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 0.5, far: 80 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+/* FAR cascade (Cheney: shadows only near her looked cut off): a second light that adds NO light of its own, it only darkens -
+   implemented as a shadow-only directional light (ShadowMaterial ground pass is too costly), so: a weak copy of the sun whose
+   shadow covers the whole visible area around the camera; its light intensity is taken out of the main sun so the total stays. */
+const sunFar = new THREE.DirectionalLight('#ffffff', 0); sunFar.castShadow = true; sunFar.shadow.mapSize.set(2048, 2048);
+Object.assign(sunFar.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, near: 1, far: 500 }); sunFar.shadow.bias = -0.0012; sunFar.shadow.normalBias = 0.25;
+scene.add(sunFar, sunFar.target);
+/* HEADLAMP (night): a spot from her head along the path; range tunable in the 光影 tab */
+const lamp = new THREE.SpotLight('#fff1dc', 0, 25, 0.5, 0.55, 1.4); lamp.castShadow = false; scene.add(lamp, lamp.target);
+const lampSpill = new THREE.PointLight('#ffe9cc', 0, 2.2, 1.6); scene.add(lampSpill);   /* light bouncing off the road back onto her */
 scene.add(sun, sun.target);
 // sky
 {
@@ -174,11 +183,11 @@ const pathTex = (() => {
   else { r.material.map = pathTex; r.material.needsUpdate = true; } }
 if (!RD) { ribbon(1.6, 40, -0.03, '#93bd6c'); ribbon(-1.6, -12, -0.03, '#e8d6a6'); }  // test-track verges      // sand on the right
 const seaU = { uT: { value: 0 }, uSun: { value: new THREE.Vector3(0.8, 0.25, 0.2).normalize() }, uSunCol: { value: new THREE.Color('#ffd8a8') }, uSky: { value: new THREE.Color('#bcd9ee') },
-  uShore: { value: SHORE?.tex || null }, uSB: { value: new THREE.Vector4(SHORE?.x0 || 0, SHORE?.y0 || 0, SHORE?.w || 1, SHORE?.h || 1) }, uFog: { value: new THREE.Color('#d6ebf5') } };
+  uShore: { value: SHORE?.tex || null }, uSB: { value: new THREE.Vector4(SHORE?.x0 || 0, SHORE?.y0 || 0, SHORE?.w || 1, SHORE?.h || 1) }, uFog: { value: new THREE.Color('#d6ebf5') }, uNight: { value: 0 }, uLamp: { value: new THREE.Vector4(0, 0, 0, 0) } };
 if (RD) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000, 1, 1), new THREE.ShaderMaterial({ uniforms: seaU, transparent: false,
     vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: `uniform float uT; uniform vec3 uSun, uSunCol, uSky, uFog; uniform sampler2D uShore; uniform vec4 uSB; varying vec3 vW;
+    fragmentShader: `uniform float uT; uniform vec3 uSun, uSunCol, uSky, uFog; uniform sampler2D uShore; uniform vec4 uSB; uniform float uNight; uniform vec4 uLamp; varying vec3 vW;
     float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f); return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+1.), f.x), f.y); }
     // sum of directional swells -> height gradient (normal); a few scales so it holds up near and far
@@ -201,6 +210,7 @@ if (RD) {
       vec3 deep = vec3(0.05, 0.27, 0.42), mid = vec3(0.10, 0.45, 0.58), shallow = vec3(0.30, 0.72, 0.70);
       vec3 col = mix(shallow, mid, smoothstep(2., 22., sd)); col = mix(col, deep, smoothstep(25., 70., sd));
       col *= 0.9 + 0.12 * sw;
+      col = mix(col, col * vec3(0.10, 0.13, 0.22), uNight);   /* night: the water itself goes ink-blue/black */
       // fresnel sky reflection
       float fr = 0.02 + 0.98 * pow(1. - max(dot(N, V), 0.), 5.);
       col = mix(col, mix(uSky, vec3(0.42, 0.62, 0.80), 0.55), clamp(fr, 0., 0.55));
@@ -228,7 +238,8 @@ if (RD) {
       band *= smoothstep(34., 12., sd) * smoothstep(0.3, 3., sd);
       float wash = smoothstep(3.5, 0.4, sd + (sin(uT * 0.8 + n * 7.) * 0.5 + 0.5) * 2.2) * (0.55 + 0.45 * n3);
       float foam = clamp(band + wash, 0., 1.);
-      col = mix(col, vec3(0.97, 0.98, 1.), foam * fade);
+      col = mix(col, mix(vec3(0.97, 0.98, 1.), vec3(0.30, 0.36, 0.50), uNight), foam * fade);   /* foam at night: faint blue-grey, not white */
+      { float ld = length(vW.xz - uLamp.xy); col += vec3(1., .93, .8) * uLamp.w * 0.25 * smoothstep(uLamp.z, uLamp.z * 0.2, ld) * (0.4 + 0.6 * foam); }   /* headlamp spill on nearby water */
       // distance haze
       col = mix(col, uFog, smoothstep(900., 3000., dist) * 0.55);
       gl_FragColor = vec4(col, 1.);
@@ -423,12 +434,12 @@ function routeSegs() { if (routeSegs.c) return routeSegs.c; const out = []; cons
   let a = 0, c = cls(track.at(0).grade);
   for (let s = 2; s <= track.total; s += 2) { const k = s >= track.total ? null : cls(track.at(s).grade); if (k !== c || s >= track.total) { if (s - a >= 6 || !out.length) { let mx = 0, dh = track.at(Math.min(s, track.total - 0.01)).p.y - track.at(a).p.y; for (let q = a; q < s; q += 1) { const g = track.at(q).grade; if (Math.abs(g) > Math.abs(mx)) mx = g; } out.push({ a, b: s, c, dh, mx }); } else { const p = out[out.length - 1]; p.b = s; } a = s; c = k; } }
   return (routeSegs.c = out); }
-const LTDEF = [['timeOverride', '时间（时）', 0, 24, 0.25], ['cloudOverride', '云量', 0, 1, 0.05], ['shadowK', '阴影强度', 0, 1, 0.02], ['toony', '明暗边界硬度', 0.3, 1, 0.02], ['sunMul', '阳光', 0, 2, 0.05], ['fillMul', '天光补光', 0, 2, 0.05], ['exposure', '曝光', 0.5, 1.8, 0.02], ['nightMul', '夜色', 0, 1, 0.05]];
+const LTDEF = [['timeOverride', '时间（时）', 0, 24, 0.25], ['cloudOverride', '云量', 0, 1, 0.05], ['shadowK', '阴影强度', 0, 1, 0.02], ['toony', '明暗边界硬度', 0.3, 1, 0.02], ['sunMul', '阳光', 0, 2, 0.05], ['fillMul', '天光补光', 0, 2, 0.05], ['exposure', '曝光', 0.5, 1.8, 0.02], ['nightMul', '夜色', 0, 1, 0.05], ['lampRange', '头灯照多远（米）', 5, 60, 1], ['lampPow', '头灯亮度', 0, 3, 0.05], ['shadowFar', '远处阴影范围（米）', 30, 300, 5], ['farShadow', '远处阴影浓度', 0, 1, 0.05]];
 function lightPane(el) { if (el.dataset.lt === '1') { LTDEF.forEach(([k]) => { const o = el.querySelector(`[data-v="${k}"]`); if (o) o.textContent = LT[k] == null ? '实时' : (+LT[k]).toFixed(2); }); return; }
   el.dataset.lt = '1'; el.innerHTML = '<div class="sec">光影（可调，自动保存）</div>' + LTDEF.map(([k, n, a, b, st]) => `<div class="row"><span>${n}</span><span data-v="${k}"></span></div><input type="range" data-k="${k}" min="${a}" max="${b}" step="${st}" value="${LT[k] ?? (k === 'timeOverride' ? 12 : k === 'cloudOverride' ? NAT.cloud : 1)}" style="width:100%">` + (k.endsWith('Override') ? `<button data-r="${k}" style="font-size:10px">用实时</button>` : '')).join('') + '<button id="ltReset" style="margin-top:6px">全部恢复默认</button>';
   el.querySelectorAll('input[type=range]').forEach((i) => i.oninput = () => { LT[i.dataset.k] = +i.value; localStorage.sw_lt = JSON.stringify(LT); });
   el.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { LT[b.dataset.r] = null; localStorage.sw_lt = JSON.stringify(LT); });
-  el.querySelector('#ltReset').onclick = () => { Object.assign(LT, { sunMul: 1, fillMul: 1, shadowK: 0.62, toony: 0.82, exposure: 1.08, nightMul: 1, timeOverride: null, cloudOverride: null }); localStorage.sw_lt = '{}'; el.dataset.lt = ''; };
+  el.querySelector('#ltReset').onclick = () => { Object.assign(LT, { sunMul: 1, fillMul: 1, shadowK: 0.62, toony: 0.82, exposure: 1.08, nightMul: 1, timeOverride: null, cloudOverride: null, lampRange: 25, lampPow: 1, farShadow: 0.45, shadowFar: 110 }); localStorage.sw_lt = '{}'; el.dataset.lt = ''; };
   ['pointerdown', 'touchstart'].forEach((ev) => el.addEventListener(ev, (e) => e.stopPropagation(), { passive: true })); }
 function brainHUD() { const r = rider, el = $('brainPane'); if (!el || document.body.classList.contains('nodbg')) return;
   const now = performance.now(); if (now - (brainHUD.tw || 0) < 250 && !brainHUD.force) return; brainHUD.tw = now; brainHUD.force = false;   /* 4 Hz: rebuilding the panel every few frames stalled phones */
@@ -577,7 +588,7 @@ function updateCamera(dt) {
   sunFollow(base);
 }
 // LIGHT TUNING (debug 光影 tab): shadow strength = how dark the side away from the sun gets (sky fill), sun power, exposure...
-const LT = { sunMul: 1, fillMul: 1, shadowK: 0.62, toony: 0.82, exposure: 1.08, nightMul: 1, timeOverride: null, cloudOverride: null };
+const LT = { sunMul: 1, fillMul: 1, shadowK: 0.62, toony: 0.82, exposure: 1.08, nightMul: 1, timeOverride: null, cloudOverride: null, lampRange: 25, lampPow: 1, farShadow: 0.45, shadowFar: 110 };
 try { Object.assign(LT, JSON.parse(localStorage.sw_lt || '{}')); } catch (e) {}
 function moonPos(date, lat, lon) { /* low-precision lunar position (Meeus-lite) + phase */ const rad = Math.PI / 180, d = date.getTime() / 86400000 + 2440587.5 - 2451545.0;
   const L = (218.316 + 13.176396 * d) * rad, M = (134.963 + 13.064993 * d) * rad, F = (93.272 + 13.229350 * d) * rad;
@@ -614,7 +625,18 @@ function sunFollow(base) {
     const kdir = night > 0.5 && moonI > 0.05 ? mdir : sdir;   /* the shadow-casting light: sun by day, moon at night */
     sun.position.copy(base).addScaledVector(kdir, 14); sun.target.position.copy(base);
     const sc = new THREE.Color(1, 0.93 - 0.17 * low, 0.82 - 0.3 * low), mc = new THREE.Color('#9fb6ff');
-    sun.color.copy(sc).lerp(mc, night); sun.intensity = LT.sunMul * ((2.9 + 0.3 * low) * (1 - 0.6 * cl) * day * (1 - night) + 0.55 * moonI * night);
+    sun.color.copy(sc).lerp(mc, night); const keyI = LT.sunMul * ((2.9 + 0.3 * low) * (1 - 0.6 * cl) * day * (1 - night) + 0.55 * moonI * night);
+    /* near + far cascade share the key light: far part = farShadow share, so distant trees/houses cast shadow over everything in view */
+    const fs = LT.farShadow; sun.intensity = keyI * (1 - fs); sunFar.intensity = keyI * fs; sunFar.color.copy(sun.color);
+    { const F = LT.shadowFar, cm = sunFar.shadow.camera; if (cm.right !== F) { cm.left = -F; cm.right = F; cm.top = F; cm.bottom = -F; cm.far = F * 4.5; cm.updateProjectionMatrix(); }
+      const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize(); const ctr = base.clone().addScaledVector(fwd, F * 0.6);   /* centre the far map ahead of the camera: that is what is visible */
+      const step = (2 * F) / 2048; ctr.x = Math.round(ctr.x / step) * step; ctr.z = Math.round(ctr.z / step) * step;   /* snap to texels: no shimmering */
+      sunFar.position.copy(ctr).addScaledVector(kdir, F * 2); sunFar.target.position.copy(ctr); }
+    { const hd = rider.b?.head; if (hd) { const hp = hd.getWorldPosition(new THREE.Vector3()), ahead = track.at(rider.s + Math.min(LT.lampRange * 0.5, 14)).p.clone(); ahead.y += 0.05;
+        lamp.position.copy(hp).add(new THREE.Vector3(0, 0.08, 0)); lamp.target.position.copy(ahead); lamp.distance = LT.lampRange; }
+      const lampOn = Math.max(0, night * 1.2 - 0.2 + (1 - day) * 0.3); lamp.intensity = LT.lampPow * 14 * Math.min(1, lampOn); lampSpill.intensity = LT.lampPow * 1.6 * Math.min(1, lampOn); lampSpill.position.copy(track.at(rider.s + 1.2).p).add(new THREE.Vector3(0, 0.45, 0));
+      seaU.uLamp.value.set(lamp.position.x, lamp.position.z, LT.lampRange, LT.lampPow * Math.min(1, lampOn)); }
+    seaU.uNight.value = Math.max(night, (1 - day) * 0.5);
     /* sky fill: this is what lights the shade side. Lower fill = stronger light/shade split (Cheney: real sun casts real shade;
        not too dark). Overcast: fill rises and the sun fades -> soft. */
     const fill = (1 - LT.shadowK) * 1.6 + 1.1 * cl;
@@ -628,6 +650,7 @@ function sunFollow(base) {
     rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2 * rim;
     NAT.phase = night > 0.5 ? '夜' : day < 1 ? (sp.el > 0 ? '黄昏/清晨' : '蓝调') : '白天';
     return; }
+  sunFar.intensity = 0; lamp.intensity = 0; lampSpill.intensity = 0; seaU.uNight.value = 0; seaU.uLamp.value.set(0, 0, 0, 0);
   if (TOD === 'golden') {
     const ahead = track.at(rider.s + 30).dir; const sdir = RD ? (() => { const v = (rider.__vd || new THREE.Vector3(1, 0, 0)).clone(); v.y = 0; v.normalize(); return new THREE.Vector3(v.x * 0.9 + 0.35, 0.16, v.z * 0.9).normalize(); })() : new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
     sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
@@ -883,6 +906,7 @@ window.LAB = {
   setCam(m) { camMode = m; camInit = false; anc.init = false; anc.y = undefined; anc.vr = undefined; },
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
+  light(o) { Object.assign(LT, o || {}); girlShading.key = null; return LT; },
   restart, jumpTo(s) { restart(); for (let i = 0; i < 4000 && rider.s < s; i++) step(1 / 30); },
   // advance n frames at fps then render; returns state
   adv(n = 1, fps = 30) { const t0 = performance.now(); for (let i = 0; i < n; i++) step(1 / fps); return { s: rider.s, v: rider.v, cap: $('cap').innerText, ms: (performance.now() - t0) / n }; },
