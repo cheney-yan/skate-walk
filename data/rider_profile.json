@@ -8,7 +8,7 @@
   },
   "energy": {
    "_doc": "stamina bar [J]; restGradeDeg: walking steeper than this slowly costs, gentler slowly recovers (walkRestW on the flat); sitRestW: sitting recovery [W]; getUpAt: bar fraction to get up",
-   "barJ": 15000,
+   "barJ": 24000,
    "walkCostMul": 1.0,
    "glideRestMul": 1.0,
    "sitRestW": 160,
@@ -18,7 +18,7 @@
   },
   "skill": {
    "_doc": "pumpGain: how much speed a pump gives per effort; pushForceN: base kick force",
-   "pumpGain": 1.0,
+   "pumpGain": 1.25,
    "pushForceN": 165,
    "pushBelowKmh": 10
   }

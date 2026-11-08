@@ -389,17 +389,48 @@ function trickHUD() { const r = rider, P = r.trickProg || { stam: r.stam, speed:
   $('trS').setAttribute('stroke', P.stam >= 0.95 ? '#ff8a5c' : '#6cbfb0');
   el.classList.toggle('ready', !!P.ready); $('trL').textContent = P.ready ? '转板!' : r.ollie?.kind === 'shove' ? '✨' : P.stam >= 0.95 ? '再快点' : '蓄力'; }
 // BRAIN panel (debug only): what she sees and why she does what she does
-function brainHUD() { const r = rider, el = $('brainNow'); if (!el || document.body.classList.contains('nodbg')) return;
+const PROFILE_LA = () => rider.profile?.mind?.lookAheadM ?? 150;
+// ---------------- DEBUG PANEL (Cheney): everything lives here — 女孩 (body/preferences/mind + live state),
+// 自然 (sun, wind, road), 决策 (plan + history), 全图 (god's-eye list of the whole route, current stretch highlighted)
+let brainTab = localStorage.sw_tab || 'girl';
+document.querySelectorAll('#brain .tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === brainTab);
+  b.onclick = (ev) => { ev.stopPropagation(); brainTab = b.dataset.t; localStorage.sw_tab = brainTab; brainHUD.map = null; document.querySelectorAll('#brain .tabs button').forEach((x) => x.classList.toggle('on', x === b)); brainHUD.k = 5; brainHUD(); }; });
+['pointerdown', 'touchstart', 'wheel'].forEach((ev) => $('brain').addEventListener(ev, (e) => e.stopPropagation(), { passive: true }));
+const deg = (gr) => (Math.atan(gr) * 57.3).toFixed(1) + '°';
+const row = (k, v, hl) => `<div class="row${hl ? ' hl' : ''}"><span>${k}</span><span>${v}</span></div>`;
+const barH = (f, col) => `<div class="bar"><i style="width:${(Math.max(0, Math.min(1, f)) * 100).toFixed(0)}%;background:${col}"></i></div>`;
+// whole-route segments (god's eye): runs of similar grade, built once
+function routeSegs() { if (routeSegs.c) return routeSegs.c; const out = []; const cls = (g) => g < -0.035 ? '下坡' : g < -0.01 ? '缓下' : g <= 0.01 ? '平' : g <= Math.tan(6 * Math.PI / 180) ? '上坡' : '陡坡';
+  let a = 0, c = cls(track.at(0).grade);
+  for (let s = 2; s <= track.total; s += 2) { const k = s >= track.total ? null : cls(track.at(s).grade); if (k !== c || s >= track.total) { if (s - a >= 6 || !out.length) { let mx = 0, dh = track.at(Math.min(s, track.total - 0.01)).p.y - track.at(a).p.y; for (let q = a; q < s; q += 1) { const g = track.at(q).grade; if (Math.abs(g) > Math.abs(mx)) mx = g; } out.push({ a, b: s, c, dh, mx }); } else { const p = out[out.length - 1]; p.b = s; } a = s; c = k; } }
+  return (routeSegs.c = out); }
+function brainHUD() { const r = rider, el = $('brainPane'); if (!el || document.body.classList.contains('nodbg')) return;
   if ((brainHUD.k = (brainHUD.k || 0) + 1) % 6) return;
-  const g = track.at(r.s).grade, pl = r.plan || {}, kmh = (r.v * 3.6).toFixed(1);
+  const g = track.at(r.s).grade, pl = r.plan || {}, kmh = (r.v * 3.6).toFixed(1), P = r.profile || {}, ph = P.physical || {}, pref = P.preference || {}, mind = P.mind || {};
   const act = r.rest ? (r.rest.sit ? '坐着休息' : '准备休息') : r.mode === 'walk' ? '拿板走路' : r.mode === 'on' ? '上板中' : r.mode === 'off' ? '下板中' : r.push ? '推板' : r.pump ? 'pump' : r.ollie ? (r.ollie.kind === 'shove' ? '转板' : 'ollie') : '滑行';
-  const planTxt = { flat: '前方平路/下坡', coast: '惯性就能过', carry: '借速度冲上去', push: '推板上坡', pushThenWalk: '先推，没力就走', walk: '太陡，要下板走' }[pl.kind] || '-';
-  el.innerHTML = `<b>${act}</b> · ${kmh} km/h · 坡 ${(Math.atan(g) * 57.3).toFixed(1)}°<br>体力 <b>${Math.round(r.stam * 100)}%</b> · 劳累 ${Math.round((1 - r.stam) * 100)}%<br>计划：<b>${planTxt}</b>` +
-    (pl.start !== undefined ? `<br>前方 ${pl.start}m 起坡 ${pl.L ?? '?'}m · 爬高 ${(pl.dh ?? 0).toFixed(1)}m · 最陡 ${(Math.atan(pl.maxG || 0) * 57.3).toFixed(0)}°` : '') +
-    (pl.need !== undefined ? `<br>需要 ${(pl.need / 1000).toFixed(1)}kJ / 有 ${(pl.have / 1000).toFixed(1)}kJ` + (pl.hCarry !== undefined ? ` · 冲坡高度 ${pl.hCarry}m` : '') : '') +
-    `<br>花样：${r.trickReady ? '<b>可以</b>' : r.stam < 0.7 ? '体力<70%' : r.v < 2.6 ? '速度不够' : r.v > (ctx.vmax ?? 6) + 1.2 ? '太快不安全' : '不合适'}`;
-  const L = (r.dlog || []).slice().reverse().slice(0, 14);
-  $('brainLog').innerHTML = L.map((d) => `<div>${Math.round(d.s)}m · ${d.msg}</div>`).join(''); }
+  const planTxt = { flat: '看得见的路都能滑', coast: '惯性就能过', carry: '借速度 + pump 冲上去', push: '推板上坡', pushThenWalk: `预计 ${pl.start}m 处会停住`, walk: `${pl.start}m 处太陡，要下板` }[pl.kind] || '-';
+  const vm = ctx.vmax ?? 8.3, barJ = ph.energy?.barJ || 15000;
+  const head = `<b>${act}</b> · ${kmh} km/h · 坡 ${deg(g)} · ${r.s.toFixed(0)}/${track.total.toFixed(0)} m` + `<div>速度</div>${barH(r.v / vm, '#6d9fe0')}<div>体力 ${Math.round(r.stam * 100)}%（${(r.stam * barJ / 1000).toFixed(1)}/${(barJ / 1000).toFixed(0)} kJ）</div>${barH(r.stam, r.stam < 0.15 ? '#e8a0a0' : '#6cbfb0')}`;
+  let body = '';
+  if (brainTab === 'girl') {
+    const sec = (t, o) => `<div class="sec">${t}</div>` + Object.entries(o || {}).filter(([k]) => k[0] !== '_').map(([k, v]) => row(k, typeof v === 'object' ? JSON.stringify(v) : v)).join('');
+    body = head + `<div class="sec">此刻</div>` + row('动作', act, true) + row('pump 强度', r.pump ? `${r.pump.A.toFixed(2)} / ${r.pump.I.toFixed(2)}` : '-') + row('蹬地冷却', (r.pushCool || 0).toFixed(1) + 's') + row('身体侧倾', ((r.lean || 0) * 57.3).toFixed(0) + '°') + row('花样', r.trickReady ? '<b>可以</b>' : r.stam < (pref.trickMinStamina ?? 0.7) ? '体力不够' : r.v < (pref.trickMinKmh ?? 9.4) / 3.6 ? '速度不够' : r.v > vm + 1.2 ? '太快不安全' : '不合适') +
+      sec('身体', ph.body) + sec('体力', ph.energy) + sec('技术', ph.skill) + sec('喜好', pref) + sec('头脑', mind);
+  } else if (brainTab === 'nature') {
+    const T = track.at(r.s); body = head + `<div class="sec">自然</div>` + row('时间', $('tod')?.textContent || '-') + row('风', ((ctx.wind || 0)).toFixed(2)) + row('坡度', deg(g), true) + row('弯曲 κ', T.kappa.toFixed(3)) + row('海拔', T.p.y.toFixed(1) + ' m') +
+      row('空气阻力', (0.5 * 1.2 * 0.23 * r.v * r.v).toFixed(1) + ' N') + row('滚阻', (60 * 9.81 * 0.004).toFixed(1) + ' N') + row('重力沿坡', (60 * 9.81 * Math.sin(Math.atan(g))).toFixed(0) + ' N') + row('动能', (0.5 * 60 * r.v * r.v / 1000).toFixed(2) + ' kJ') +
+      `<div class="sec">前方 60 m</div>` + [10, 20, 30, 45, 60].map((d) => row(`+${d} m`, deg(track.at(Math.min(track.total - 0.1, r.s + d)).grade))).join('');
+  } else if (brainTab === 'mind') {
+    body = head + `<div class="sec">计划（看 ${PROFILE_LA()} m）</div>` + row('结论', planTxt, true) + (pl.climbAt != null ? row('下一段上坡', `${pl.climbAt} m 后 · 长 ${pl.L ?? '?'} m · 爬 ${(pl.dh ?? 0).toFixed(1)} m · 最陡 ${deg(pl.maxG || 0)}`) : '') +
+      (pl.need !== undefined ? row('模拟耗能', `${(pl.need / 1000).toFixed(1)} / ${(pl.have / 1000).toFixed(1)} kJ`) : '') + (pl.vEnd !== undefined ? row(`${PROFILE_LA()} m 后速度`, pl.vEnd + ' km/h') : '') + row('速度目标', ((r.vTarget || 0) * 3.6).toFixed(0) + ' km/h') +
+      `<div class="sec">历史决策</div>` + (r.dlog || []).slice().reverse().slice(0, 40).map((d, i) => `<div class="${i ? '' : 'hl'}">${Math.round(d.s)}m · ${d.msg}</div>`).join('');
+  } else {
+    const S = routeSegs(); let cur = 0; S.forEach((q, i) => { if (r.s >= q.a && r.s < q.b) cur = i; });
+    const col = { 下坡: '#3b8f6a', 缓下: '#6cbfb0', 平: '#999', 上坡: '#d08a3c', 陡坡: '#c4512f' };
+    el.innerHTML = head + `<div class="sec">全图 ${S.length} 段（天眼）</div>` + S.map((q, i) => `<div class="seg${i === cur ? ' cur' : i < cur ? ' done' : ''}" ${i === cur ? 'id="segCur"' : ''}><span style="color:${col[q.c]}">■</span> ${q.a.toFixed(0)}–${q.b.toFixed(0)} m · ${q.c} ${(q.b - q.a).toFixed(0)} m · ${q.dh >= 0 ? '+' : ''}${q.dh.toFixed(1)} m · 最陡 ${deg(q.mx)}${pl.start != null && (pl.kind === 'walk' || pl.kind === 'pushThenWalk') && r.s + pl.start >= q.a && r.s + pl.start < q.b ? ' · <b>⚠ 计划下板</b>' : ''}</div>`).join('');
+    if (brainHUD.map !== cur) { brainHUD.map = cur; $('segCur')?.scrollIntoView({ block: 'center' }); } return;
+  }
+  el.innerHTML = body; }
 function stamHUD() {
   trickHUD(); brainHUD();
   const r = rider, f = r.stam;
