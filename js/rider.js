@@ -253,10 +253,11 @@ export class Rider {
     this.stepSeq(dt, track);
     const riding = this.mode === 'ride' || (this.mode === 'off' && this.seq?.ph === 'brake');
     // lean from turning physics (only on the board)
+    if (this.pump && this.mode !== 'ride') { this.pump.A = damp(this.pump.A, 0, 3, dt); this.pump.ph += 2 * Math.PI * 0.5 * dt; if (this.pump.A < 0.02) this.pump = null; }
     const PI_ = this.pump?.I ?? 0, pw = this.pump && riding ? this.pump.A * (0.45 + 0.55 * PI_) : 0, ph0 = this.pump ? this.pump.ph : 0;
     // kinetic chain (she cannot just sway): 1. twist at the waist turns the shoulders -> 2. the hips are wound after them
     // -> 3. the wind-up tips the whole body into a diagonal lean over the edge -> 4. the board, loaded on that edge, turns.
-    const pa0 = this.pump && riding ? this.pump.A : 0;
+    const pa0 = this.pump ? this.pump.A * (riding ? 1 : 0.999) : 0;
     const sh = Math.sin(ph0), hy = Math.sin(ph0 - 0.75), hp = Math.sin(ph0 - 1.25), bd = Math.sin(ph0 - 1.7), turn = Math.abs(bd);
     this.pumpTwist = pa0 * (0.5 + 0.25 * PI_) * sh;             // 1. waist twist -> shoulders ±29° (elegant) .. ±43° (power)
     this.pumpHipYaw = pa0 * (0.16 + 0.1 * PI_) * hy;            // 2. hips follow the shoulders, smaller
@@ -280,7 +281,7 @@ export class Rider {
       const gA = riding ? (this.glideA || 0) * (1 - pa0) : 0, dA = riding && this.dance ? (this.dn || 0) : 0;
       const lamG = (gA * (1 - dA) * 5 * Math.sin(this.glidePh || 0) + dA * 6 * Math.sin((this.dance?.t || 0) * 2 * Math.PI / 4.2)) * D;
       const lamP = riding ? pa0 * lamAmp * hp + lamG : 0;
-      if (!riding) { this.pPsi = 0; this.pLat = 0; }
+      if (!riding) { this.pPsi = damp(this.pPsi || 0, 0, 3, dt); this.pLat = damp(this.pLat || 0, 0, 2, dt); }
       const psi = this.pPsi || 0, y = this.pLat || 0;
       const fbK = 1 - 0.35 * Math.max((this.glideA || 0) * (1 - pa0), this.dance ? 1 : 0);
       const aFb = riding ? -fbK * (1.1 * y + 1.5 * vv * Math.sin(psi)) - (1 - fbK) * (0.35 * y + 0.6 * vv * Math.sin(psi)) : 0;   // steer back to the line (gently when gliding: long arcs)
@@ -409,7 +410,7 @@ export class Rider {
   }
   // ---------------- mode sequences ----------------
   startOff(why) {
-    this.push = null; this.offWhy = why; this.mode = 'off'; this.modeT = 0;
+    this.push = null; this.dance = null;   // pump keeps decaying smoothly through the brake (see below), never frozen this.offWhy = why; this.mode = 'off'; this.modeT = 0;
     const r = Math.random(), kind = this.v > 3.2 ? (r < 0.6 ? 'slide' : 'heel') : (r < 0.34 ? 'slide' : r < 0.67 ? 'heel' : 'roll');
     this.seq = { kind, ph: 'brake', t: 0, decel: { slide: 2.6, heel: 1.4, roll: 0.45 }[kind] };
     this.ev.push(['off', this.s, kind, why]);
