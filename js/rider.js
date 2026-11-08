@@ -28,6 +28,14 @@ const PUSH_F = 165;   // N, a strong but unhurried kick
 export const MASS = 60;   // Cheney (corrected): more INERTIA — each push takes real force, but once rolling she keeps her speed (same friction/drag force, more mass -> slower decay)   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
 const EFF = 0.25, P_AERO = 230, CRR = 0.0030, CDA = 0.25;   // slicker than reality on purpose: long glides   // W: what her aerobic system refills continuously; above it she spends the bar, below it she refills          // deck top above ground (m)
 const WHEEL_R = 0.035, HALF_WB = 0.36, DECK_L = 1.12;
+/* BOARDS (Cheney 11/09): rolling friction, how far she can lean (sets how fast a bend can be taken) and the tightest radius
+   the trucks turn; 'electric' has a hub motor: it drives itself up to its top speed, she never pushes or pumps on it. */
+export const BOARDS = {
+  cruiser:  { name: '长板 cruiser',  crr: 0.0030, cda: 0.25, leanDeg: 30, minR: 3.0, pump: 1.0,  deck: '#e2c79c', art: '#8fd3d6', wheel: '#ffd7a3' },
+  dancer:   { name: '舞板 dancer',   crr: 0.0026, cda: 0.25, leanDeg: 22, minR: 5.0, pump: 0.8,  deck: '#e9d9bd', art: '#f2a7a0', wheel: '#fff3e0' },
+  surf:     { name: '陆冲 surfskate', crr: 0.0048, cda: 0.25, leanDeg: 40, minR: 1.4, pump: 1.6,  deck: '#6fb3c9', art: '#ffd166', wheel: '#ff9e7a' },
+  electric: { name: '电动 e-board',  crr: 0.0042, cda: 0.26, leanDeg: 28, minR: 3.5, pump: 0,    deck: '#3d4148', art: '#5ad1b5', wheel: '#9ad7ff', motorW: 700, aMax: 1.3, vmaxKmh: 25, climbDeg: 14, brakeDown: true },
+};
 let ANK = 0.093;   // ankle (foot bone) height above the shoe sole — measured per model in the Rider constructor
 
 // DECK SHAPE + FLEX (Cheney: a longboard deck is a concave bridge; it only bends under the load of her feet).
@@ -137,7 +145,11 @@ export function buildLongboard() {
     for (let i = 0; i < arr.length; i += 3) arr[i + 1] += sgn * concaveAt(arr[i] * sx, arr[i + 2] * sz) / (m.scale.y || 1);
     a.needsUpdate = true; m.geometry.computeVertexNormals(); }
   const flexMeshes = [deck, grip, art].map((m) => ({ m, base: m.geometry.attributes.position.array.slice() }));
-  g.userData = { trucks, deck: deckG, chassis, flexMeshes };
+  const ebox = new THREE.Group(); { const bm = new THREE.MeshStandardMaterial({ color: '#22252b', roughness: 0.6 }); const bat = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.028, 0.42), bm); bat.position.y = DECK_Y - 0.036; ebox.add(bat);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.004, 0.01), new THREE.MeshBasicMaterial({ color: '#5ad1b5' })); led.position.set(0, DECK_Y - 0.05, 0.21); ebox.add(led);
+    const mot = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.05, 14), metal); mot.rotation.z = Math.PI / 2; mot.position.set(0.06, WHEEL_R, -HALF_WB); }   /* battery pack under the deck (rides with the deck) */
+  ebox.visible = false; deckG.add(ebox);
+  g.userData = { trucks, deck: deckG, chassis, flexMeshes, ebox, mats: { wood: deck.material, art: art.material, urethane } };
   return g;
 }
 
@@ -156,7 +168,7 @@ export class Rider {
   applyProfile(P) { if (!P) return; const ph = P.physical || P; for (const k of ['energy', 'skill']) Object.assign(PROFILE[k], ph[k] || {}); Object.assign(PROFILE.preference, P.preference || {}); Object.assign(PROFILE.mind, P.mind || {}); this.profile = P; }
   constructor(vrm, scene) {
     this.vrm = vrm;
-    this.board = buildLongboard(); scene.add(this.board);
+    this.board = buildLongboard(); scene.add(this.board); this.bt = BOARDS.cruiser; this.boardId = 'cruiser'; this.battery = 1;
     this.board.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.deck = this.board.userData.deck;
     // rider root lives in the scene: follows the deck while riding, the ground while walking (blend m)
@@ -214,18 +226,18 @@ export class Rider {
     let spend = 0;
     const brake = this.mode === 'off' && this.seq.ph === 'brake';
     if (this.mode === 'ride' || brake) {
-      let a = -g * Math.sin(theta) - CRR * g * Math.cos(theta) * (52 / m) - (0.5 * 1.2 * CDA * this.v * this.v) / m;   // same resisting force, more mass -> she keeps her speed
+      const BT = this.bt; let a = -g * Math.sin(theta) - BT.crr * g * Math.cos(theta) * (52 / m) - (0.5 * 1.2 * BT.cda * this.v * this.v) / m;   // same resisting force, more mass -> she keeps her speed
       if (this.mode === 'ride') {
-        const gdeg = Math.atan(grade) / D, cruise = (ctx.cruise ?? 3.0) * (gdeg > 2 ? clamp(1 - (gdeg - 2) * 0.1, 0.6, 1) : 1), vmax = PROFILE.preference.vmaxKmh / 3.6;
+        const gdeg = Math.atan(grade) / D, cruise = (ctx.cruise ?? 3.0) * (gdeg > 2 ? clamp(1 - (gdeg - 2) * 0.1, 0.6, 1) : 1), vmax = Math.min(PROFILE.preference.vmaxKmh, BT.vmaxKmh ?? 99) / 3.6;
         const holeSoon = (ctx.holes || []).some((h) => h - this.s > 0 && h - this.s < this.v * 0.42 + 0.35 + this.v * 1.3 + 0.5);
         const carrying = this.plan?.kind === 'carry' && grade > 0.02;
         const pc0 = this.plan, climbAhead = pc0 && pc0.climbAt !== undefined && pc0.climbAt !== null && pc0.climbAt < 60;
         const PF = PROFILE.preference, vFloor = (climbAhead && grade < 0.02 && PROFILE.mind.foresight > 0.5 ? PF.chargeBeforeClimbKmh : PF.speedFloorKmh) / 3.6; this.vFloor = vFloor; this.vTarget = vFloor;   /* climb ahead: charge to ~31 km/h on the run-in */   /* Cheney: below ~20 km/h she works (pump / push) to bring it back */
-        const needGo = !this.dance && !this.piro && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < vFloor - 0.15 || (carrying && this.v < cruise));
+        const MOT = !!BT.motorW; const needGo = !MOT && !this.dance && !this.piro && this.stam > 0.02 && !holeSoon && !this.ollie && this.air <= 0 && (this.v < vFloor - 0.15 || (carrying && this.v < cruise));
         // PUMP (S-carve): rhythmic weight shifts through the turns convert body work into forward speed. Real pumping needs
         // speed to work (~>7 km/h) and is less efficient than a push, but feet stay on the board: she prefers it on the flat
         // and on gentle climbs (<3.5°) when she already rolls; below that speed (or steeper) she pushes.
-        const canPump = this.v > PROFILE.skill.pushBelowKmh / 3.6 && grade < (carrying ? 0.12 : 0.06) && Math.abs(kappa) < 0.4 && !this.push && !this.ollie && this.air <= 0 && !this.dance && !this.piro && this.stam > 0.05 && !holeSoon;   /* pumping through bends too (carving IS the pump) */
+        const canPump = !MOT && this.v > PROFILE.skill.pushBelowKmh / 3.6 && grade < (carrying ? 0.12 : 0.06) && Math.abs(kappa) < 0.4 && !this.push && !this.ollie && this.air <= 0 && !this.dance && !this.piro && this.stam > 0.05 && !holeSoon;   /* pumping through bends too (carving IS the pump) */
         // The body steers the board: shoulders turn first, the hips follow, the board follows the hips. Intensity I sets the
         // style: elegant = slow, small, upright, rhythmic (gliding on the flat / downhill, I≈0.15); power = faster & bigger
         // when she needs speed (I→1). Steep climbs are never elegant: she pushes or walks.
@@ -241,7 +253,7 @@ export class Rider {
         if (!this.push && !(this.pump && pumpGo) && needGo && this.v < PROFILE.skill.pushBelowKmh / 3.6 + 0.2 && this.pushCool <= 0) { this.pump = null; this.startPush(grade); }   /* push only below ~10 km/h, kick after kick; above that she pumps */
         if (this.pump) { const P = this.pump, ph = Math.sin(P.ph - 1.1) ** 2;   // propulsion peaks as the board loads mid-carve, twice per S
           const def = Math.max(0, (this.vFloor || 5.5) - this.v);
-          const pa = PROFILE.skill.pumpGain * P.A * P.I * (0.25 + 0.35 * ph) * (0.6 + 0.5 * Math.min(1, def)) * clamp((this.v - 1.2) / 1.2, 0, 1) + P.A * P.I * Math.max(0, g * Math.sin(theta)) * 0.9; a += pa;   /* ~0.3-0.5 m/s² on the flat: 14->20 km/h in ~5 s; uphill adds what the slope takes away (and bills it) */   /* uphill she also pumps against the slope (costs proportionally more) */ spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
+          const pa = PROFILE.skill.pumpGain * (BT.pump ?? 1) * P.A * P.I * (0.25 + 0.35 * ph) * (0.6 + 0.5 * Math.min(1, def)) * clamp((this.v - 1.2) / 1.2, 0, 1) + P.A * P.I * Math.max(0, g * Math.sin(theta)) * 0.9; a += pa;   /* ~0.3-0.5 m/s² on the flat: 14->20 km/h in ~5 s; uphill adds what the slope takes away (and bills it) */   /* uphill she also pumps against the slope (costs proportionally more) */ spend += (m * pa * this.v / (EFF * 0.6)) * dt; }
         const BASE = 110;   // W metabolic just standing balanced on a rolling board
         if (this.push) { const pa = this.pushAccel(); a += pa; spend += (m * pa * Math.max(this.v, 0.5) / EFF) * dt; }
         /* RECOVERY ON THE BOARD (Cheney): standing still on a rolling board — gliding, looking around, small graceful moves
@@ -253,6 +265,16 @@ export class Rider {
            (rideRestW defaults to walkRestW). Only very fast (>= noRestKmh) the recovery fades to zero — never a cost. */
         if (calm) spend -= rideRest * dt;
         else spend += (BASE - P_AERO + Math.max(0, theta - EN.restGradeDeg * D) / D * 30) * dt;   /* gliding above the 6° line costs a little */   // gliding = resting   // rolling downhill is the best rest: the bar fills fastest there
+        if (MOT) { /* hub motor: drives toward its cruise speed (her speed floor, max the board's top speed); regen-brakes downhill */
+          const vT = Math.min(vmax, Math.max(PROFILE.preference.speedFloorKmh / 3.6, vmax)), F = Math.min(BT.aMax * m, BT.motorW / Math.max(this.v, 1.2)) * (this.battery > 0 ? 1 : 0);
+          const am = this.v < vT ? Math.min(F / m, (vT - this.v) * 1.5 + 0.15 + Math.max(0, g * Math.sin(theta))) : 0; a += am; this.motorA = am;
+          this.battery = Math.max(0, this.battery - (m * am * this.v / 0.8) * dt / 1.8e6);   /* ~500 Wh pack: Bondi->Bronte uses a few % */
+          if (BT.brakeDown && this.v > vmax) { a -= Math.min(3, 2.5 * (this.v - vmax) + Math.max(0, -g * Math.sin(theta))); this.battery = Math.min(1, this.battery + m * Math.max(0, -g * Math.sin(theta)) * this.v * 0.5 * dt / 1.8e6); }   /* regen brake: holds its top speed downhill (and charges a little) */
+          if (am > 0.05 && !this._motWas) this.decide('电动板：电机加速，不用 pump'); this._motWas = am > 0.05; }
+        { /* BENDS: her lean limit sets the fastest she can take the curve ahead (a = v²κ <= g·tan(lean)); below the board's min radius she slows right down */
+          let kM = 0; for (let d = 0; d <= this.v * 2 + 3; d += 1.5) kM = Math.max(kM, Math.abs(track(this.s + d).kappa)); this.kAhead = kM;
+          if (kM > 1e-3) { let vB = Math.sqrt(g * Math.tan(BT.leanDeg * D) / kM); if (1 / kM < BT.minR) vB = Math.min(vB, 2.2); this.vBend = vB;
+            if (this.v > vB + 0.2) { a -= 1.4 * (this.v - vB) + 0.3; if (!this._bendWas) this.decide(`弯道 R≈${(1 / kM).toFixed(0)} m：这块板最多 ${(vB * 3.6).toFixed(0)} km/h，减速`); this._bendWas = true; } else this._bendWas = false; } else this.vBend = null; }
         this.ctxV = vmax; const pc = this.plan, upSoon = pc && pc.climbAt !== undefined && pc.climbAt !== null && pc.climbAt < 12 + this.v * 8;
         const vCap = upSoon ? vmax + 2.2 : vmax;   /* a climb ahead: keep the speed, she'll spend it going up */
         if (this.v > vCap) a -= (this.pump ? 1.1 : 1.6) * (this.v - vCap) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
@@ -354,7 +376,7 @@ export class Rider {
       this.pumpYaw = this.pPsi || 0; this.pumpLat = this.pLat || 0;
       const aLat = riding ? this.v * this.v * kappa + aP : 0;                                 // total sideways acceleration
       this.aLat = aLat;
-      const leanT = clamp(Math.atan(aLat / 9.81), -30 * D, 30 * D) * (this.piro ? 1 - 0.85 * (this.psP?.on || 0) : 1);   /* the CoM lean that balances it; pirouette: she stays upright (the board just runs straight) */
+      const leanT = clamp(Math.atan(aLat / 9.81), -(this.bt?.leanDeg ?? 30) * D, (this.bt?.leanDeg ?? 30) * D) * (this.piro ? 1 - 0.85 * (this.psP?.on || 0) : 1);   /* the CoM lean that balances it; pirouette: she stays upright (the board just runs straight) */
       this.lean = damp(this.lean, leanT, 5, dt);   // a heavier body leans slowly
       const kTot = riding ? kappa + kP : 0;
       this.steerT = Math.atan(kTot * HALF_WB); this.tiltT = clamp(this.steerT / KT, -24 * D, 24 * D); }
@@ -459,13 +481,14 @@ export class Rider {
     const G = []; for (let d = 0; d <= LA; d++) G.push(track(this.s + d).grade);
     // is the climb ahead too steep for its length? (a short ramp can be pumped at ~10°, a long hill only up to ~6°)
     /* judge each >6° stretch by its WHOLE length (not how far into it she is): short ramp ≤6 m may be ridden up to 10°, ≤15 m up to 8°, longer only up to 6° */
-    let run = 0; for (let d = 0; d <= LA && steepAt === null; d++) { if (G[d] <= Math.tan(6 * D)) continue; let e = d, mx = 0; while (e <= LA && G[e] > Math.tan(6 * D)) { mx = Math.max(mx, G[e]); e++; } run = e - d; const lim = run <= 6 ? 10 : run <= 15 ? 8 : 6; if (mx > Math.tan(lim * D)) steepAt = d; d = e; }
+    let run = 0; for (let d = 0; d <= LA && steepAt === null; d++) { if (G[d] <= Math.tan(6 * D)) continue; let e = d, mx = 0; while (e <= LA && G[e] > Math.tan(6 * D)) { mx = Math.max(mx, G[e]); e++; } run = e - d; const lim = (run <= 6 ? 10 : run <= 15 ? 8 : 6) + (this.bt.climbDeg ? this.bt.climbDeg - 6 : 0);   /* the motor climbs what her legs couldn't */ if (mx > Math.tan(lim * D)) steepAt = d; d = e; }
     for (let d = 0; d < LA; d++) {
       const gr = G[d], th = Math.atan(gr);
       if (gr > 0.01) { if (start === null) start = d; dh += gr; maxG = Math.max(maxG, gr); end = d + 1; } else if (start !== null && end !== null && d - end > 3 && end - start > 3) { /* first climb measured */ }
       // the next climb within reach decides how much run-in to keep
-      let a = -g * Math.sin(th) - CRR * g * Math.cos(th) * (52 / m) - 0.5 * 1.2 * CDA * v * v / m;
-      if (v < floor + 0.3 && E > 300) { const P = Math.min(pumpW, E * 0.5); const ap = P / (m * Math.max(v, 1.5)); a += ap; const cost = P / EFF * (1 / Math.max(v, 0.5)); E -= cost; used += cost; }
+      const BT = this.bt; let a = -g * Math.sin(th) - BT.crr * g * Math.cos(th) * (52 / m) - 0.5 * 1.2 * BT.cda * v * v / m;
+      if (BT.motorW) { if (v < (BT.vmaxKmh / 3.6)) a += Math.min(BT.aMax, BT.motorW / (m * Math.max(v, 1.2))); }
+      else if (v < floor + 0.3 && E > 300) { const P = Math.min(pumpW, E * 0.5); const ap = P / (m * Math.max(v, 1.5)); a += ap; const cost = P / EFF * (1 / Math.max(v, 0.5)); E -= cost; used += cost; }
       v = Math.sqrt(Math.max(0, v * v + 2 * a * 1));
       if (v > vmaxS) v = vmaxS;
       if (steepAt !== null && d >= steepAt - 1) break;
@@ -480,6 +503,9 @@ export class Rider {
     const pstart = kind === 'walk' || kind === 'pushThenWalk' ? stopAt : (start ?? 0);
     return { kind, start: pstart, climbAt: start, L, dh, maxG, need: used, have, steepLen: run, hCarry: +((v * v) / (2 * g)).toFixed(1), vEnd: +(v * 3.6).toFixed(0), sim: true };
   }
+  setBoard(id) { const B = BOARDS[id] || BOARDS.cruiser; this.bt = B; this.boardId = BOARDS[id] ? id : 'cruiser'; this.pump = null; this.push = null; this.plan = null; this.planT = 0;
+    const U = this.board.userData; if (U.mats) { U.mats.wood.color.set(B.deck); U.mats.art.color.set(B.art); U.mats.urethane.color.set(B.wheel); } if (U.ebox) U.ebox.visible = !!B.motorW;
+    this.decide('换板：' + B.name); return B; }
   decide(msg) { const L = this.dlog || (this.dlog = []); if (L.length && L[L.length - 1].msg === msg) return; L.push({ t: this.t, s: this.s, msg }); if (L.length > 40) L.shift(); }
   lookAhead(track, L) { let up = 0, down = 0; for (let d = 2; d <= L; d += 2) { const gr = track(this.s + d).grade; if (gr > 0.03) up += 2; if (gr < -0.02) down += 2; } return { up: up > L * 0.3, down: down > L * 0.4 }; }
   // REST (Cheney): energy at zero -> she stops at the roadside, puts the board down and sits on it; resting refills

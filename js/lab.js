@@ -876,6 +876,12 @@ const setPause = (p) => { paused = p; $('pause').textContent = p ? '▶' : '⏸'
 $('pause').onclick = (e) => { e.stopPropagation(); setPause(!paused); };
 $('restart2').onclick = (e) => { e.stopPropagation(); restart(); setPause(false); };
 addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); setPause(!paused); } if (e.key === 'f' || e.key === 'F') setFF((FFS.indexOf(FF) + 1) % FFS.length); });
+{ /* 🛹 board picker: cycles cruiser / dancer / surfskate / electric (saved; ?board=electric) */
+  const ids = ['cruiser', 'dancer', 'surf', 'electric'], el = $('boardBtn');
+  const show = (id) => { const B = rider.setBoard(id); localStorage.sw_board = id; el.textContent = id === 'electric' ? '⚡' : '🛹'; el.title = B.name;
+    const tt = $('toast'); if (tt) { tt.innerHTML = '<b>' + B.name + '</b><br>滚动阻力 ' + B.crr.toFixed(4) + ' · 最大侧倾 ' + B.leanDeg + '° · 最小转弯半径 ' + B.minR + ' m' + (B.motorW ? '<br>电机 ' + B.motorW + ' W，极速 ' + B.vmaxKmh + ' km/h，自己加速，不用 pump' : ' · pump 效率 ×' + B.pump); tt.style.opacity = 1; clearTimeout(show.t); show.t = setTimeout(() => (tt.style.opacity = 0), 3200); } };
+  el.onclick = (e) => { e.stopPropagation(); show(ids[(ids.indexOf(rider.boardId) + 1) % ids.length]); };
+  const b0 = Q.get('board') || localStorage.sw_board; if (b0 && ids.includes(b0)) { rider.setBoard(b0); el.textContent = b0 === 'electric' ? '⚡' : '🛹'; } }
 $('ff').onclick = (e) => { e.stopPropagation(); setFF((FFS.indexOf(FF) + 1) % FFS.length); };
 // debug switch: hides everything except the stamina bar (and the switch itself)
 const setDbg = (on) => { document.body.classList.toggle('nodbg', !on); $('dbg').classList.toggle('on', on); localStorage.sw_dbg = on ? '1' : '0'; };
@@ -952,6 +958,7 @@ window.LAB = {
   orbit(y, p, d) { camMode = 'orbit'; camInit = false; orbit.yaw = y; orbit.pitch = p ?? orbit.pitch; orbit.dist = d ?? orbit.dist; },
   setTod(x) { TOD = x; },
   stepLite(d) { step(d, true); },
+  board(id) { return rider.setBoard(id); },
   ff(x) { const i = FFS.indexOf(x); setFF(i < 0 ? 0 : i); return FF; },
   light(o) { Object.assign(LT, o || {}); girlShading.key = null; return LT; },
   get renderer() { return renderer; },
