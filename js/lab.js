@@ -134,14 +134,14 @@ Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near:
 scene.add(sun, sun.target);
 // sky
 {
-  const m = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uWarm: { value: 0 }, uSun: { value: new THREE.Vector3(0, 0.2, 1) } },
+  const m = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uWarm: { value: 0 }, uSun: { value: new THREE.Vector3(0, 0.2, 1) }, uNight: { value: 0 }, uMoon: { value: new THREE.Vector3(0, 0.5, 1) }, uMoonA: { value: 0 } },
     vertexShader: 'varying vec3 p;void main(){p=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: `uniform float uWarm; uniform vec3 uSun; varying vec3 p;float h(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5);}
+    fragmentShader: `uniform float uWarm; uniform vec3 uSun; uniform float uNight; uniform vec3 uMoon; uniform float uMoonA; varying vec3 p;float h(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5);}
     float n(vec2 q){vec2 i=floor(q),f=fract(q);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
     float fbm(vec2 q){float s=0.,a=.5;for(int k=0;k<5;k++){s+=a*n(q);q*=2.03;a*=.5;}return s;}
     void main(){float y=max(p.y,0.);vec3 c=mix(vec3(.85,.93,.97),vec3(.33,.6,.88),pow(y,.5));
     vec3 warmHor=vec3(1.,.78,.55),warmTop=vec3(.45,.62,.86);vec3 cw=mix(warmHor,warmTop,pow(y,.6));float sd=max(dot(normalize(p),normalize(uSun)),0.);cw+=vec3(1.,.75,.45)*pow(sd,24.)*.9+vec3(1.,.6,.3)*pow(sd,4.)*.25;c=mix(c,cw,uWarm);
-    vec2 q=p.xz/(p.y+.15)*1.3;float cl=smoothstep(.5,.78,fbm(q+2.));vec3 cc=mix(vec3(1.),vec3(1.,.86,.72),uWarm);c=mix(c,cc,cl*smoothstep(.03,.2,p.y)*.95);gl_FragColor=vec4(c,1.);}` });
+    vec2 q=p.xz/(p.y+.15)*1.3;float cl=smoothstep(.5,.78,fbm(q+2.));vec3 cc=mix(vec3(1.),vec3(1.,.86,.72),uWarm);c=mix(c,cc,cl*smoothstep(.03,.2,p.y)*.95);vec3 nc=mix(vec3(.06,.10,.22),vec3(.01,.02,.07),pow(y,.45));vec2 sq=floor(p.xz/(p.y+.02)*180.);float st=step(.9975,h(sq))*smoothstep(.05,.3,p.y)*(1.-cl*.9);nc+=vec3(.85,.9,1.)*st*.9;float md=dot(normalize(p),normalize(uMoon));nc+=vec3(.75,.82,1.)*(smoothstep(.9994,.9997,md)*1.2+pow(max(md,0.),60.)*.18)*uMoonA;nc=mix(nc,vec3(.12,.15,.24),cl*smoothstep(.03,.2,p.y)*.6);c=mix(c,nc,uNight);gl_FragColor=vec4(c,1.);}` });
   window.__sky = m; const skyM = new THREE.Mesh(new THREE.SphereGeometry(1200, 32, 16), m); skyM.onBeforeRender = (r, s, cam) => { skyM.position.copy(cam.position); skyM.updateMatrixWorld(); }; skyM.frustumCulled = false; scene.add(skyM);   // follows the camera (route is 1.4 km from origin)
 }
 // road + verge ribbons
@@ -412,7 +412,7 @@ const PROFILE_LA = () => rider.profile?.mind?.lookAheadM ?? 150;
 // 自然 (sun, wind, road), 决策 (plan + history), 全图 (god's-eye list of the whole route, current stretch highlighted)
 let brainTab = localStorage.sw_tab || 'girl';
 document.querySelectorAll('#brain .tabs button').forEach((b) => { b.classList.toggle('on', b.dataset.t === brainTab);
-  b.onclick = (ev) => { ev.stopPropagation(); brainTab = b.dataset.t; localStorage.sw_tab = brainTab; brainHUD.map = null; brainHUD.mapBuilt = false; brainHUD.force = true; document.querySelectorAll('#brain .tabs button').forEach((x) => x.classList.toggle('on', x === b)); brainHUD(); }; });
+  b.onclick = (ev) => { ev.stopPropagation(); brainTab = b.dataset.t; localStorage.sw_tab = brainTab; brainHUD.map = null; brainHUD.mapBuilt = false; brainHUD.force = true; $('brainPane').dataset.lt = ''; document.querySelectorAll('#brain .tabs button').forEach((x) => x.classList.toggle('on', x === b)); brainHUD(); }; });
 $('brainPane').addEventListener('scroll', () => { brainHUD.userScroll = true; clearTimeout(brainHUD.us); brainHUD.us = setTimeout(() => brainHUD.userScroll = false, 4000); }, { passive: true });
 ['pointerdown', 'touchstart', 'wheel'].forEach((ev) => $('brain').addEventListener(ev, (e) => e.stopPropagation(), { passive: true }));
 const deg = (gr) => (Math.atan(gr) * 57.3).toFixed(1) + '°';
@@ -423,6 +423,13 @@ function routeSegs() { if (routeSegs.c) return routeSegs.c; const out = []; cons
   let a = 0, c = cls(track.at(0).grade);
   for (let s = 2; s <= track.total; s += 2) { const k = s >= track.total ? null : cls(track.at(s).grade); if (k !== c || s >= track.total) { if (s - a >= 6 || !out.length) { let mx = 0, dh = track.at(Math.min(s, track.total - 0.01)).p.y - track.at(a).p.y; for (let q = a; q < s; q += 1) { const g = track.at(q).grade; if (Math.abs(g) > Math.abs(mx)) mx = g; } out.push({ a, b: s, c, dh, mx }); } else { const p = out[out.length - 1]; p.b = s; } a = s; c = k; } }
   return (routeSegs.c = out); }
+const LTDEF = [['timeOverride', '时间（时）', 0, 24, 0.25], ['cloudOverride', '云量', 0, 1, 0.05], ['shadowK', '阴影强度', 0, 1, 0.02], ['toony', '明暗边界硬度', 0.3, 1, 0.02], ['sunMul', '阳光', 0, 2, 0.05], ['fillMul', '天光补光', 0, 2, 0.05], ['exposure', '曝光', 0.5, 1.8, 0.02], ['nightMul', '夜色', 0, 1, 0.05]];
+function lightPane(el) { if (el.dataset.lt === '1') { LTDEF.forEach(([k]) => { const o = el.querySelector(`[data-v="${k}"]`); if (o) o.textContent = LT[k] == null ? '实时' : (+LT[k]).toFixed(2); }); return; }
+  el.dataset.lt = '1'; el.innerHTML = '<div class="sec">光影（可调，自动保存）</div>' + LTDEF.map(([k, n, a, b, st]) => `<div class="row"><span>${n}</span><span data-v="${k}"></span></div><input type="range" data-k="${k}" min="${a}" max="${b}" step="${st}" value="${LT[k] ?? (k === 'timeOverride' ? 12 : k === 'cloudOverride' ? NAT.cloud : 1)}" style="width:100%">` + (k.endsWith('Override') ? `<button data-r="${k}" style="font-size:10px">用实时</button>` : '')).join('') + '<button id="ltReset" style="margin-top:6px">全部恢复默认</button>';
+  el.querySelectorAll('input[type=range]').forEach((i) => i.oninput = () => { LT[i.dataset.k] = +i.value; localStorage.sw_lt = JSON.stringify(LT); });
+  el.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { LT[b.dataset.r] = null; localStorage.sw_lt = JSON.stringify(LT); });
+  el.querySelector('#ltReset').onclick = () => { Object.assign(LT, { sunMul: 1, fillMul: 1, shadowK: 0.62, toony: 0.82, exposure: 1.08, nightMul: 1, timeOverride: null, cloudOverride: null }); localStorage.sw_lt = '{}'; el.dataset.lt = ''; };
+  ['pointerdown', 'touchstart'].forEach((ev) => el.addEventListener(ev, (e) => e.stopPropagation(), { passive: true })); }
 function brainHUD() { const r = rider, el = $('brainPane'); if (!el || document.body.classList.contains('nodbg')) return;
   const now = performance.now(); if (now - (brainHUD.tw || 0) < 250 && !brainHUD.force) return; brainHUD.tw = now; brainHUD.force = false;   /* 4 Hz: rebuilding the panel every few frames stalled phones */
   const g = track.at(r.s).grade, pl = r.plan || {}, kmh = (r.v * 3.6).toFixed(1), P = r.profile || {}, ph = P.physical || {}, pref = P.preference || {}, mind = P.mind || {};
@@ -436,9 +443,10 @@ function brainHUD() { const r = rider, el = $('brainPane'); if (!el || document.
     body = head + `<div class="sec">此刻</div>` + row('动作', act, true) + row('pump 强度', r.pump ? `${r.pump.A.toFixed(2)} / ${r.pump.I.toFixed(2)}` : '-') + row('蹬地冷却', (r.pushCool || 0).toFixed(1) + 's') + row('身体侧倾', ((r.lean || 0) * 57.3).toFixed(0) + '°') + row('花样', r.trickReady ? '<b>可以</b>' : r.stam < (pref.trickMinStamina ?? 0.7) ? '体力不够' : r.v < (pref.trickMinKmh ?? 9.4) / 3.6 ? '速度不够' : r.v > vm + 1.2 ? '太快不安全' : '不合适') +
       sec('身体', ph.body) + sec('体力', ph.energy) + sec('技术', ph.skill) + sec('喜好', pref) + sec('头脑', mind);
   } else if (brainTab === 'nature') {
-    const T = track.at(r.s); const ws = ctx.wind ? Math.hypot(ctx.wind.x, ctx.wind.z) : 0; body = head + `<div class="sec">自然</div>` + row('光照模式', $('tod')?.textContent || '-') + row('当地时间', new Date().toLocaleTimeString('zh-CN', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' })) + (NAT.sun ? row('太阳高度 / 方位', `${(NAT.sun.el * 57.3).toFixed(0)}° / ${(((NAT.sun.az * 57.3) % 360 + 360) % 360).toFixed(0)}°`, true) : '') + row('天气来源', NAT.src) + (NAT.raw ? row('气温 / 云量', `${NAT.raw.temperature_2m}°C / ${NAT.raw.cloud_cover}%`) + row('10 m 风 / 阵风', `${NAT.raw.wind_speed_10m} / ${NAT.raw.wind_gusts_10m} m/s 来自 ${NAT.raw.wind_direction_10m}°`) : '') + row('她身边的风', ws.toFixed(1) + ' m/s（只吹头发衣服）') + row('坡度', deg(g), true) + row('弯曲 κ', T.kappa.toFixed(3)) + row('海拔', T.p.y.toFixed(1) + ' m') +
+    const T = track.at(r.s); const ws = ctx.wind ? Math.hypot(ctx.wind.x, ctx.wind.z) : 0; body = head + `<div class="sec">自然</div>` + row('光照模式', $('tod')?.textContent || '-') + row('当地时间', new Date().toLocaleTimeString('zh-CN', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' })) + (NAT.sun ? row('太阳高度 / 方位', `${(NAT.sun.el * 57.3).toFixed(0)}° / ${(((NAT.sun.az * 57.3) % 360 + 360) % 360).toFixed(0)}°`, true) : '') + (NAT.phase ? row('天色', NAT.phase) : '') + (NAT.moon ? row('月亮 高度 / 亮面', `${(NAT.moon.el * 57.3).toFixed(0)}° / ${Math.round(NAT.moon.illum * 100)}%`) : '') + row('天气来源', NAT.src) + (NAT.raw ? row('气温 / 云量', `${NAT.raw.temperature_2m}°C / ${NAT.raw.cloud_cover}%`) + row('10 m 风 / 阵风', `${NAT.raw.wind_speed_10m} / ${NAT.raw.wind_gusts_10m} m/s 来自 ${NAT.raw.wind_direction_10m}°`) : '') + row('她身边的风', ws.toFixed(1) + ' m/s（只吹头发衣服）') + row('坡度', deg(g), true) + row('弯曲 κ', T.kappa.toFixed(3)) + row('海拔', T.p.y.toFixed(1) + ' m') +
       row('空气阻力', (0.5 * 1.2 * 0.23 * r.v * r.v).toFixed(1) + ' N') + row('滚阻', (60 * 9.81 * 0.004).toFixed(1) + ' N') + row('重力沿坡', (60 * 9.81 * Math.sin(Math.atan(g))).toFixed(0) + ' N') + row('动能', (0.5 * 60 * r.v * r.v / 1000).toFixed(2) + ' kJ') +
       `<div class="sec">前方 60 m</div>` + [10, 20, 30, 45, 60].map((d) => row(`+${d} m`, deg(track.at(Math.min(track.total - 0.1, r.s + d)).grade))).join('');
+  } else if (brainTab === 'light') { lightPane(el); return;
   } else if (brainTab === 'mind') {
     body = head + `<div class="sec">计划（看 ${PROFILE_LA()} m）</div>` + row('结论', planTxt, true) + (pl.climbAt != null ? row('下一段上坡', `${pl.climbAt} m 后 · 长 ${pl.L ?? '?'} m · 爬 ${(pl.dh ?? 0).toFixed(1)} m · 最陡 ${deg(pl.maxG || 0)}`) : '') +
       (pl.need !== undefined ? row('模拟耗能', `${(pl.need / 1000).toFixed(1)} / ${(pl.have / 1000).toFixed(1)} kJ`) : '') + (pl.vEnd !== undefined ? row(`${PROFILE_LA()} m 后速度`, pl.vEnd + ' km/h') : '') + row('速度目标', ((r.vTarget || 0) * 3.6).toFixed(0) + ' km/h') +
@@ -568,16 +576,57 @@ function updateCamera(dt) {
     for (const o of BLD) { const u = clamp(o.c.clone().sub(a).dot(af) / lf, 0, 1), d = o.c.distanceTo(a.clone().addScaledVector(af, u)); o.m.visible = d > o.r * 0.8 + 2; } }
   sunFollow(base);
 }
+// LIGHT TUNING (debug 光影 tab): shadow strength = how dark the side away from the sun gets (sky fill), sun power, exposure...
+const LT = { sunMul: 1, fillMul: 1, shadowK: 0.62, toony: 0.82, exposure: 1.08, nightMul: 1, timeOverride: null, cloudOverride: null };
+try { Object.assign(LT, JSON.parse(localStorage.sw_lt || '{}')); } catch (e) {}
+function moonPos(date, lat, lon) { /* low-precision lunar position (Meeus-lite) + phase */ const rad = Math.PI / 180, d = date.getTime() / 86400000 + 2440587.5 - 2451545.0;
+  const L = (218.316 + 13.176396 * d) * rad, M = (134.963 + 13.064993 * d) * rad, F = (93.272 + 13.229350 * d) * rad;
+  const lam = L + 6.289 * rad * Math.sin(M), bet = 5.128 * rad * Math.sin(F), e = 23.439 * rad;
+  const ra = Math.atan2(Math.sin(lam) * Math.cos(e) - Math.tan(bet) * Math.sin(e), Math.cos(lam)), dec = Math.asin(Math.sin(bet) * Math.cos(e) + Math.cos(bet) * Math.sin(e) * Math.sin(lam));
+  const gmst = (18.697374558 + 24.06570982441908 * d) % 24, ha = (gmst * 15 + lon) * rad - ra, la = lat * rad;
+  const el = Math.asin(Math.sin(la) * Math.sin(dec) + Math.cos(la) * Math.cos(dec) * Math.cos(ha)), az = Math.atan2(-Math.sin(ha), Math.tan(dec) * Math.cos(la) - Math.sin(la) * Math.cos(ha));
+  const sunL = (280.459 + 0.98564736 * d) * rad + 1.915 * rad * Math.sin((357.529 + 0.98560028 * d) * rad), illum = 0.5 * (1 - Math.cos(lam - sunL));
+  return { el, az, illum }; }
+const dirOf = (el, az) => new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
+// GIRL SHADING (Cheney: real sun = a visible light/shade split on her, but the shade side not too dark).
+// The native VRM materials came with shadeColor == lit and shift 1 (= no shade at all). Here: shade = lit x shadeK (slightly
+// cool), a crisp-ish terminator, less GI flattening. Re-applied whenever the tuning changes. Face stays soft.
+function girlShading() { const v = rider?.vrm; if (!v) return; const k = LT.shadowK, sh = 1 - 0.55 * k, key = k + ':' + LT.toony;
+  if (girlShading.key === key) return; girlShading.key = key;
+  v.scene.traverse((o) => { if (!o.isMesh) return; (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { const U = m.uniforms; if (!U || !U.shadeColorFactor) return;
+    const n = m.name || ''; if (/EYE|Eyeline|Eyelash|Brow|Highlight|FaceMouth/.test(n)) return;
+    const face = /Face_00_SKIN/.test(n), hair = /HAIR/.test(n), s = face ? 1 - 0.3 * k : sh;
+    U.shadeColorFactor.value.setRGB(s * 0.97, s * 0.95, s * 1.04);
+    if (U.shadingShiftFactor) U.shadingShiftFactor.value = face ? -0.2 : hair ? -0.25 : -0.12;
+    if (U.shadingToonyFactor) U.shadingToonyFactor.value = face ? 0.5 : LT.toony;
+    if ('giEqualizationFactor' in m) m.giEqualizationFactor = 0.45; else if (U.giEqualizationFactor) U.giEqualizationFactor.value = 0.45;
+    if (!m.shadeMultiplyTexture && m.map) { m.shadeMultiplyTexture = m.map; m.needsUpdate = true; }   /* shade keeps the cloth/skin texture */ }); }); }
 function sunFollow(base) {
-  if (TOD === 'real') { const now = NAT.t || new Date(), sp = solarPos(now, NAT.lat, NAT.lon); NAT.sun = sp;
-    const el = Math.max(sp.el, 4 * Math.PI / 180), sdir = new THREE.Vector3(Math.sin(sp.az) * Math.cos(el), Math.sin(el), -Math.cos(sp.az) * Math.cos(el)).normalize();
-    const low = 1 - Math.min(1, Math.max(0, (sp.el * 180 / Math.PI - 4) / 30)), cl = NAT.cloud;   // low sun -> warm, long side light
-    sun.position.copy(base).addScaledVector(sdir, 14); sun.target.position.copy(base);
-    sun.color.setRGB(1, 0.93 - 0.17 * low, 0.82 - 0.3 * low); sun.intensity = (2.6 + 0.4 * low) * (1 - 0.55 * cl); hemi.color.set(low > 0.6 ? '#ffe2c4' : '#eef6ff'); hemi.groundColor.set('#c8b08a'); hemi.intensity = 0.6 + 0.8 * cl;   /* less sky fill under a clear sun -> the shade side stays shade (strong light/shade line) */
-    scene.fog.color.set(low > 0.6 ? '#f4d9bd' : '#d6ebf5'); renderer.toneMappingExposure = 1.08; window.__sky.uniforms.uWarm.value = low; window.__sky.uniforms.uSun.value.copy(sdir);
-    seaU.uSun.value.copy(sdir); seaU.uSunCol.value.copy(sun.color); seaU.uSky.value.set(low > 0.6 ? '#c9d6e0' : '#a8cdea'); seaU.uFog.value.copy(scene.fog.color);
-    const rim = low * (1 - cl); if (skirt) skirt.rimU.value.set(0.75 * rim, 0.52 * rim, 0.3 * rim); if (skirt2) skirt2.rimU.value.set(0.6 * rim, 0.45 * rim, 0.3 * rim);
+  girlShading();
+  if (TOD === 'real') { const now = LT.timeOverride != null ? (() => { const d = new Date(); const syd = new Date(d.toLocaleString('en-US', { timeZone: 'Australia/Sydney' })); const off = d - syd; const t = new Date(syd); t.setHours(Math.floor(LT.timeOverride), Math.round((LT.timeOverride % 1) * 60), 0, 0); return new Date(t.getTime() + off); })() : (NAT.t || new Date());
+    const sp = solarPos(now, NAT.lat, NAT.lon), mp = moonPos(now, NAT.lat, NAT.lon); NAT.sun = sp; NAT.moon = mp; NAT.now = now;
+    const elD = sp.el * 180 / Math.PI, cl = LT.cloudOverride != null ? LT.cloudOverride : NAT.cloud;
+    /* phases: day (sun > 6°) -> golden (6..-1) -> twilight (-1..-8, blue hour) -> night (< -8°, moon/stars) */
+    const day = Math.min(1, Math.max(0, (elD + 1) / 7)), night = Math.min(1, Math.max(0, (-elD - 1) / 7)) * LT.nightMul;
+    const low = 1 - Math.min(1, Math.max(0, (elD - 4) / 30));
+    const sdir = dirOf(Math.max(sp.el, 3 * Math.PI / 180), sp.az), mdir = dirOf(Math.max(mp.el, 5 * Math.PI / 180), mp.az);
+    const moonUp = Math.min(1, Math.max(0, mp.el * 180 / Math.PI / 5)), moonI = moonUp * (0.25 + 0.75 * mp.illum) * (1 - 0.7 * cl);
+    const kdir = night > 0.5 && moonI > 0.05 ? mdir : sdir;   /* the shadow-casting light: sun by day, moon at night */
+    sun.position.copy(base).addScaledVector(kdir, 14); sun.target.position.copy(base);
+    const sc = new THREE.Color(1, 0.93 - 0.17 * low, 0.82 - 0.3 * low), mc = new THREE.Color('#9fb6ff');
+    sun.color.copy(sc).lerp(mc, night); sun.intensity = LT.sunMul * ((2.9 + 0.3 * low) * (1 - 0.6 * cl) * day * (1 - night) + 0.55 * moonI * night);
+    /* sky fill: this is what lights the shade side. Lower fill = stronger light/shade split (Cheney: real sun casts real shade;
+       not too dark). Overcast: fill rises and the sun fades -> soft. */
+    const fill = (1 - LT.shadowK) * 1.6 + 1.1 * cl;
+    hemi.color.set(low > 0.6 ? '#ffe2c4' : '#eef6ff').lerp(new THREE.Color('#4a63a8'), night); hemi.groundColor.set('#c8b08a').lerp(new THREE.Color('#1c2846'), night);
+    hemi.intensity = LT.fillMul * (fill * (1 - night) * Math.max(0.35, day) + (0.85 + 0.5 * moonI) * night);
+    scene.fog.color.set(low > 0.6 ? '#f4d9bd' : '#d6ebf5').lerp(new THREE.Color('#0d1730'), Math.max(night, (1 - day) * 0.6));
+    renderer.toneMappingExposure = LT.exposure * (1 + 0.1 * night);
+    const S = window.__sky.uniforms; S.uWarm.value = low * (1 - night); S.uSun.value.copy(sdir); S.uNight.value = Math.max(night, (1 - day) * 0.55); S.uMoon.value.copy(mdir); S.uMoonA.value = moonUp * (0.4 + 0.6 * mp.illum);
+    seaU.uSun.value.copy(kdir); seaU.uSunCol.value.copy(sun.color); seaU.uSky.value.set(low > 0.6 ? '#c9d6e0' : '#a8cdea').lerp(new THREE.Color('#0c1630'), night); seaU.uFog.value.copy(scene.fog.color);
+    const rim = low * (1 - cl) * (1 - night) * day; if (skirt) skirt.rimU.value.set(0.75 * rim, 0.52 * rim, 0.3 * rim); if (skirt2) skirt2.rimU.value.set(0.6 * rim, 0.45 * rim, 0.3 * rim);
     rimLight.position.copy(base).addScaledVector(sdir, 10).add(new THREE.Vector3(0, 2, 0)); rimLight.target.position.copy(base).add(new THREE.Vector3(0, 1.2, 0)); rimLight.intensity = 2.2 * rim;
+    NAT.phase = night > 0.5 ? '夜' : day < 1 ? (sp.el > 0 ? '黄昏/清晨' : '蓝调') : '白天';
     return; }
   if (TOD === 'golden') {
     const ahead = track.at(rider.s + 30).dir; const sdir = RD ? (() => { const v = (rider.__vd || new THREE.Vector3(1, 0, 0)).clone(); v.y = 0; v.normalize(); return new THREE.Vector3(v.x * 0.9 + 0.35, 0.16, v.z * 0.9).normalize(); })() : new THREE.Vector3(ahead.x * 0.9 + 0.35, 0.32, ahead.z * 0.9).normalize();
