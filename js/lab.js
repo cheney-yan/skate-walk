@@ -368,7 +368,20 @@ function caption() {
 }
 
 // ---------------- stamina bar (always on) ----------------
+// TRICK RING (always on, debug or not): outer ring = stamina, inner ring = speed toward the trick threshold.
+// When both are met she waits and looks at us; tap the ring / Space / Enter / click the scene to release the trick (board spin).
+{ const fire = (e) => { if (e) e.preventDefault?.(); rider.requestTrick && rider.requestTrick(); };
+  $('trick')?.addEventListener('click', (e) => { e.stopPropagation(); fire(e); });
+  addEventListener('keydown', (e) => { if (e.code === 'Space' || e.code === 'Enter') fire(e); });
+  let down = null; $('c').addEventListener('pointerdown', (e) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+  $('c').addEventListener('pointerup', (e) => { if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) < 8 && performance.now() - down.t < 300) fire(); down = null; }); }
+function trickHUD() { const r = rider, P = r.trickProg || { stam: r.stam, speed: 0, ready: false }, el = $('trick'); if (!el) return;
+  $('trS').setAttribute('stroke-dashoffset', (276.5 * (1 - Math.min(1, P.stam / 0.95))).toFixed(1));
+  $('trV').setAttribute('stroke-dashoffset', (213.6 * (1 - P.speed)).toFixed(1));
+  $('trS').setAttribute('stroke', P.stam >= 0.95 ? '#ff8a5c' : '#6cbfb0');
+  el.classList.toggle('ready', !!P.ready); $('trL').textContent = P.ready ? '转板!' : r.ollie?.kind === 'shove' ? '✨' : P.stam >= 0.95 ? '再快点' : '蓄力'; }
 function stamHUD() {
+  trickHUD();
   const r = rider, f = r.stam;
   $('stamF').style.width = (f * 100).toFixed(1) + '%';
   const vm = ctx.vmax ?? 6, sp = Math.min(1, (r.v * r.v) / (vm * vm));   // speed bar = kinetic energy share of the top speed
