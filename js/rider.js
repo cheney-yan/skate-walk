@@ -508,22 +508,30 @@ export class Rider {
   // (fingers can only curl one way: toward the palm). Solved geometrically from the hand's own finger bones, so it does
   // not depend on the rig's bone axes: align finger direction, then roll about it so the palm faces up.
   clampHand() {
-    const H = this.vrm.humanoid, hd = this.b.rightHand, P = (n) => H.getRawBoneNode(n).getWorldPosition(new V());
-    if (!H.getRawBoneNode('rightMiddleProximal')) return;
+    // Solve the wanted hand orientation ONCE per frame as a full frame (finger dir + palm normal -> rotation), in the
+    // forearm's local space, then slerp toward it. The old two-step solve (aim fingers, then roll palm) was evaluated on
+    // the pose it had just written, so it flipped between two answers each frame (hand jittered up to 50°/frame and the
+    // cuff, skinned partly to the hand, shook with it).
+    const H = this.vrm.humanoid, hd = this.b.rightHand, la = this.b.rightLowerArm;
+    const mp = H.getRawBoneNode('rightMiddleProximal'), ip = H.getRawBoneNode('rightIndexProximal'), lp = H.getRawBoneNode('rightLittleProximal');
+    if (!mp || !ip || !lp) return;
     const w = (this.hold ? sstep(0, this.hold.T, this.hold.t) : 1) * (1 - (this.hold?.drop || 0));
-    if (w <= 0.01) return;
+    if (w <= 0.01) { this.clampQ = null; return; }
+    // hand-local axes, measured once from the rest pose of the finger bones
+    if (!this.handAx) { const F = mp.position.clone().normalize(), S = ip.position.clone().sub(lp.position).normalize(); const N = F.clone().cross(S).normalize(); S.copy(N.clone().cross(F)).normalize();
+      this.handAx = new THREE.Matrix4().makeBasis(F, S, N); }
     this.root.updateMatrixWorld(true);
-    const inward = new V(1, 0, 0).applyQuaternion(this.walkF.quaternion).normalize(), up = new V(0, 1, 0);
-    const fT = inward.clone().multiplyScalar(0.8).addScaledVector(up, 0.25).addScaledVector(new V(0, 0, 1).applyQuaternion(this.walkF.quaternion), 0.25).normalize();
-    const pT = up.clone().addScaledVector(inward, 0.35).normalize(); pT.addScaledVector(fT, -pT.dot(fT)).normalize();
-    for (let it = 0; it < 2; it++) {
-      const h = hd.getWorldPosition(new V()), fd = P('rightMiddleProximal').sub(h).normalize();
-      const q1 = new Q().setFromUnitVectors(fd, fd.clone().lerp(fT, w).normalize());
-      setWorldQuat(hd, q1.multiply(hd.getWorldQuaternion(new Q()))); hd.updateMatrixWorld(true);
-      const h2 = hd.getWorldPosition(new V()), fd2 = P('rightMiddleProximal').sub(h2).normalize(), side = P('rightIndexProximal').sub(P('rightLittleProximal'));
-      const palm = fd2.clone().cross(side).normalize().multiplyScalar(-1);   // right hand: palm = -(fingers × index→little... ) (T-pose check: -Y)
-      const want = palm.clone().lerp(pT, w); want.addScaledVector(fd2, -want.dot(fd2)).normalize(); palm.addScaledVector(fd2, -palm.dot(fd2)).normalize();
-      const q2 = new Q().setFromUnitVectors(palm, want); setWorldQuat(hd, q2.multiply(hd.getWorldQuaternion(new Q()))); hd.updateMatrixWorld(true); }
+    const inward = new V(1, 0, 0).applyQuaternion(this.walkF.quaternion).normalize(), fw = new V(0, 0, 1).applyQuaternion(this.walkF.quaternion), up = new V(0, 1, 0);
+    const fT = inward.clone().multiplyScalar(0.8).addScaledVector(up, 0.25).addScaledVector(fw, 0.25).normalize();
+    const nT = up.clone().addScaledVector(inward, 0.35).normalize().multiplyScalar(-1);   // palm faces up -> back-of-hand normal points down
+    nT.addScaledVector(fT, -nT.dot(fT)).normalize(); const sT = nT.clone().cross(fT).normalize();
+    const want = new Q().setFromRotationMatrix(new THREE.Matrix4().makeBasis(fT, sT, nT)).multiply(new Q().setFromRotationMatrix(this.handAx).invert());   // world quat of the hand
+    const parentQ = la.getWorldQuaternion(new Q()), wantL = parentQ.clone().invert().multiply(want);
+    // pick the sign of the palm normal that is closer to the current pose (avoids a 180° flip if the rig's axes differ)
+    const alt = parentQ.clone().invert().multiply(new Q().setFromRotationMatrix(new THREE.Matrix4().makeBasis(fT, sT.clone().negate(), nT.clone().negate())).multiply(new Q().setFromRotationMatrix(this.handAx).invert()));
+    const tgtL = (this.clampSign ?? (hd.quaternion.angleTo(wantL) <= hd.quaternion.angleTo(alt) ? (this.clampSign = 1) : (this.clampSign = -1))) > 0 ? wantL : alt;
+    this.clampQ = this.clampQ ? this.clampQ.slerp(tgtL, 0.25) : hd.quaternion.clone().slerp(tgtL, 0.25);
+    hd.quaternion.copy(hd.quaternion.clone().slerp(this.clampQ, w)); hd.updateMatrixWorld(true);
   }
   // BOARD vs BODY while carrying. The board is clamped BETWEEN her forearm (outside) and her hip/coat (inside):
   //  - any forearm/upper-arm vertex inside the deck slab moves the board toward her body (the arm never goes through it);
