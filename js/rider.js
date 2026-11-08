@@ -443,7 +443,7 @@ export class Rider {
         }
       } else if (S.ph === 'step') {
         this.m = sstep(0, 0.7, S.t); this.face = sstep(0.05, 0.75, S.t);
-        if (S.t > 0.8) { S.ph = 'pick'; S.t = 0; S.pick = this.forcePick || 'bend';   // Cheney: the kick-up looked odd; bend & pick for now this.ev.push(['pick', this.s, S.pick]); }
+        if (S.t > 0.8) { S.ph = 'pick'; S.t = 0; S.pick = this.forcePick || 'bend';   /* Cheney: the kick-up looked odd; bend & pick for now */ this.ev.push(['pick', this.s, S.pick]); }
       } else if (S.ph === 'pick') {
         this.m = 1; this.face = 1;
         if (S.pick === 'bend') {
