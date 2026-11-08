@@ -20,8 +20,9 @@ const DANCE_K = [[0, 0.2, -0.21, 0, 0, 0.015, -0.01], [0.5, 0.2, -0.21, 0, 0, 0.
   [2.2, 0.42, 0.31, 0, 0, -0.01, 0.03], [2.7, 0.42, 0.02, 0, 0.24, -0.01, -0.02], [4.2, 0.42, 0.0, 0, 0.26, -0.01, -0.02], [4.7, 0.42, 0.22, 0, 0, -0.01, 0.0],
   [5.3, 0.2, 0.22, 0, 0, 0.015, 0.0], [5.9, 0.2, -0.21, 0, 0, 0.015, -0.01], [6.4, 0.2, -0.21, 0, 0, 0.015, -0.01]];
 const DANCE_T = 6.4;
-export const MASS = 46;   // Cheney: a lighter girl — the same lean makes a wider carve, she rolls further, pushes/pumps less   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
-const EFF = 0.25, P_AERO = 230, CRR = 0.0026, CDA = 0.23;   // slicker than reality on purpose: long glides   // W: what her aerobic system refills continuously; above it she spends the bar, below it she refills          // deck top above ground (m)
+const PUSH_F = 165;   // N, a strong but unhurried kick
+export const MASS = 60;   // Cheney (corrected): more INERTIA — each push takes real force, but once rolling she keeps her speed (same friction/drag force, more mass -> slower decay)   // J (metabolic): full stamina bar. Muscle efficiency ~25% -> metabolic = mechanical work / 0.25
+const EFF = 0.25, P_AERO = 230, CRR = 0.0030, CDA = 0.25;   // slicker than reality on purpose: long glides   // W: what her aerobic system refills continuously; above it she spends the bar, below it she refills          // deck top above ground (m)
 const WHEEL_R = 0.035, HALF_WB = 0.36, DECK_L = 1.12;
 let ANK = 0.093;   // ankle (foot bone) height above the shoe sole — measured per model in the Rider constructor
 
@@ -185,7 +186,7 @@ export class Rider {
     let spend = 0;
     const brake = this.mode === 'off' && this.seq.ph === 'brake';
     if (this.mode === 'ride' || brake) {
-      let a = -g * Math.sin(theta) - CRR * g * Math.cos(theta) - (0.5 * 1.2 * CDA * this.v * this.v) / m;
+      let a = -g * Math.sin(theta) - CRR * g * Math.cos(theta) * (52 / m) - (0.5 * 1.2 * CDA * this.v * this.v) / m;   // same resisting force, more mass -> she keeps her speed
       if (this.mode === 'ride') {
         const gdeg = Math.atan(grade) / D, cruise = (ctx.cruise ?? 3.0) * (gdeg > 2 ? clamp(1 - (gdeg - 2) * 0.1, 0.6, 1) : 1), vmax = ctx.vmax ?? 5.2;
         const holeSoon = (ctx.holes || []).some((h) => h - this.s > 0 && h - this.s < this.v * 0.42 + 0.35 + this.v * 1.3 + 0.5);
@@ -200,7 +201,7 @@ export class Rider {
         const pumpGo = canPump && (needGo || (this.pump && this.pump.I > 0.4 && this.v < cruise - 0.6));
         const wantPump = pumpGo;   // no idle pumping: when she has speed she stands tall and GLIDE-CARVES with her centre of mass
         const carveGo = !pumpGo && !this.push && !this.ollie && this.air <= 0 && this.v > 2.0 && Math.abs(kappa) < 0.08 && !holeSoon && grade < 0.04;
-        this.glideA = damp(this.glideA || 0, carveGo ? 1 : 0, 0.8, dt); this.glidePh = (this.glidePh || 0) + 2 * Math.PI * 0.16 * dt;   // slow: one S every ~6 s
+        this.glideA = damp(this.glideA || 0, carveGo ? 1 : 0, 0.8, dt); this.glidePh = (this.glidePh || 0) + 2 * Math.PI * 0.125 * dt;   // slow: one S every 8 s
         const Itgt = pumpGo ? clamp(0.45 + (cruise - this.v) * 0.35 + Math.max(0, grade) * 8, 0.45, 1) : 0.15;
         if (wantPump && !this.pump) this.pump = { t: 0, ph: 0, I: Itgt, A: 0 };
         if (this.pump) { const P = this.pump; P.t += dt; P.I = damp(P.I, Itgt, 0.8, dt); P.ph += 2 * Math.PI * (0.42 + 0.5 * P.I) * dt;
@@ -213,7 +214,7 @@ export class Rider {
         spend += (BASE - P_AERO - (grade < -0.02 && !this.push ? 60 : 0)) * dt;   // rolling downhill is the best rest: the bar fills fastest there
         if (this.v > vmax) a -= (this.pump ? 1.1 : 1.6) * (this.v - vmax) + (this.pump ? 0.35 : 0.8);   // carving (or foot-drag) checks speed
         this.pushCool -= dt; this.trickCool = (this.trickCool ?? 6) - dt; this.danceCool = (this.danceCool ?? 10) - dt;
-        if (this.dance) { this.dance.t += dt; if (this.dance.t > DANCE_T) { this.dance = null; this.danceCool = 9 + Math.random() * 6; } }
+        if (this.dance) { this.dance.t += dt * 0.75; if (this.dance.t > DANCE_T) { this.dance = null; this.danceCool = 14 + Math.random() * 8; } }
         if (!this.planT || this.t - this.planT > 0.5) { this.plan = this.planClimb(track); this.planT = this.t; }
         const pl = this.plan, stopDist = this.v * this.v / (2 * 2.6) + this.v * 0.6 + 1.5;   // room to stop before it
         this.slowT = this.v < 0.7 ? (this.slowT || 0) + dt : 0;
@@ -263,13 +264,13 @@ export class Rider {
     //     (longboard trucks steer ~0.6 rad per rad of roll);
     //  4. heading ψ' = v·κ, sideways drift y' = v·sinψ: the S-line on the road follows from the lean, a quarter cycle later.
     // She also steers back to her line (lean feedback on drift & heading), slower than the pump so it doesn't cancel it.
-    { const vv = Math.max(this.v, 0.8), w0 = 2 * Math.PI * fq, KT = 0.62;
+    { const vv = Math.max(this.v, 0.8), w0 = 2 * Math.PI * fq, KT = 0.42;   // soft dancer bushings: a lean rolls the deck a lot
       const psiAmp = (0.12 + 0.11 * PI_) * clamp((this.v - 1.2) / 1.5, 0, 1);         // heading swing: ±7° elegant .. ±13° power
       const lamAmp = Math.atan(Math.min(Math.tan(20 * D), psiAmp * vv * w0 / 9.81));   // the lean that produces that swing at this speed
       // GLIDE CARVE / DANCE: no pumping — she just shifts her centre of mass a few degrees, slowly; with speed that is enough
       // for a wide, long arc (lean λ -> a = g·tanλ -> κ = a/v²). Dance arcs follow her steps (lean toward the stepping side).
       const gA = riding ? (this.glideA || 0) * (1 - pa0) : 0, dA = riding && this.dance ? (this.dn || 0) : 0;
-      const lamG = (gA * (1 - dA) * 7 * Math.sin(this.glidePh || 0) + dA * 10 * Math.sin((this.dance?.t || 0) * 2 * Math.PI / 3.2)) * D;
+      const lamG = (gA * (1 - dA) * 9 * Math.sin(this.glidePh || 0) + dA * 11 * Math.sin((this.dance?.t || 0) * 2 * Math.PI / 4.2)) * D;
       const lamP = riding ? pa0 * lamAmp * hp + lamG : 0;
       if (!riding) { this.pPsi = 0; this.pLat = 0; }
       const psi = this.pPsi || 0, y = this.pLat || 0;
@@ -281,9 +282,9 @@ export class Rider {
       const aLat = riding ? this.v * this.v * kappa + aP : 0;                                 // total sideways acceleration
       this.aLat = aLat;
       const leanT = clamp(Math.atan(aLat / 9.81), -30 * D, 30 * D);                           // the CoM lean that balances it
-      this.lean = damp(this.lean, leanT, 14, dt);
+      this.lean = damp(this.lean, leanT, 5, dt);   // a heavier body leans slowly
       const kTot = riding ? kappa + kP : 0;
-      this.steerT = Math.atan(kTot * HALF_WB); this.tiltT = clamp(this.steerT / KT, -19 * D, 19 * D); }
+      this.steerT = Math.atan(kTot * HALF_WB); this.tiltT = clamp(this.steerT / KT, -24 * D, 24 * D); }
     { const onB = riding && this.air <= 0 && this.m < 0.5, dyn = (this.pumpTurn || 0) * 0.02 + (this.landFlex || 0);
       const tgt = onB ? 0.007 + dyn * 0.55 : 0;   /* a 52 kg rider on a dancer deck: ~7 mm static, ~1.5-2 cm at the pump peaks */ this.flexV = (this.flexV || 0) + ((tgt - (this.flex || 0)) * 230 - (this.flexV || 0) * 6.5) * dt; this.flex = (this.flex || 0) + this.flexV * dt;   // springy deck: under-damped
       this.landFlex = Math.max(0, (this.landFlex || 0) - dt * 0.12); }
@@ -407,7 +408,7 @@ export class Rider {
   }
   startOn() { this.mode = 'on'; this.modeT = 0; const bs = this.s + 0.75; this.seq = { ph: 'drop', t: 0, bs }; this.slowT = 0; this.ev.push(['on', this.s]); }
   startTrick(why) {
-    this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 14 : 12;
+    this.ollie = { t: 0, kind: 'shove', dir: Math.random() < 0.5 ? 1 : -1, why }; this.trickCool = why === 'full' ? 40 : 20;
     this.stam = Math.max(0, this.stam - (52 * 9.81 * 0.32 / EFF + 150) / EMAX); this.ev.push(['trick', this.s, why]);
   }
   boardRestQ(s, track) { const tr = track(s), q = new Q().setFromAxisAngle(new V(0, 1, 0), Math.atan2(tr.dir.x, tr.dir.z)); return q.multiply(new Q().setFromAxisAngle(new V(1, 0, 0), -Math.atan(tr.grade))); }
@@ -521,16 +522,16 @@ export class Rider {
     return { lz: L(1), rz: L(2), ly: arc(1) + L(3), ry: arc(2) + L(4), lx: L(5), rx: L(6), k: i };
   }
   startPush(grade) {
-    const T = grade > 0.03 ? 0.92 : 1.12;
+    const T = grade > 0.03 ? 1.0 : 1.3;
     this.push = { t: 0, T, contact: null };
     this.pushCount++;
   }
   pushAccel() {
     const p = this.push;
     // contact window inside the cycle
-    const c0 = 0.3 * p.T, c1 = c0 + clamp(0.42 / Math.max(this.v, 0.6), 0.16, 0.36);
+    const c0 = 0.3 * p.T, c1 = c0 + clamp(0.6 / Math.max(this.v, 0.6), 0.22, 0.45);   // a long stroke: the foot stays on the road while the body rolls past
     p.c0 = c0; p.c1 = c1;
-    return p.t > c0 && p.t < c1 && !p.abort ? 3.4 : 0;
+    return p.t > c0 && p.t < c1 && !p.abort ? PUSH_F / MASS : 0;
   }
 
   stateWeights(dt, grade, ctx) {
@@ -538,7 +539,7 @@ export class Rider {
     if (this.push) {
       this.push.t += dt;
       if (this.push.t >= this.push.T) {
-        this.push = null; this.pushCool = 0.25;
+        this.push = null; this.pushCool = 0.7;   // one breath between kicks: push, ride, push — never a scramble
       }
     }
     w.push = damp(w.push, this.push ? 1 : 0, 7, dt);
@@ -573,7 +574,7 @@ export class Rider {
     const w = this.w, t = this.t, b = this.b;
     const P = this.push ? this.push.t / this.push.T : 0;
     // push sub-phase envelope: down (0..0.3 reach), contact, recover
-    const reach = this.push ? sstep(0.05, 0.32, P) * (1 - sstep(0.7, 0.98, P)) : 0;
+    const reach = this.push ? 0.55 * sstep(0.05, 0.32, P) * (1 - sstep(0.7, 0.98, P)) : 0;   // a woman's push: long spine, a soft knee bend, not a hunched dig
     const ol = this.ollie ? this.ollie.t : -1;
     // ollie body phases (from longboard-ollie reference: deep ~90° knee wind-up, explosive extension with arms
     // sweeping up, knees pulled toward chest in the air, then reach down and absorb on landing)
@@ -621,18 +622,18 @@ export class Rider {
     this.solveGaze(dt, ctx, lb, fwd, w);
     // ---- arms: relaxed, swinging; balance out on tuck/landing; right hand to hair in wind
     const bal = clamp(w.tuck * 0.9 + crouchO * 0.5 + tuckAir * 1.2 + landAbs * 0.8 + Math.abs(this.lean) * 1.2 * (1 - 0.8 * (this.pump?.A || 0)), 0, 1);
-    const swing = this.push ? Math.sin(P * Math.PI * 2) * 0.45 * w.push : Math.sin(t * 1.1) * 0.03;
+    const swing = this.push ? Math.sin(P * Math.PI * 2) * 0.22 * w.push : Math.sin(t * 1.1) * 0.03;   // arms barely swing on a push
     // ARMS — two poses + an envelope.
     //  rest: hang relaxed by the sides (soft elbows, tiny swing from the body), like someone just riding along;
     //  active: open for balance (lead arm forward-low, trail arm back-low, port-de-bras).
     //  need = how much balance the moment demands; arms rise fast (~0.25 s), then settle down slowly (~1.5 s).
     const hh = w.hair;
-    const need = dn > 0.05 ? 1 : M > 0.5 ? clamp(this.bend * 0.6 + (brk ? 0.8 : 0), 0, 1) : clamp(Math.max(bal, (brk ? 0.85 : 0), w.push * (0.35 + 0.4 * w.effort), w.effort * 0.6, Math.abs(carve) * 0.95 * (1 - (this.pump?.A || 0)), crouchO * 1.1, tuckAir * 1.2, landAbs, w.tuck * 0.9, (this.gust || 0) * 0.5), 0, 1);
+    const need = dn > 0.05 ? 1 : M > 0.5 ? clamp(this.bend * 0.6 + (brk ? 0.8 : 0), 0, 1) : clamp(Math.max(bal, (brk ? 0.85 : 0), w.push * (0.12 + 0.3 * w.effort), w.effort * 0.45, Math.abs(carve) * 0.45 * (1 - (this.pump?.A || 0)), crouchO * 1.1, tuckAir * 1.2, landAbs, w.tuck * 0.9, (this.gust || 0) * 0.5), 0, 1);
     this.armUp = this.armUp ?? 0;
-    if (need > this.armUp) this.armUp = damp(this.armUp, need, 9, dt);           // quick rise
+    if (need > this.armUp) this.armUp = damp(this.armUp, need, 3, dt);           // unhurried rise
     else { this.armHold = (this.armHold ?? 0) + dt; if (this.armHold > 0.6) this.armUp = damp(this.armUp, need, 1.3, dt); } // linger, then lower
     if (need > this.armUp - 0.02) this.armHold = 0;
-    const pmA = this.pump?.A || 0, pmI = this.pump?.I ?? 0, glide = M < 0.5 && !this.push ? (0.38 + 0.18 * Math.sin(t * 0.45)) * (1 - pmA * (0.85 - 0.5 * pmI)) : 0;
+    const pmA = this.pump?.A || 0, pmI = this.pump?.I ?? 0, glide = M < 0.5 && !this.push ? (0.16 + 0.08 * Math.sin(t * 0.45)) * (1 - pmA * (0.85 - 0.5 * pmI)) : 0;   // gliding: arms low and soft beside her
     const up = this.armForce ?? Math.max(this.armUp, glide);
     const brz = Math.sin(t * 0.73) * 0.05, brz2 = Math.sin(t * 0.57 + 1.3) * 0.06;
     const bodySw = Math.sin(t * 1.6) * 0.04 + this.lean * 0.4;   // passive pendulum with the body
@@ -655,15 +656,15 @@ export class Rider {
     };
     // dance: wings at chest height, elbows soft, wrists leading; arm on the stepping side reaches a beat early
     if (dn > 0) { const pp = DF && DF.ry > 0.15 ? 1 : 0, sw = Math.sin(this.dance.t * 2.2) * 0.12;
-      act.lz = lerp(act.lz, (-12 + pp * 6) * D, dn); act.rz = lerp(act.rz, (12 - pp * 6) * D, dn);
+      act.lz = lerp(act.lz, (-28 + pp * 6) * D, dn); act.rz = lerp(act.rz, (28 - pp * 6) * D, dn);
       act.ly = lerp(act.ly, -0.25 + sw, dn); act.ry = lerp(act.ry, 0.25 + sw, dn);
       act.le = lerp(act.le, -0.35, dn); act.re = lerp(act.re, 0.35, dn); act.lw = lerp(act.lw, -0.35, dn); act.rw = lerp(act.rw, 0.35, dn);
       // arm raise (Cheney: 手举起来, using the lean): follows the dance arc slowly; outside arm lifts above the shoulder,
       // elbow soft, the inside arm floats low — never both straight up
-      const arc = Math.sin(this.dance.t * 2 * Math.PI / 3.2 - 0.5), upL = dn * Math.max(0, arc), upR = dn * Math.max(0, -arc);
+      const arc = Math.sin(this.dance.t * 2 * Math.PI / 4.2 - 0.5), upL = dn * Math.max(0, arc), upR = dn * Math.max(0, -arc);
       const eL = upL * upL * (3 - 2 * upL), eR = upR * upR * (3 - 2 * upR);   // smoothstep: slow in, slow out
-      act.lz += eL * 55 * D; act.le = lerp(act.le, -0.6, eL); act.ly += eL * 0.32; act.lw += eL * 0.4;
-      act.rz -= eR * 55 * D; act.re = lerp(act.re, 0.6, eR); act.ry -= eR * 0.32; act.rw -= eR * 0.4; }
+      act.lz += eL * 30 * D; act.le = lerp(act.le, -0.7, eL); act.ly += eL * 0.35; act.lw += eL * 0.35;
+      act.rz -= eR * 30 * D; act.re = lerp(act.re, 0.7, eR); act.ry -= eR * 0.35; act.rw -= eR * 0.35; }
     // ollie: arms drop low/back in the wind-up, sweep up through the pop, spread wide at shoulder height in the air
     const sweep = clamp(extend + tuckAir, 0, 1), load = crouchO * (1 - sweep);
     act.lz += (-8 * D) * load + (34 * D) * sweep; act.rz += (8 * D) * load - (34 * D) * sweep;
