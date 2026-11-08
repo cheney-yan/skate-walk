@@ -209,13 +209,13 @@ if (RD) {
       float inB = step(0., uv.x) * step(uv.x, 1.) * step(0., uv.y) * step(uv.y, 1.);
       float sd = mix(80., texture2D(uShore, uv).r * 255. / 4., inB); if (inB > 0.5 && texture2D(uShore, uv).r < 0.002) sd = 0.;
       // water colour: turquoise over the sand shelf, deep blue offshore
-      vec3 deep = vec3(0.05, 0.27, 0.42), mid = vec3(0.10, 0.45, 0.58), shallow = vec3(0.30, 0.72, 0.70);
-      vec3 col = mix(shallow, mid, smoothstep(2., 22., sd)); col = mix(col, deep, smoothstep(25., 70., sd));
+      vec3 deep = vec3(0.004, 0.022, 0.045), mid = vec3(0.012, 0.06, 0.09), shallow = vec3(0.07, 0.30, 0.32);   /* LINEAR values (the shader converts to sRGB): sRGB ~ #0b2a3d deep navy, as in the aerial */   /* Sydney ocean in the aerial: deep navy offshore, turquoise only over the sand shelf */
+      vec3 col = mix(shallow, mid, smoothstep(1.5, 14., sd)); col = mix(col, deep, smoothstep(14., 45., sd));
       col *= 0.9 + 0.12 * sw;
       col = mix(col, col * vec3(0.10, 0.13, 0.22), uNight);   /* night: the water itself goes ink-blue/black */
       // fresnel sky reflection
       float fr = 0.02 + 0.98 * pow(1. - max(dot(N, V), 0.), 5.);
-      col = mix(col, mix(uSky, vec3(0.42, 0.62, 0.80), 0.55), clamp(fr, 0., 0.55));
+      col = mix(col, mix(uSky, vec3(0.42, 0.62, 0.80), 0.55), clamp(fr, 0., 0.55) * smoothstep(-0.2, 0.6, V.y < 0.5 ? 0.0 : V.y) * 0. + clamp(fr, 0., 0.55) * (1. - smoothstep(0.55, 0.95, V.y)));   /* looking straight down (aerial) the sky reflection fades -> the water's own deep colour */
       // sun: broad sheen + tight glints = the glittering path toward the sun
       vec3 H = normalize(uSun + V); float nh = max(dot(N, H), 0.);
       col += uSunCol * (pow(nh, 80.) * 0.18 + pow(nh, 1400.) * 4.);
