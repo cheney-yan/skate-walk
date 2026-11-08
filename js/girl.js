@@ -115,8 +115,9 @@ function restyle(vrm) {
     fullerLegs(vrm, Number(new URLSearchParams(location.search).get('legk') ?? 1));
     for (const m of matsByName(vrm, 'Body')) { if (!/Outline/.test(m.name)) legForm(m); }   // rounded knee / shin shading
     addHairFlutter(vrm);
+    tuckArmsInSleeves(vrm);
     // edges of the heavy cloth (jacket hem, cuffs, collar; skirt hem) flutter a little, faster with speed (shader below)
-    for (const [key, w] of [['Tops', (y, ax) => Math.max(sstepG(0.98, 0.9, y), y > 1.05 ? sstepG(0.42, 0.5, ax) : 0, sstepG(1.36, 1.42, y) * 0.6)], ['Bottoms', (y) => sstepG(0.86, 0.78, y)]])
+    for (const [key, w] of [['Tops', (y, ax) => Math.max(sstepG(0.98, 0.9, y), y > 1.05 ? 0.35 * sstepG(0.42, 0.5, ax) : 0, sstepG(1.36, 1.42, y) * 0.6)], ['Bottoms', (y) => sstepG(0.86, 0.78, y)]])
       for (const o of meshesByMat(vrm, key)) { const P = o.geometry.attributes.position, fl = new Float32Array(P.count);
         for (let i = 0; i < P.count; i++) fl[i] = w(P.getY(i), Math.abs(P.getX(i)));
         o.geometry.setAttribute('aFlut', new THREE.BufferAttribute(fl, 1));
@@ -254,6 +255,27 @@ function addHairFlutter(vrm) {
 }
 // leg form: soft darkening toward the silhouette and a gentle front highlight (shin, knee cap, thigh) so the legs read as
 // rounded forms in flat toon light. Only below the hips (bind-pose y < 0.9).
+
+// SLEEVES (Cheney: sleeves sometimes clip, the arm pokes out): skin under a sleeve is never seen, so pull the arm skin
+// inside the sleeve tube. In bind (T-)pose the arms run along x; for each arm slice we measure the sleeve's own radius
+// around the slice centre and shrink the body skin to 70% of it (and never larger than the skin was). Skinning then keeps
+// the skin inside the sleeve through every bend/twist, including when the cuffs flutter.
+function tuckArmsInSleeves(vrm) {
+  vrm.scene.updateMatrixWorld(true);
+  const tops = meshesByMat(vrm, 'Tops'), body = meshesByMat(vrm, 'Body'); if (!tops.length) return;
+  const BIN = 0.02, slices = new Map(), v = new THREE.Vector3();
+  for (const o of tops) { const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i); if (v.y < 1.05 || Math.abs(v.x) < 0.2) continue;
+      const k = Math.round(v.x / BIN); const s = slices.get(k) || { n: 0, y: 0, z: 0, pts: [] }; s.n++; s.y += v.y; s.z += v.z; s.pts.push(v.y, v.z); slices.set(k, s); } }
+  for (const s of slices.values()) { s.y /= s.n; s.z /= s.n; let r = 1; for (let i = 0; i < s.pts.length; i += 2) r = Math.min(r, Math.hypot(s.pts[i] - s.y, s.pts[i + 1] - s.z)); let ra = 0; for (let i = 0; i < s.pts.length; i += 2) ra += Math.hypot(s.pts[i] - s.y, s.pts[i + 1] - s.z); s.r = Math.max(0.012, Math.min(r * 1.1, ra / (s.pts.length / 2) * 0.8)); }
+  let xmaxL = 0, xmaxR = 0; for (const k of slices.keys()) { const x = k * BIN; if (x > 0) xmaxL = Math.max(xmaxL, x); else xmaxR = Math.max(xmaxR, -x); }
+  let moved = 0;
+  for (const o of body) { const P = o.geometry.attributes.position;
+    for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i); if (v.y < 1.0 || Math.abs(v.x) < 0.2) continue; if (Math.abs(v.x) > (v.x > 0 ? xmaxL : xmaxR) - 0.035) continue;   /* keep the wrist just past the cuff untouched (no step) */ const s = slices.get(Math.round(v.x / BIN)); if (!s || s.n < 6) continue;
+      const dy = v.y - s.y, dz = v.z - s.z, d = Math.hypot(dy, dz); const lim = s.r * 0.7; if (d <= lim || d > 0.12) continue;
+      const k = lim / d; P.setY(i, s.y + dy * k); P.setZ(i, s.z + dz * k); moved++; }
+    P.needsUpdate = true; o.geometry.computeVertexNormals(); }
+  vrm.userData.sleeveTuck = moved;
+}
 function legForm(m) {
   const prev = m.onBeforeCompile;
   m.onBeforeCompile = (sh, r) => { prev?.call(m, sh, r);

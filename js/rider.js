@@ -421,6 +421,7 @@ export class Rider {
     // board on edge, long axis along her walking direction, deck facing her leg (grip tape inward)
     const q = this.walkF.quaternion.clone().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), Math.PI / 2));
     if (this.carryStyle === 'under') q.multiply(new Q().setFromAxisAngle(new V(0, 0, 1), -0.5));   // tilted: bottom edge out, rests on the forearm
+    if (this.carryStyle === 'clamp') q.multiply(new Q().setFromAxisAngle(new V(0, 0, 1), 0.12));   // CLAMP: board on edge against her hip, top rail leaning in a touch
     return q;
   }
   stepSeq(dt, track) {
@@ -483,14 +484,14 @@ export class Rider {
     if (this.boardFixed && !this.hold && S.bPos && !(this.mode === 'off' && S.ph === 'pick' && S.pick === 'kick')) { this.board.position.copy(S.bPos); this.board.quaternion.copy(S.bQ); }
   }
   toWalk() { this.mode = 'walk'; this.modeT = 0; this.seq = null; this.boardFixed = false; this.bend = 0; this.kickStep = 0; this.carry = 1; }
-  grab(pos, q, gripL, T) { this.hold = { qFrom: q.clone(), gFrom: gripL.clone(), t: 0, T, drop: 0 }; this.carry = 1; this.carryStyle = this.forceCarry || (Math.random() < 0.5 ? 'top' : 'under'); }
+  grab(pos, q, gripL, T) { this.hold = { qFrom: q.clone(), gFrom: gripL.clone(), t: 0, T, drop: 0 }; this.carry = 1; this.carryStyle = this.forceCarry || 'clamp'; }
   // hand targets for the right arm (reach for the board, carry it, hand it down)
   armTargets(track) {
     let w = 0; const S = this.seq;
     if (this.hold || this.mode === 'walk') { w = 1;
       // top: arm hangs nearly straight by the side, hand just outside the hip; board top rail at hand height -> hangs low beside the leg
       // under: elbow bent ~90°, hand at hip height further out, forearm outside the board
-      this.armIKt.copy(this.walkF.localToWorld(this.carryStyle === 'under' ? new V(-0.37, 0.86, 0.12) : new V(-0.25, 0.70, 0.02))); }
+      this.armIKt.copy(this.walkF.localToWorld(this.carryStyle === 'clamp' ? new V(-0.235, 0.715, 0.04) : this.carryStyle === 'under' ? new V(-0.37, 0.86, 0.12) : new V(-0.25, 0.70, 0.02))); }
     if (S && this.mode === 'off' && S.ph === 'pick' && !this.hold) {
       const tgt = S.pick === 'bend' ? new V(-0.117, DECK_Y, 0).applyQuaternion(S.bQ).add(S.bPos) : new V(0, DECK_Y, 0.44).applyQuaternion(this.board.quaternion).add(this.board.position);
       if (S.pick === 'kick') { const nose = new V(0, DECK_Y, 0.44).applyQuaternion(S.bQ.clone().multiply(new Q().setFromAxisAngle(new V(1, 0, 0), -80 * D))).add(S.bPos.clone().add(new V(0, 0, 0))); tgt.copy(nose); }
@@ -503,48 +504,94 @@ export class Rider {
   // NO CLIPPING while carrying: sample the skinned vertices of her right arm, hips, thighs, skirt; any that fall inside the
   // deck slab (or within 8 mm of it) push the board out along its deck normal, away from her body. The hand's own fingers
   // are allowed to wrap the rail. Smoothed so the board doesn't jitter.
+  // CLAMP HAND: palm turned up under the bottom rail, fingers pointing in toward her body so they hook round the rail
+  // (fingers can only curl one way: toward the palm). Solved geometrically from the hand's own finger bones, so it does
+  // not depend on the rig's bone axes: align finger direction, then roll about it so the palm faces up.
+  clampHand() {
+    const H = this.vrm.humanoid, hd = this.b.rightHand, P = (n) => H.getRawBoneNode(n).getWorldPosition(new V());
+    if (!H.getRawBoneNode('rightMiddleProximal')) return;
+    const w = (this.hold ? sstep(0, this.hold.T, this.hold.t) : 1) * (1 - (this.hold?.drop || 0));
+    if (w <= 0.01) return;
+    this.root.updateMatrixWorld(true);
+    const inward = new V(1, 0, 0).applyQuaternion(this.walkF.quaternion).normalize(), up = new V(0, 1, 0);
+    const fT = inward.clone().multiplyScalar(0.8).addScaledVector(up, 0.25).addScaledVector(new V(0, 0, 1).applyQuaternion(this.walkF.quaternion), 0.25).normalize();
+    const pT = up.clone().addScaledVector(inward, 0.35).normalize(); pT.addScaledVector(fT, -pT.dot(fT)).normalize();
+    for (let it = 0; it < 2; it++) {
+      const h = hd.getWorldPosition(new V()), fd = P('rightMiddleProximal').sub(h).normalize();
+      const q1 = new Q().setFromUnitVectors(fd, fd.clone().lerp(fT, w).normalize());
+      setWorldQuat(hd, q1.multiply(hd.getWorldQuaternion(new Q()))); hd.updateMatrixWorld(true);
+      const h2 = hd.getWorldPosition(new V()), fd2 = P('rightMiddleProximal').sub(h2).normalize(), side = P('rightIndexProximal').sub(P('rightLittleProximal'));
+      const palm = fd2.clone().cross(side).normalize().multiplyScalar(-1);   // right hand: palm = -(fingers × index→little... ) (T-pose check: -Y)
+      const want = palm.clone().lerp(pT, w); want.addScaledVector(fd2, -want.dot(fd2)).normalize(); palm.addScaledVector(fd2, -palm.dot(fd2)).normalize();
+      const q2 = new Q().setFromUnitVectors(palm, want); setWorldQuat(hd, q2.multiply(hd.getWorldQuaternion(new Q()))); hd.updateMatrixWorld(true); }
+  }
+  // BOARD vs BODY while carrying. The board is clamped BETWEEN her forearm (outside) and her hip/coat (inside):
+  //  - any forearm/upper-arm vertex inside the deck slab moves the board toward her body (the arm never goes through it);
+  //  - the board is then pressed ~12 mm into her side; the coat/skirt/skin under it is flattened onto the deck face by the
+  //    PRESS vertex shader (clothes visibly squashed by the board instead of the board vanishing into them).
   clearBoard() {
-    // forearm/upper-arm vertices that end up inside the deck slab push the board along its deck normal, AWAY from the side
-    // the arm is on (centroid of the arm relative to the deck mid-plane) — the board then rests against the forearm instead
-    // of through it. Fingers may wrap the rail. Body vertices are checked too: if the push would drive the deck into her
-    // hip/thigh, it stops there (and the arm target moves out a little next frame via armOut).
     const V3 = THREE.Vector3, vrm = this.vrm;
     if (!this._clr) { this._clr = []; vrm.scene.traverse((o) => { if (!o.isSkinnedMesh || !o.visible) return; const sk = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight, idx = [], arm = [];
         for (let i = 0; i < o.geometry.attributes.position.count; i += 3) { let bi = sk.getX(i), bw = sw.getX(i); for (const c of ['getY', 'getZ', 'getW']) if (sw[c](i) > bw) { bw = sw[c](i); bi = sk[c](i); }
-          const n = o.skeleton.bones[bi].name; if (/Hand|Index|Middle|Ring|Little|Thumb/.test(n)) continue;
-          if (/R_LowerArm|R_UpperArm/.test(n)) { idx.push(i); arm.push(1); } else if (/Hips|R_UpperLeg|R_LowerLeg|Skirt/.test(n)) { idx.push(i); arm.push(0); } }
-        if (idx.length) this._clr.push({ o, idx, arm }); }); }
-    const MID = DECK_Y - 0.0065, HALF = 0.0075 + 0.006;   // slab half-thickness + 6 mm skin margin
-    let off = this.clrOff || 0;
-    for (let it = 0; it < 3; it++) {
-      this.board.updateMatrixWorld(true); const inv = this.board.matrixWorld.clone().invert(), v = new V3(); let armC = 0, armN = 0, dIn = 0, side = 0, bodyHit = 0;
-      const pts = [];
-      for (const { o, idx, arm } of this._clr) for (let k = 0; k < idx.length; k++) { o.getVertexPosition(idx[k], v); v.applyMatrix4(o.matrixWorld).applyMatrix4(inv); pts.push([v.x, v.y, v.z, arm[k]]); if (arm[k]) { armC += v.y - MID; armN++; } }
-      side = armC >= 0 ? -1 : 1;   // board moves to the side opposite the arm
-      for (const [x, y, z, a] of pts) { const hw = 0.125 * Math.min(1, 1.6 * (1 - Math.abs(z) / 0.57) + 0.3); if (Math.abs(z) > 0.57 || Math.abs(x) > hw) continue;
-        const d = (y - MID) * -side;   // distance on the side the board moves toward (positive = in the way)
-        if (Math.abs(y - MID) < HALF) { if (a) dIn = Math.max(dIn, HALF + (y - MID) * side); else bodyHit = Math.max(bodyHit, HALF - Math.abs(y - MID)); } }
-      if (dIn <= 0.0005) break;
-      const step = Math.min(dIn, 0.03); off += step;
-      this.board.position.addScaledVector(new V3(0, side, 0).applyQuaternion(this.board.quaternion), step);
+          const n = o.skeleton.bones[bi].name; if (/Hand|Index|Middle|Ring|Little|Thumb|Hair|Face|Head|Neck/.test(n)) continue;
+          if (/R_LowerArm|R_UpperArm/.test(n)) { idx.push(i); arm.push(1); } else if (/Hips|R_UpperLeg|Skirt|Spine|Chest/.test(n)) { idx.push(i); arm.push(0); } }
+        if (idx.length) this._clr.push({ o, idx, arm }); }); this.setupPress(); }
+    const MID = DECK_Y - 0.0065, HALF = 0.0075, PRESS = 0.012;
+    let sb = 1;
+    for (let it = 0; it < 4; it++) {
+      this.board.updateMatrixWorld(true); const inv = this.board.matrixWorld.clone().invert(), v = new V3();
+      sb = this.b.hips.getWorldPosition(new V3()).applyMatrix4(inv).y > MID ? 1 : -1;   // which deck face looks at her
+      let armNeed = 0, gap = 1;
+      for (const { o, idx, arm } of this._clr) for (let k = 0; k < idx.length; k++) { o.getVertexPosition(idx[k], v); v.applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+        const hw = 0.125 * Math.min(1, 1.6 * (1 - Math.abs(v.z) / 0.57) + 0.3); if (Math.abs(v.z) > 0.57 || Math.abs(v.x) > hw) continue;
+        const d = (v.y - MID) * sb;   // + = toward her body
+        if (arm[k]) { if (d > -HALF - 0.004 && d < 0.05) armNeed = Math.max(armNeed, d + HALF + 0.004); }   // arm must stay beyond the OUTER face
+        else if (d > -0.06) gap = Math.min(gap, d - HALF); }
+      const move = clamp(Math.max(armNeed, gap < 1 ? gap + PRESS : 0), -0.03, 0.03);
+      if (Math.abs(move) < 0.0008) break;
+      this.board.position.addScaledVector(new V3(0, sb, 0).applyQuaternion(this.board.quaternion), move);
     }
-    this.clrOff = off * 0.0;   // recomputed every frame from the placed pose (no drift)
     this.board.updateMatrixWorld(true);
+    const U = this.pressU; if (U) { U.uBInv.value.copy(this.board.matrixWorld).invert(); U.uB.value.copy(this.board.matrixWorld); U.uSide.value = sb; U.uOn.value = 1; }
+  }
+  // PRESS shader: after skinning, coat/skirt/skin vertices that are on her side of the carried deck but would be inside it
+  // are moved onto the deck face (+2 mm). Arm vertices are excluded (aPress = 0) — they stay outside the board.
+  setupPress() {
+    if (this.pressU) return;
+    const U = this.pressU = { uBInv: { value: new THREE.Matrix4() }, uB: { value: new THREE.Matrix4() }, uSide: { value: 1 }, uOn: { value: 0 }, uMid: { value: DECK_Y - 0.0065 }, uHalf: { value: 0.0075 + 0.002 } };
+    this.vrm.scene.traverse((o) => {
+      if (!o.isSkinnedMesh || /Hair|Face/.test(o.name)) return;
+      const g = o.geometry, sk = g.attributes.skinIndex, sw = g.attributes.skinWeight, n = g.attributes.position.count, a = new Float32Array(n);
+      for (let i = 0; i < n; i++) { let armW = 0; for (const [c, cw] of [['getX', 'getX'], ['getY', 'getY'], ['getZ', 'getZ'], ['getW', 'getW']]) { const bn = o.skeleton.bones[sk[c](i)]?.name || ''; if (/Arm|Hand|Index|Middle|Ring|Little|Thumb|Shoulder/.test(bn)) armW += sw[cw](i); } a[i] = armW < 0.3 ? 1 : 0; }
+      g.setAttribute('aPress', new THREE.BufferAttribute(a, 1));
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (m.userData.press) continue; m.userData.press = true;
+        const prev = m.onBeforeCompile, key0 = m.customProgramCacheKey ? m.customProgramCacheKey.bind(m) : () => '';
+        m.onBeforeCompile = (sh, r) => { prev?.call(m, sh, r); Object.assign(sh.uniforms, U);
+          sh.vertexShader = 'attribute float aPress; uniform mat4 uBInv; uniform mat4 uB; uniform float uSide, uOn, uMid, uHalf;\n' + sh.vertexShader.replace('#include <project_vertex>', `
+          if (uOn > 0.5 && aPress > 0.5) { vec4 wp = modelMatrix * vec4(transformed, 1.0); vec3 bl = (uBInv * wp).xyz;
+            float hw = 0.13 * min(1.0, 1.6 * (1.0 - abs(bl.z) / 0.58) + 0.3);
+            if (abs(bl.z) < 0.58 && abs(bl.x) < hw) { float d = (bl.y - uMid) * uSide;
+              if (d < uHalf && d > -0.09) { bl.y = uMid + uSide * (uHalf + max(0.0, -d - uHalf) * 0.04); transformed = (inverse(modelMatrix) * (uB * vec4(bl, 1.0))).xyz; } } }
+          #include <project_vertex>`);   /* after skinning AND cloth flutter; cloth that flared past the outer face is tucked back to her side */
+          m.userData.pressOK = sh.vertexShader.includes('aPress > 0.5') && sh.vertexShader.includes('uBInv * wp'); };
+        m.customProgramCacheKey = () => key0() + '+press'; m.needsUpdate = true; }
+    });
   }
   placeHeldBoard() {
-    const H = this.hold; if (!H) return;
+    const H = this.hold; if (!H) { if (this.pressU) this.pressU.uOn.value = 0; return; }
     H.t += 1 / 30; const u = sstep(0, H.T, H.t), du = H.drop;
     const hand = this.b.rightHand.getWorldPosition(new V());
     // grip point in board-local coords. top: fingers over the UPPER rail (x=-rail after the 90° roll -> up), board hangs from the hand.
     // under: hand cups the LOWER rail from below, forearm runs along the outside of the deck.
-    const gTo = this.carryStyle === 'under' ? new V(0.117, DECK_Y - 0.03, 0.05) : new V(-0.117, DECK_Y - 0.004, 0);   // carry frame: board +x points UP. top: fingers hook over the UPPER rail, board hangs below the hand; under: hand cups the LOWER rail
+    const gTo = this.carryStyle === 'clamp' ? new V(0.128, DECK_Y - 0.022, -0.02) : this.carryStyle === 'under' ? new V(0.117, DECK_Y - 0.03, 0.05) : new V(-0.117, DECK_Y - 0.004, 0);   // clamp: palm cups the BOTTOM rail from below/outside, fingers hook round it toward her body   // carry frame: board +x points UP. top: fingers hook over the UPPER rail, board hangs below the hand; under: hand cups the LOWER rail
     const tw = H.twirl ? 2 * Math.PI * sstep(0.1, 0.9, H.t / (H.T + 0.5)) : 0;
-    const sw = this.mode === 'walk' ? 1 : 0.4, ph2 = this.phi * Math.PI * 2;
+    const sw = (this.mode === 'walk' ? 1 : 0.4) * (this.carryStyle === 'clamp' ? 0.35 : 1), ph2 = this.phi * Math.PI * 2;
     let q = H.qFrom.clone().slerp(this.carryQ().multiply(new Q().setFromAxisAngle(new V(0, 0, 1), Math.sin(ph2) * 0.05 * sw)).multiply(new Q().setFromAxisAngle(new V(0, 1, 0), Math.sin(ph2 - 0.7) * 0.07 * sw)).multiply(new Q().setFromAxisAngle(new V(1, 0, 0), Math.sin(2 * ph2 - 0.9) * 0.03 * sw)), u).multiply(new Q().setFromAxisAngle(new V(0, 0, 1), tw));
     let g = H.gFrom.clone().lerp(gTo, u);
     if (du > 0) { q = q.slerp(this.seq.bQ, du); }
     this.board.quaternion.copy(q); this.board.position.copy(hand).sub(g.clone().applyQuaternion(q));
-    if (du < 0.5 && u > 0.3) this.clearBoard();
+    if (du < 0.5 && u > 0.3) this.clearBoard(); else if (this.pressU) this.pressU.uOn.value = 0;
     if (du > 0.98) { this.board.position.copy(this.seq.bPos); this.board.quaternion.copy(this.seq.bQ); }
     this.board.updateMatrixWorld(true);
   }
@@ -726,10 +773,12 @@ export class Rider {
       const ua = b.rightUpperArm, la = b.rightLowerArm, hd = b.rightHand, sp = ua.getWorldPosition(new V());
       const tgt = sp.clone().lerp(this.armIKt, 1).sub(sp).multiplyScalar(1).add(sp);
       const cur = hd.getWorldPosition(new V()), goal = cur.lerp(tgt, this.armIKw);
-      const out = this.walkF.localToWorld(new V(-1, 0, this.carryStyle === 'under' && this.hold ? -1.2 : -0.6)).sub(this.walkF.position);
-      const pole = sp.clone().add(new V(0, -0.5, 0)).addScaledVector(out, this.carryStyle === 'under' && this.hold ? 0.9 : 0.4);
+      const cl = this.carryStyle === 'clamp' && this.hold, un = this.carryStyle === 'under' && this.hold;
+      const out = this.walkF.localToWorld(new V(-1, 0, un ? -1.2 : cl ? -0.35 : -0.6)).sub(this.walkF.position);
+      const pole = sp.clone().add(new V(0, -0.5, 0)).addScaledVector(out, un ? 0.9 : cl ? 0.7 : 0.4);
       twoBoneIK(ua, la, hd, goal, pole);
-      if (this.hold) { if (this.carryStyle === 'under') this.rot('rightHand', -0.5, 0.3, 0.6); else this.rot('rightHand', 0, 0, 0.15); }
+      if (this.hold) { if (this.carryStyle === 'under') this.rot('rightHand', -0.5, 0.3, 0.6); else if (this.carryStyle !== 'clamp') this.rot('rightHand', 0, 0, 0.15); }
+      if (this.hold && this.carryStyle === 'clamp') this.clampHand();
     }
     // fingers softly curled (graceful hands)
     for (const f of this.fing) {
