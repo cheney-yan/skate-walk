@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { loadGirl, setupHair, Skirt, Hat, OUTFIT, addWristGuards, flutterUpdate } from './girl.js';
 import { Rider, EMAX } from './rider.js';
+import { envU, roadMaterial, roadEdges, roadDecals, groundAttr, groundMaterial, buildTrees } from './env.js';
 
 const Q = new URLSearchParams(location.search);
 const REC = Q.has('rec');
 // ?route=bondi -> ride the real Bondi -> Bronte coastal walk (OSM path + AWS terrain + OSM building blocks)
 const RD = Q.get('route') ? await (await fetch('./data/route.json')).json() : null;
+// baked environment (tools/env.py): ground classes, tree/shrub instances, road symbols & stains
+const ENV = RD ? await (await fetch('./data/env.json')).json() : null;
 if (REC) document.body.classList.add('rec');
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -150,7 +153,9 @@ const pathTex = (() => {
   g.strokeStyle = 'rgba(120,112,100,.35)'; g.lineWidth = 2; for (let y = 0; y < 512; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
 })();
-{ const r = ribbon(-1.6, 1.6, 0.0, '#ffffff', 0.85); r.material.map = pathTex; r.material.needsUpdate = true; }
+{ const r = ribbon(-1.6, 1.6, 0.0, '#ffffff', 0.85);
+  if (ENV) { r.material = roadMaterial(3.2); const e = roadEdges(track, 1.6); scene.add(e); const d = roadDecals(track, ENV.decals); scene.add(d); window.__decals = ENV.decals.length; }
+  else { r.material.map = pathTex; r.material.needsUpdate = true; } }
 if (!RD) { ribbon(1.6, 40, -0.03, '#93bd6c'); ribbon(-1.6, -12, -0.03, '#e8d6a6'); }  // test-track verges      // sand on the right
 const seaU = { uT: { value: 0 }, uSun: { value: new THREE.Vector3(0.8, 0.25, 0.2).normalize() }, uSunCol: { value: new THREE.Color('#ffd8a8') }, uSky: { value: new THREE.Color('#bcd9ee') },
   uShore: { value: SHORE?.tex || null }, uSB: { value: new THREE.Vector4(SHORE?.x0 || 0, SHORE?.y0 || 0, SHORE?.w || 1, SHORE?.h || 1) }, uFog: { value: new THREE.Color('#d6ebf5') } };
@@ -248,22 +253,18 @@ if (RD) {
   for (let i = 0; i < track.pts.length; i += 4) { const q = track.pts[i]; const ci = Math.floor(q.x / 8), cj = Math.floor(q.z / 8);
     for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) { const kk = (ci + di) + ',' + (cj + dj); if (!PH.has(kk)) PH.set(kk, []); PH.get(kk).push(q); } }
   const geo = new THREE.PlaneGeometry((T.nx - 1) * T.step, (T.ny - 1) * T.step, T.nx - 1, T.ny - 1); geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 4);
   const cx = T.x0 + (T.nx - 1) * T.step / 2, cy = T.y0 + (T.ny - 1) * T.step / 2;
-  const sand = new THREE.Color('#efe2bf'), grass = new THREE.Color('#bfd9a3'), park = new THREE.Color('#a9cf8c'), rock = new THREE.Color('#cfc4b1'), c = new THREE.Color();
   for (let k = 0; k < pos.count; k++) {
     const x = pos.getX(k) + cx, y = -pos.getZ(k) + cy; let h = tH(x, y); if (h < 1.3) h = -2.5 + h;
     // the smoothed path runs slightly below crests of the raw terrain: cut the ground away under / beside the path so it never buries the board
     const cell = PH.get(Math.floor(x / 8) + ',' + Math.floor(-y / 8));
     if (cell) { let best = 1e9, py = 0; for (const q of cell) { const d = (q.x - x) ** 2 + (q.z + y) ** 2; if (d < best) { best = d; py = q.y; } } const d = Math.sqrt(best); if (d < 14) h = Math.min(h, py - 0.12 + Math.max(0, d - 2.2) * 0.45); }
     pos.setXYZ(k, x, h, -y);
-    const sl = Math.hypot(tH(x + 4, y) - tH(x - 4, y), tH(x, y + 4) - tH(x, y - 4)) / 8;
-    if (h < 3.5) c.copy(sand).lerp(grass, clamp((h - 2) / 1.5, 0, 1)); else c.copy(grass).lerp(park, clamp((h - 8) / 40, 0, 1));
-    if (sl > 0.55 && h > 0.5) c.lerp(rock, clamp((sl - 0.55) * 2, 0, 1));
-    col.set([c.r, c.g, c.b], k * 3);
+    col.set(groundAttr(ENV, T, x, y), k * 4);   // baked sand / rock / dirt / green weights
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
-  const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })); ground.receiveShadow = true; scene.add(ground);
+  geo.setAttribute('aCls', new THREE.BufferAttribute(col, 4)); geo.computeVertexNormals();
+  const ground = new THREE.Mesh(geo, groundMaterial()); ground.receiveShadow = true; scene.add(ground);
   const skirtG = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshStandardMaterial({ color: '#bfd3a0', roughness: 1 }));   // land beyond the data edge
   skirtG.rotation.x = -Math.PI / 2; skirtG.position.y = -0.5; scene.add(skirtG);
   // buildings: soft off-white blocks, slightly lighter roofs, the way Apple Maps draws a city before photo-3D loads
@@ -277,30 +278,8 @@ if (RD) {
     g.computeBoundingSphere(); BLD.push({ m, c: g.boundingSphere.center.clone().add(m.position), r: g.boundingSphere.radius });
   }
 }
-if (RD) {
-  const tH = track.terrainH, polys = RD.buildings.map((b) => b.poly);
-  const inPoly = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; return c; };
-  const spots = []; let seed = 3; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  for (let s = 0; s < track.total; s += 3) {
-    const q = track.at(s), l = new THREE.Vector3(Math.cos(q.yaw), 0, -Math.sin(q.yaw));
-    for (const sd of [-1, 1]) {
-      if (rnd() < 0.55) continue;
-      const off = sd * (7 + rnd() * 24), X = q.p.x + l.x * off, Z = q.p.z + l.z * off, x = X, y = -Z, h = tH(x, y);
-      if (h < 4) continue;                                    // sand / sea
-      const sl = Math.hypot(tH(x + 3, y) - tH(x - 3, y), tH(x, y + 3) - tH(x, y - 3)) / 6; if (sl > 0.5) continue;  // cliffs
-      let onPath = false; for (let k = -12; k <= 12 && !onPath; k += 2) { const r = track.at(s + k).p; if ((r.x - X) ** 2 + (r.z - Z) ** 2 < 36) onPath = true; } if (onPath) continue;
-      if (polys.some((P) => inPoly(x, y, P))) continue;
-      spots.push([X, h - 0.2, Z, 0.7 + rnd() * 0.7, rnd() * 6]);
-    }
-  }
-  const trunkG = new THREE.CylinderGeometry(0.12, 0.18, 2.2, 6); trunkG.translate(0, 1.1, 0);
-  const crownG = new THREE.IcosahedronGeometry(1.3, 1); crownG.translate(0, 3.0, 0);
-  const trunks = new THREE.InstancedMesh(trunkG, new THREE.MeshStandardMaterial({ color: '#9a7a5a', roughness: 1 }), spots.length);
-  const crowns = new THREE.InstancedMesh(crownG, new THREE.MeshStandardMaterial({ color: '#8fbf72', roughness: 1, flatShading: true }), spots.length);
-  const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), cc = new THREE.Color();
-  spots.forEach(([x, y, z, s, r], i) => { qq.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r); m4.compose(new THREE.Vector3(x, y, z), qq, new THREE.Vector3(s, s * (0.9 + (r % 1) * 0.3), s)); trunks.setMatrixAt(i, m4); crowns.setMatrixAt(i, m4); crowns.setColorAt(i, cc.set('#8fbf72').offsetHSL((r % 1) * 0.04 - 0.02, 0, (r % 0.5) * 0.12 - 0.03)); });
-  trunks.castShadow = crowns.castShadow = true; scene.add(trunks, crowns);
-  window.__trees = spots.length;
+if (RD) {   // baked Bondi trees: Norfolk Island pines, coastal gums, banksias, heath shrubs (instanced, tiled)
+  window.__trees = buildTrees(scene, ENV);
 }
 // potholes (dark, slightly sunk) + a little cone so the eye reads them
 for (const h of HOLES) {
@@ -524,7 +503,7 @@ function sunFollow(base) {
 // ---------------- loop ----------------
 let slow = 1;
 function step(dt) {
-  simT += dt; seaU.uT.value = simT;
+  simT += dt; seaU.uT.value = simT; envU.uT.value = simT;
   // events by position
   if (lookIdx < LOOKS.length && rider.s > LOOKS[lookIdx]) { rider.nextLook = 0; lookIdx++; }
   windNow.lerp(LAB_WIND.v || windTarget(rider.s), 1 - Math.exp(-dt * 1.2));   // LAB_WIND.v: test override (world m/s)
