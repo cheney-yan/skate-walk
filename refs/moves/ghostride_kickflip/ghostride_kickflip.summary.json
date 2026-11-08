@@ -1,0 +1,59 @@
+{
+ "schema_version": "1.0",
+ "move": "ghostride_kickflip",
+ "description": "ghostride kickflip：站板旁一踢板翻过来再踩上",
+ "n": 1,
+ "n_fullbody": 1,
+ "scores": {
+  "4": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 137.6,
+  "knee_typical": 75.2,
+  "torso_lean_peak": 33.1,
+  "torso_lean_typical": 13.8,
+  "arm_abd_peak": 138.6,
+  "wrist_span_peak": 1.1,
+  "ankle_dist_peak": 0.6,
+  "dur": 2.4
+ },
+ "best": "tricks_peterpan_1",
+ "samples": [
+  {
+   "move": "ghostride_kickflip",
+   "id": "tricks_peterpan_1",
+   "user_score": 4,
+   "label": "ghostride kickflip 站板旁一踢板翻过来再踩上",
+   "clip": "tricks_peterpan",
+   "src_time": [
+    18.02,
+    20.42
+   ],
+   "dur": 2.4,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "ghostride_kickflip/tricks_peterpan_1.skeleton.json",
+   "clip_mp4": "ghostride_kickflip/tricks_peterpan_1.mp4",
+   "stats_brief": {
+    "knee": [
+     30.8,
+     75.2,
+     137.6
+    ],
+    "torso": [
+     8.4,
+     13.8,
+     33.1
+    ],
+    "arm": [
+     51.2,
+     102.8,
+     138.6
+    ]
+   }
+  }
+ ]
+}

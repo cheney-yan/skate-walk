@@ -1,0 +1,120 @@
+{
+ "move": "cross_step",
+ "schema": "data/moves v1 (style of throwdown.json): every number = {v, basis}; basis = sample id + skeleton field + frame/time",
+ "derived_by": "tools/derive_moves.py from refs/moves (package moves-2026-11-08)",
+ "conventions": "ref angles: knee 0 = straight, torso_lean 0 = upright, arm_abd 0 = arm hanging, elbow 0 = straight (MediaPipe skeleton). game.* knee = interior angle (180 = straight) as in rider.js. t = clip time (0 = user segment start).",
+ "best_sample": {
+  "id": "pro_ARCk35WWnbk_38",
+  "user_score": 5,
+  "clip_title": "Susu Tran @ Pier 76",
+  "source": "https://www.youtube.com/watch?v=ARCk35WWnbk",
+  "src_time": [
+   108.1,
+   111.0
+  ],
+  "view": {
+   "camera": "斜侧机位 (约45°)",
+   "travel": "远离镜头（方向沿用上一段，同一镜头里板不会掉头）",
+   "stance": "右脚在前 (goofy)",
+   "camera_moving": "镜头在动（跟拍/换角度）",
+   "board_deg": 52
+  },
+  "replay": "lab.html?ref=cross_step/pro_ARCk35WWnbk_38"
+ },
+ "other_sources": [],
+ "segment_notes": "2.9 s user segment = ~4 cross-steps walking up the board (vision on the mp4: crossings at ~0.5-0.7, 1.3-1.5, 1.9-2.1 s, feet end near the nose). t 2.17 is a non-ok frame and f69 a detection glitch (knee_R 129.5, ankle_dy 0.8) — excluded; 2.2-2.5 s torso 40 deg + right arm 90 deg = a reach/lean at the end, not part of the step cycle. World-coordinate ankle order along the hip line is too noisy at 45 deg to count crossings (only 3 sign changes); step timing comes from the knee-flexion peaks of the stepping leg.",
+ "stance": {
+  "v": "R (goofy)",
+  "basis": "pro_ARCk35WWnbk_38 view.stance; refskel stance() falls back to the head method (travel = away from camera) — head method over t 0..0.5 votes L 11 / R 3, so the skeleton does NOT confirm goofy: treat front foot as unknown, mirror freely"
+ },
+ "ref": {
+  "step_period_s": {
+   "v": 0.47,
+   "basis": "pro_ARCk35WWnbk_38 ang.knee_L/knee_R local peaks >24 deg in t 0..2.1, median spacing; peaks at t [0.77, 0.83, 1.2, 1.23, 1.8]"
+  },
+  "steps_in_segment": {
+   "v": 5,
+   "basis": "pro_ARCk35WWnbk_38 same peaks (L 2, R 3)"
+  },
+  "knee_step_peak_deg": {
+   "v": 28.1,
+   "basis": "pro_ARCk35WWnbk_38 median of those knee peaks (stepping leg lifts)"
+  },
+  "knee_support_deg": {
+   "v": 14.8,
+   "basis": "pro_ARCk35WWnbk_38 ang.knee_L median (support / between steps) over t 0.0..2.1"
+  },
+  "knee_other_deg": {
+   "v": 23.0,
+   "basis": "pro_ARCk35WWnbk_38 ang.knee_R median over t 0.0..2.1"
+  },
+  "torso_lean_deg": {
+   "v": 16.3,
+   "basis": "pro_ARCk35WWnbk_38 ang.torso_lean median over t 0.0..2.1"
+  },
+  "torso_lean_peak_deg": {
+   "v": 34.1,
+   "basis": "pro_ARCk35WWnbk_38 ang.torso_lean peak within t<=2.1 f32 t0.97 (smoothed 34.1, raw 34.9, half-height 0.8..1.0)"
+  },
+  "arm_abd_lead_peak_deg": {
+   "v": 60.8,
+   "basis": "pro_ARCk35WWnbk_38 ang.arm_abd_L main peak (reaching arm) f25 t0.73 (smoothed 60.8, raw 63.9, half-height 0.7..0.97)"
+  },
+  "arm_abd_L_deg": {
+   "v": 34.9,
+   "basis": "pro_ARCk35WWnbk_38 ang.arm_abd_L median over t 0.0..2.1"
+  },
+  "arm_abd_R_deg": {
+   "v": 22.6,
+   "basis": "pro_ARCk35WWnbk_38 ang.arm_abd_R median over t 0.0..2.1"
+  },
+  "elbow_deg": {
+   "v": 35.7,
+   "basis": "pro_ARCk35WWnbk_38 ang.elbow_L+elbow_R mean of medians over t 0.0..2.1"
+  },
+  "wrist_span_m": {
+   "v": 0.4,
+   "basis": "pro_ARCk35WWnbk_38 ang.wrist_span median over t 0.0..2.1"
+  },
+  "ankle_dist_m": {
+   "v": 0.2,
+   "basis": "pro_ARCk35WWnbk_38 ang.ankle_dist median (feet close: 0.0-0.3 m) over t 0.0..2.1"
+  }
+ },
+ "game": {
+  "_": "proposed rider.js params for the dance cross-step (DANCE_K timing / dance arm targets). Not wired yet.",
+  "stepT": {
+   "v": 0.47,
+   "basis": "ref.step_period_s"
+  },
+  "kneeSupport": {
+   "v": 165,
+   "basis": "180 - ref.knee_support_deg (interior)"
+  },
+  "kneeStepLift": {
+   "v": 152,
+   "basis": "180 - ref.knee_step_peak_deg: stepping leg at its highest"
+  },
+  "torsoLean": {
+   "v": 16.3,
+   "basis": "ref.torso_lean_deg (forward lean while walking the board)"
+  },
+  "armLeadAbd": {
+   "v": 60.8,
+   "basis": "ref.arm_abd_lead_peak_deg capped at 70 (Cheney: outside arm about shoulder height, bent elbow, never overhead)",
+   "style_override": "cap 70"
+  },
+  "armTrailAbd": {
+   "v": 22.6,
+   "basis": "ref.arm_abd_R_deg (trailing arm low)"
+  },
+  "elbow": {
+   "v": 35.7,
+   "basis": "ref.elbow_deg (soft elbows)"
+  },
+  "footGap": {
+   "v": 0.2,
+   "basis": "ref.ankle_dist_m (feet stay close; deck walking)"
+  }
+ }
+}

@@ -1,0 +1,126 @@
+{
+ "move": "push",
+ "schema": "data/moves v1 (style of throwdown.json): every number = {v, basis}; basis = sample id + skeleton field + frame/time",
+ "derived_by": "tools/derive_moves.py from refs/moves (package moves-2026-11-08)",
+ "conventions": "ref angles: knee 0 = straight, torso_lean 0 = upright, arm_abd 0 = arm hanging, elbow 0 = straight (MediaPipe skeleton). game.* knee = interior angle (180 = straight) as in rider.js. t = clip time (0 = user segment start).",
+ "best_sample": {
+  "id": "pro_ARCk35WWnbk_20",
+  "user_score": 5,
+  "clip_title": "Susu Tran @ Pier 76",
+  "source": "https://www.youtube.com/watch?v=ARCk35WWnbk",
+  "src_time": [
+   55.9,
+   57.7
+  ],
+  "view": {
+   "camera": "侧面机位",
+   "travel": "向画面左",
+   "stance": "左脚在前 (regular)",
+   "camera_moving": "镜头在动（跟拍/换角度）",
+   "board_deg": 0
+  },
+  "replay": "lab.html?ref=push/pro_ARCk35WWnbk_20"
+ },
+ "other_sources": [],
+ "segment_notes": "1.8 s user segment = 2 push strokes with the RIGHT (rear) foot, left foot on the board (vision on the mp4 + skeleton: right ankle reaches forward of the hip and drops to ground level ~0.43-0.5 s, moves back relative to the hip until ~0.77 s (world x -0.11 -> +0.58 m, travel = image left), lifts, swings forward again, second contact ~1.5-1.77 s). Support (left) knee bend and torso lean peak inside each contact. Recovery swing is HIGH: right ankle 0.30 m above the left at f4 with knee_R ~90 deg.",
+ "stance": {
+  "v": "L (regular), pushes with R",
+  "basis": "pro_ARCk35WWnbk_20 refskel stance(): travel method, 100% agree with view.stance; vision confirms right foot pushes"
+ },
+ "ref": {
+  "cycle_s": {
+   "v": 1.07,
+   "basis": "pro_ARCk35WWnbk_20 ang.knee_L main peak f21 t0.6 -> next support-knee peak f53 t1.67 (one stroke per cycle)"
+  },
+  "contact_t0": {
+   "v": 0.47,
+   "basis": "pro_ARCk35WWnbk_20 world right ankle y reaches ground level (0.69-0.72 m below hip, = left/board ankle +-0.05) at f16-f18 t 0.43-0.5"
+  },
+  "contact_t1": {
+   "v": 0.77,
+   "basis": "pro_ARCk35WWnbk_20 world right ankle x most rearward +0.58 at f26 t 0.77, then lifts (f30 y 0.48)"
+  },
+  "support_knee_peak_deg": {
+   "v": 57.8,
+   "basis": "pro_ARCk35WWnbk_20 ang.knee_L main peak f21 t0.6 (smoothed 57.8, raw 63.3, half-height 0.57..0.7)"
+  },
+  "support_knee_glide_deg": {
+   "v": 14.3,
+   "basis": "pro_ARCk35WWnbk_20 ang.knee_L median between strokes over t 1.0..1.4"
+  },
+  "torso_lean_peak_deg": {
+   "v": 29.0,
+   "basis": "pro_ARCk35WWnbk_20 ang.torso_lean main peak f20 t0.57 (smoothed 29.0, raw 29.4, half-height 0.5..0.7)"
+  },
+  "torso_lean_glide_deg": {
+   "v": 10.4,
+   "basis": "pro_ARCk35WWnbk_20 ang.torso_lean median between strokes over t 1.0..1.4"
+  },
+  "recovery_knee_peak_deg": {
+   "v": 79.1,
+   "basis": "pro_ARCk35WWnbk_20 ang.knee_R peak t<=0.4 (push leg recovery) f5 t0.07 (smoothed 79.1, raw 89.3, half-height -0.03..0.27)"
+  },
+  "recovery_foot_lift_m": {
+   "v": 0.3,
+   "basis": "pro_ARCk35WWnbk_20 world left_ankle.y - right_ankle.y at f4 t0.033 (+y down)"
+  },
+  "push_reach_fwd_m": {
+   "v": 0.11,
+   "basis": "pro_ARCk35WWnbk_20 world right_ankle.x at f16 t0.433 (plant point ahead of the hip; travel = -x)"
+  },
+  "push_reach_back_m": {
+   "v": 0.58,
+   "basis": "pro_ARCk35WWnbk_20 world right_ankle.x at f26 t0.766 (toe-off behind the hip)"
+  },
+  "arm_abd_deg": {
+   "v": 56.1,
+   "basis": "pro_ARCk35WWnbk_20 ang.arm_abd_max median during contact over t 0.4..0.8"
+  },
+  "elbow_deg": {
+   "v": 74.6,
+   "basis": "pro_ARCk35WWnbk_20 ang.elbow_L median during contact over t 0.4..0.8"
+  }
+ },
+ "game": {
+  "_": "proposed values for rider.js startPush/pushAccel/stateWeights (push cycle T, contact window c0/c1, support knee, lean). Not wired yet.",
+  "T": {
+   "v": 1.07,
+   "basis": "ref.cycle_s (rider.js now: 1.3 flat / 1.0 uphill)"
+  },
+  "c0": {
+   "v": 0.4,
+   "basis": "ref.contact_t0 - recovery knee peak t0.07 (cycle start = push foot at its highest; rider.js now: c0 = 0.3*T)"
+  },
+  "contactS": {
+   "v": 0.3,
+   "basis": "ref.contact_t1 - ref.contact_t0 (rider.js now: clamp(0.6/v, 0.22, 0.45))"
+  },
+  "kneeSupport": {
+   "v": 135,
+   "basis": "180 - ref.support_knee_peak_deg, capped at 45 deg flexion (Cheney: soft knee, long spine, no hunched dig; ref 58 deg)",
+   "style_override": "cap 45"
+  },
+  "kneeGlide": {
+   "v": 166,
+   "basis": "180 - ref.support_knee_glide_deg"
+  },
+  "lean": {
+   "v": 18,
+   "basis": "ref.torso_lean_peak_deg capped at 18 (long spine; ref 29)",
+   "style_override": "cap 18"
+  },
+  "reachFwd": {
+   "v": 0.11,
+   "basis": "ref.push_reach_fwd_m"
+  },
+  "reachBack": {
+   "v": 0.58,
+   "basis": "ref.push_reach_back_m"
+  },
+  "recoveryLift": {
+   "v": 0.08,
+   "basis": "ref.recovery_foot_lift_m = 0.30 m, capped at 0.08 (rider.js rule: recovery swing low ~5 cm; the reference skater swings high — Cheney to decide)",
+   "style_override": "cap 0.08"
+  }
+ }
+}

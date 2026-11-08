@@ -1,0 +1,277 @@
+{
+ "schema_version": "1.0",
+ "move": "manual",
+ "description": "翘板 manual：一组轮子离地滑行",
+ "n": 7,
+ "n_fullbody": 7,
+ "scores": {
+  "5": 2,
+  "4": 3,
+  "3": 2
+ },
+ "pooled_median_of": {
+  "knee_peak": 93.6,
+  "knee_typical": 31.6,
+  "torso_lean_peak": 41.4,
+  "torso_lean_typical": 16.2,
+  "arm_abd_peak": 121.9,
+  "wrist_span_peak": 1.0,
+  "ankle_dist_peak": 0.7,
+  "dur": 2.7
+ },
+ "best": "short_tbVYcMg6D38_1",
+ "samples": [
+  {
+   "move": "manual",
+   "id": "short_tbVYcMg6D38_1",
+   "user_score": 5,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "short_tbVYcMg6D38",
+   "src_time": [
+    0.5,
+    3.2
+   ],
+   "dur": 2.7,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/short_tbVYcMg6D38_1.skeleton.json",
+   "clip_mp4": "manual/short_tbVYcMg6D38_1.mp4",
+   "stats_brief": {
+    "knee": [
+     9.7,
+     25.7,
+     114.5
+    ],
+    "torso": [
+     1.1,
+     11.6,
+     26.7
+    ],
+    "arm": [
+     17.2,
+     56.0,
+     108.6
+    ]
+   }
+  },
+  {
+   "move": "manual",
+   "id": "pro_y_kGbnpYFaA_3",
+   "user_score": 5,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    32.63,
+    36.44
+   ],
+   "dur": 3.81,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.93,
+   "flags": [],
+   "skeleton": "manual/pro_y_kGbnpYFaA_3.skeleton.json",
+   "clip_mp4": "manual/pro_y_kGbnpYFaA_3.mp4",
+   "stats_brief": {
+    "knee": [
+     18.9,
+     32.6,
+     143.5
+    ],
+    "torso": [
+     3.6,
+     21.2,
+     130.1
+    ],
+    "arm": [
+     14.2,
+     56.4,
+     127.6
+    ]
+   }
+  },
+  {
+   "move": "manual",
+   "id": "pro_1MQl0CZNdls_4",
+   "user_score": 4,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_1MQl0CZNdls",
+   "src_time": [
+    10.2,
+    13.8
+   ],
+   "dur": 3.6,
+   "camera": "正对镜头 (前/后机位)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/pro_1MQl0CZNdls_4.skeleton.json",
+   "clip_mp4": "manual/pro_1MQl0CZNdls_4.mp4",
+   "stats_brief": {
+    "knee": [
+     9.8,
+     51.1,
+     93.6
+    ],
+    "torso": [
+     7.0,
+     15.0,
+     31.0
+    ],
+    "arm": [
+     22.2,
+     64.8,
+     112.6
+    ]
+   }
+  },
+  {
+   "move": "manual",
+   "id": "pro_tQNzYSUsJdk_12",
+   "user_score": 4,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    101.2,
+    104.7
+   ],
+   "dur": 3.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "manual/pro_tQNzYSUsJdk_12.skeleton.json",
+   "clip_mp4": "manual/pro_tQNzYSUsJdk_12.mp4",
+   "stats_brief": {
+    "knee": [
+     7.3,
+     44.1,
+     119.2
+    ],
+    "torso": [
+     1.7,
+     10.1,
+     159.3
+    ],
+    "arm": [
+     27.5,
+     65.0,
+     175.0
+    ]
+   }
+  },
+  {
+   "move": "manual",
+   "id": "pro_y_kGbnpYFaA_4",
+   "user_score": 4,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    35.94,
+    37.74
+   ],
+   "dur": 1.8,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.58,
+   "flags": [],
+   "skeleton": "manual/pro_y_kGbnpYFaA_4.skeleton.json",
+   "clip_mp4": "manual/pro_y_kGbnpYFaA_4.mp4",
+   "stats_brief": {
+    "knee": [
+     16.0,
+     31.4,
+     86.6
+    ],
+    "torso": [
+     6.7,
+     16.2,
+     41.4
+    ],
+    "arm": [
+     18.0,
+     67.7,
+     89.4
+    ]
+   }
+  },
+  {
+   "move": "manual",
+   "id": "pro_EiPZ7dODY0E_28",
+   "user_score": 3,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    106.53,
+    107.94
+   ],
+   "dur": 1.41,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/pro_EiPZ7dODY0E_28.skeleton.json",
+   "clip_mp4": "manual/pro_EiPZ7dODY0E_28.mp4",
+   "stats_brief": {
+    "knee": [
+     18.2,
+     31.6,
+     82.1
+    ],
+    "torso": [
+     5.2,
+     31.3,
+     44.0
+    ],
+    "arm": [
+     18.1,
+     46.1,
+     138.2
+    ]
+   }
+  },
+  {
+   "move": "manual",
+   "id": "pro_EiPZ7dODY0E_27",
+   "user_score": 3,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    105.11,
+    105.52
+   ],
+   "dur": 0.41,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/pro_EiPZ7dODY0E_27.skeleton.json",
+   "clip_mp4": "manual/pro_EiPZ7dODY0E_27.mp4",
+   "stats_brief": {
+    "knee": [
+     21.8,
+     26.9,
+     55.4
+    ],
+    "torso": [
+     10.3,
+     20.3,
+     30.8
+    ],
+    "arm": [
+     75.9,
+     96.5,
+     121.9
+    ]
+   }
+  }
+ ]
+}

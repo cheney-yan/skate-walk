@@ -1,0 +1,709 @@
+{
+ "schema_version": "1.0",
+ "move": "pirouette",
+ "description": "pirouette 原地转体：人在板上转一圈，板方向不变",
+ "n": 19,
+ "n_fullbody": 19,
+ "scores": {
+  "5": 1,
+  "4": 13,
+  "3": 5
+ },
+ "pooled_median_of": {
+  "knee_peak": 83.0,
+  "knee_typical": 26.3,
+  "torso_lean_peak": 34.1,
+  "torso_lean_typical": 9.8,
+  "arm_abd_peak": 93.6,
+  "wrist_span_peak": 1.0,
+  "ankle_dist_peak": 0.6,
+  "dur": 2.3
+ },
+ "best": "pro_ARCk35WWnbk_36",
+ "samples": [
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_36",
+   "user_score": 5,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    101.2,
+    103.2
+   ],
+   "dur": 2.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_36.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_36.mp4",
+   "stats_brief": {
+    "knee": [
+     6.2,
+     30.4,
+     125.7
+    ],
+    "torso": [
+     4.5,
+     9.7,
+     23.5
+    ],
+    "arm": [
+     19.0,
+     41.0,
+     86.6
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "hyojoo_6",
+   "user_score": 4,
+   "label": "pirouette/转体",
+   "clip": "hyojoo",
+   "src_time": [
+    17.2,
+    19.3
+   ],
+   "dur": 2.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/hyojoo_6.skeleton.json",
+   "clip_mp4": "pirouette/hyojoo_6.mp4",
+   "stats_brief": {
+    "knee": [
+     8.5,
+     24.1,
+     73.2
+    ],
+    "torso": [
+     2.9,
+     13.2,
+     27.0
+    ],
+    "arm": [
+     16.3,
+     51.5,
+     81.0
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_1MQl0CZNdls_3",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_1MQl0CZNdls",
+   "src_time": [
+    5.8,
+    8.4
+   ],
+   "dur": 2.6,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_1MQl0CZNdls_3.skeleton.json",
+   "clip_mp4": "pirouette/pro_1MQl0CZNdls_3.mp4",
+   "stats_brief": {
+    "knee": [
+     6.6,
+     19.4,
+     61.1
+    ],
+    "torso": [
+     4.0,
+     9.2,
+     22.4
+    ],
+    "arm": [
+     24.8,
+     54.0,
+     105.3
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_31",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    83.0,
+    86.5
+   ],
+   "dur": 3.5,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_31.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_31.mp4",
+   "stats_brief": {
+    "knee": [
+     6.6,
+     28.4,
+     91.3
+    ],
+    "torso": [
+     2.2,
+     9.8,
+     37.9
+    ],
+    "arm": [
+     10.9,
+     32.9,
+     64.4
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_29",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    79.4,
+    80.3
+   ],
+   "dur": 0.9,
+   "camera": "正对镜头 (前/后机位)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_29.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_29.mp4",
+   "stats_brief": {
+    "knee": [
+     7.6,
+     28.0,
+     106.6
+    ],
+    "torso": [
+     1.1,
+     10.2,
+     19.1
+    ],
+    "arm": [
+     20.6,
+     53.5,
+     93.6
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_40",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    114.2,
+    115.0
+   ],
+   "dur": 0.8,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_40.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_40.mp4",
+   "stats_brief": {
+    "knee": [
+     7.0,
+     21.6,
+     103.5
+    ],
+    "torso": [
+     0.4,
+     4.6,
+     12.6
+    ],
+    "arm": [
+     15.4,
+     23.8,
+     37.8
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_XyKLATi_aHo_5",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    11.0,
+    12.7
+   ],
+   "dur": 1.7,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_XyKLATi_aHo_5.skeleton.json",
+   "clip_mp4": "pirouette/pro_XyKLATi_aHo_5.mp4",
+   "stats_brief": {
+    "knee": [
+     11.6,
+     24.6,
+     60.0
+    ],
+    "torso": [
+     1.5,
+     8.9,
+     20.1
+    ],
+    "arm": [
+     9.0,
+     33.4,
+     91.2
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_3",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    5.9,
+    8.7
+   ],
+   "dur": 2.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_3.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_3.mp4",
+   "stats_brief": {
+    "knee": [
+     5.7,
+     26.3,
+     111.4
+    ],
+    "torso": [
+     0.7,
+     9.9,
+     99.6
+    ],
+    "arm": [
+     12.0,
+     48.4,
+     132.4
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_11",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    26.9,
+    30.9
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_11.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_11.mp4",
+   "stats_brief": {
+    "knee": [
+     13.9,
+     41.6,
+     88.9
+    ],
+    "torso": [
+     1.1,
+     10.0,
+     36.3
+    ],
+    "arm": [
+     13.7,
+     43.7,
+     168.7
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_y_kGbnpYFaA_17",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    90.89,
+    93.29
+   ],
+   "dur": 2.4,
+   "camera": "板沿没识别出来",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "pirouette/pro_y_kGbnpYFaA_17.skeleton.json",
+   "clip_mp4": "pirouette/pro_y_kGbnpYFaA_17.mp4",
+   "stats_brief": {
+    "knee": [
+     11.1,
+     30.9,
+     59.4
+    ],
+    "torso": [
+     1.3,
+     14.9,
+     33.1
+    ],
+    "arm": [
+     33.4,
+     67.1,
+     167.5
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_4",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    8.7,
+    11.1
+   ],
+   "dur": 2.4,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_4.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_4.mp4",
+   "stats_brief": {
+    "knee": [
+     8.8,
+     32.5,
+     70.1
+    ],
+    "torso": [
+     0.2,
+     7.8,
+     49.3
+    ],
+    "arm": [
+     23.4,
+     41.5,
+     83.1
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_35",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    95.9,
+    98.2
+   ],
+   "dur": 2.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_35.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_35.mp4",
+   "stats_brief": {
+    "knee": [
+     7.3,
+     26.7,
+     76.6
+    ],
+    "torso": [
+     2.6,
+     9.1,
+     37.1
+    ],
+    "arm": [
+     16.7,
+     40.7,
+     80.4
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_16",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    43.1,
+    45.3
+   ],
+   "dur": 2.2,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.92,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_16.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_16.mp4",
+   "stats_brief": {
+    "knee": [
+     6.5,
+     30.6,
+     106.6
+    ],
+    "torso": [
+     0.2,
+     10.2,
+     142.8
+    ],
+    "arm": [
+     24.1,
+     52.6,
+     141.0
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_dvomTqNI12o_2",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_dvomTqNI12o",
+   "src_time": [
+    4.5,
+    8.5
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "pirouette/pro_dvomTqNI12o_2.skeleton.json",
+   "clip_mp4": "pirouette/pro_dvomTqNI12o_2.mp4",
+   "stats_brief": {
+    "knee": [
+     5.7,
+     23.4,
+     105.6
+    ],
+    "torso": [
+     1.6,
+     20.1,
+     53.6
+    ],
+    "arm": [
+     7.5,
+     86.9,
+     136.7
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "D80MTOxjYqA_3",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "D80MTOxjYqA",
+   "src_time": [
+    5.8,
+    8.1
+   ],
+   "dur": 2.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/D80MTOxjYqA_3.skeleton.json",
+   "clip_mp4": "pirouette/D80MTOxjYqA_3.mp4",
+   "stats_brief": {
+    "knee": [
+     6.1,
+     24.6,
+     83.0
+    ],
+    "torso": [
+     3.8,
+     13.1,
+     34.1
+    ],
+    "arm": [
+     12.8,
+     47.6,
+     83.6
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_17",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    45.6,
+    47.8
+   ],
+   "dur": 2.2,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_17.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_17.mp4",
+   "stats_brief": {
+    "knee": [
+     3.0,
+     21.5,
+     57.8
+    ],
+    "torso": [
+     1.6,
+     9.4,
+     31.2
+    ],
+    "arm": [
+     24.0,
+     45.0,
+     101.8
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_19",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    52.6,
+    55.9
+   ],
+   "dur": 3.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_19.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_19.mp4",
+   "stats_brief": {
+    "knee": [
+     6.7,
+     36.0,
+     91.7
+    ],
+    "torso": [
+     0.8,
+     14.2,
+     38.7
+    ],
+    "arm": [
+     26.1,
+     59.3,
+     177.1
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_28",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    74.8,
+    77.3
+   ],
+   "dur": 2.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_28.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_28.mp4",
+   "stats_brief": {
+    "knee": [
+     5.2,
+     24.5,
+     58.8
+    ],
+    "torso": [
+     1.1,
+     8.2,
+     27.6
+    ],
+    "arm": [
+     21.4,
+     54.0,
+     82.8
+    ]
+   }
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_FJCB0OBj7FQ_1",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_FJCB0OBj7FQ",
+   "src_time": [
+    36.96,
+    38.72
+   ],
+   "dur": 1.76,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.92,
+   "flags": [],
+   "skeleton": "pirouette/pro_FJCB0OBj7FQ_1.skeleton.json",
+   "clip_mp4": "pirouette/pro_FJCB0OBj7FQ_1.mp4",
+   "stats_brief": {
+    "knee": [
+     6.0,
+     19.3,
+     50.8
+    ],
+    "torso": [
+     0.9,
+     7.0,
+     59.9
+    ],
+    "arm": [
+     14.2,
+     60.8,
+     142.7
+    ]
+   }
+  }
+ ]
+}

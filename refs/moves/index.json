@@ -1,0 +1,2273 @@
+{
+ "schema_version": "1.0",
+ "contract_version": "1.0",
+ "package": "moves-2026-11-08",
+ "generator": "make_handoff.py@skate-walk-test",
+ "generated": "2026-11-08",
+ "min_score": 3,
+ "n": 106,
+ "moves": {
+  "cross_step": {
+   "n": 23,
+   "description": "交叉步走板：人在板上前后交叉迈步，不下板",
+   "summary": "cross_step/cross_step.summary.json"
+  },
+  "arm_styling": {
+   "n": 22,
+   "description": "手臂造型：滑行中手臂张开/举高/画圈，身体其余不变",
+   "summary": "arm_styling/arm_styling.summary.json"
+  },
+  "pirouette": {
+   "n": 19,
+   "description": "pirouette 原地转体：人在板上转一圈，板方向不变",
+   "summary": "pirouette/pirouette.summary.json"
+  },
+  "push": {
+   "n": 10,
+   "description": "蹬地：一脚站板，另一脚蹬地加速",
+   "summary": "push/push.summary.json"
+  },
+  "manual": {
+   "n": 7,
+   "description": "翘板 manual：一组轮子离地滑行",
+   "summary": "manual/manual.summary.json"
+  },
+  "tiger_claw": {
+   "n": 5,
+   "description": "tiger claw 虎爪：踩板尾弹起，手接住转一圈，放下再上板",
+   "summary": "tiger_claw/tiger_claw.summary.json"
+  },
+  "cruise": {
+   "n": 3,
+   "description": "站立滑行：双脚在板上，无其他动作",
+   "summary": "cruise/cruise.summary.json"
+  },
+  "hop": {
+   "n": 2,
+   "description": "小跳：人跳起，板不动",
+   "summary": "hop/hop.summary.json"
+  },
+  "throwdown": {
+   "n": 2,
+   "description": "throwdown 跑动上板：拿板跑、放板、一脚一脚踏上（已单独交接，见 ../throwdown/）",
+   "summary": "throwdown/throwdown.summary.json"
+  },
+  "pump": {
+   "n": 2,
+   "description": "左右压弯泵速：身体左右压，板走 S 线",
+   "summary": "pump/pump.summary.json"
+  },
+  "shove_it": {
+   "n": 2,
+   "description": "shove-it：板转 180°，人不转",
+   "summary": "shove_it/shove_it.summary.json"
+  },
+  "ghostride": {
+   "n": 2,
+   "description": "ghostride：下板走一步再上板",
+   "summary": "ghostride/ghostride.summary.json"
+  },
+  "fall": {
+   "n": 2,
+   "description": "摔倒/失误（用户仍给了分，可做失误动画参考）",
+   "summary": "fall/fall.summary.json"
+  },
+  "no_comply": {
+   "n": 1,
+   "description": "no-comply flip：踩板尾弹起翻滚（不用手），人下板再跳上",
+   "summary": "no_comply/no_comply.summary.json"
+  },
+  "low_crouch": {
+   "n": 1,
+   "description": "深蹲/低姿滑行",
+   "summary": "low_crouch/low_crouch.summary.json"
+  },
+  "peter_pan": {
+   "n": 1,
+   "description": "peter pan 跨板走：双脚交替跨到板两侧再回来",
+   "summary": "peter_pan/peter_pan.summary.json"
+  },
+  "footwork": {
+   "n": 1,
+   "description": "走板/脚步特写（可能半身）",
+   "summary": "footwork/footwork.summary.json"
+  },
+  "ghostride_kickflip": {
+   "n": 1,
+   "description": "ghostride kickflip：站板旁一踢板翻过来再踩上",
+   "summary": "ghostride_kickflip/ghostride_kickflip.summary.json"
+  }
+ },
+ "coords": "world: MediaPipe pose_world_landmarks, metres, origin = hip centre, +y DOWN (flip y for three.js), z small = toward camera; lm: normalized image coords x,y in [0,1] + z + visibility; ang: degrees, knee 0 = straight, torso_lean 0 = upright",
+ "joints": [
+  "nose",
+  "left_eye_inner",
+  "left_eye",
+  "left_eye_outer",
+  "right_eye_inner",
+  "right_eye",
+  "right_eye_outer",
+  "left_ear",
+  "right_ear",
+  "mouth_left",
+  "mouth_right",
+  "left_shoulder",
+  "right_shoulder",
+  "left_elbow",
+  "right_elbow",
+  "left_wrist",
+  "right_wrist",
+  "left_pinky",
+  "right_pinky",
+  "left_index",
+  "right_index",
+  "left_thumb",
+  "right_thumb",
+  "left_hip",
+  "right_hip",
+  "left_knee",
+  "right_knee",
+  "left_ankle",
+  "right_ankle",
+  "left_heel",
+  "right_heel",
+  "left_foot_index",
+  "right_foot_index"
+ ],
+ "imported_packages": [
+  {
+   "package": "moves-2026-11-08",
+   "generated": "2026-11-08",
+   "schema_version": "1.0",
+   "contract_version": "1.0",
+   "n": 106,
+   "new": 106,
+   "changed": {},
+   "removed": {},
+   "stale_basis": []
+  }
+ ],
+ "imported_by": "tools/import_moves.py",
+ "samples": [
+  {
+   "move": "arm_styling",
+   "id": "pro_ARCk35WWnbk_10",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    25.2,
+    25.5
+   ],
+   "dur": 0.3,
+   "camera": "正对镜头 (前/后机位)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_ARCk35WWnbk_10.skeleton.json",
+   "clip_mp4": "arm_styling/pro_ARCk35WWnbk_10.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_ARCk35WWnbk_22",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    62.4,
+    62.7
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "arm_styling/pro_ARCk35WWnbk_22.skeleton.json",
+   "clip_mp4": "arm_styling/pro_ARCk35WWnbk_22.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_C91vOecuTZM_5",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    70.48,
+    70.78
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_C91vOecuTZM_5.skeleton.json",
+   "clip_mp4": "arm_styling/pro_C91vOecuTZM_5.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_C91vOecuTZM_12",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    98.64,
+    99.12
+   ],
+   "dur": 0.48,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_C91vOecuTZM_12.skeleton.json",
+   "clip_mp4": "arm_styling/pro_C91vOecuTZM_12.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_C91vOecuTZM_19",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    114.0,
+    114.32
+   ],
+   "dur": 0.32,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_C91vOecuTZM_19.skeleton.json",
+   "clip_mp4": "arm_styling/pro_C91vOecuTZM_19.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_17",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    53.47,
+    55.64
+   ],
+   "dur": 2.17,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_17.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_17.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_1",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    11.1,
+    12.01
+   ],
+   "dur": 0.91,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_1.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_2",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    12.43,
+    13.35
+   ],
+   "dur": 0.92,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_2.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_3",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    14.02,
+    14.6
+   ],
+   "dur": 0.58,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_3.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_4",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    15.35,
+    16.19
+   ],
+   "dur": 0.84,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_4.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_25",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    103.35,
+    103.65
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_25.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_25.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_ARCk35WWnbk_1",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    0.0,
+    4.0
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_ARCk35WWnbk_1.skeleton.json",
+   "clip_mp4": "arm_styling/pro_ARCk35WWnbk_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_5",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    16.94,
+    17.69
+   ],
+   "dur": 0.75,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_5.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_5.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_11",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    31.12,
+    33.37
+   ],
+   "dur": 2.25,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_11.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_11.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_14",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    37.46,
+    37.76
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_14.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_14.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_16",
+   "user_score": 3,
+   "label": "手臂造型/普通滑行",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    43.96,
+    47.47
+   ],
+   "dur": 3.51,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_16.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_16.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_15",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    83.98,
+    85.19
+   ],
+   "dur": 1.21,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_15.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_15.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_18",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    93.99,
+    95.9
+   ],
+   "dur": 1.91,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_18.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_18.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_14",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    80.88,
+    81.18
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_14.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_14.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_5",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    41.24,
+    42.34
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_5.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_5.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "tricks_crossstep_2",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "tricks_crossstep",
+   "src_time": [
+    17.52,
+    18.22
+   ],
+   "dur": 0.7,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/tricks_crossstep_2.skeleton.json",
+   "clip_mp4": "arm_styling/tricks_crossstep_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "arm_styling",
+   "id": "tricks_crossstep_3",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "tricks_crossstep",
+   "src_time": [
+    18.82,
+    19.32
+   ],
+   "dur": 0.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/tricks_crossstep_3.skeleton.json",
+   "clip_mp4": "arm_styling/tricks_crossstep_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_38",
+   "user_score": 5,
+   "label": "cross-step",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    108.1,
+    111.0
+   ],
+   "dur": 2.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_38.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_38.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "i_BGbiWTMvY_2",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "i-BGbiWTMvY",
+   "src_time": [
+    2.2,
+    3.1
+   ],
+   "dur": 0.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/i_BGbiWTMvY_2.skeleton.json",
+   "clip_mp4": "cross_step/i_BGbiWTMvY_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "i_BGbiWTMvY_4",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "i-BGbiWTMvY",
+   "src_time": [
+    4.8,
+    7.51
+   ],
+   "dur": 2.71,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/i_BGbiWTMvY_4.skeleton.json",
+   "clip_mp4": "cross_step/i_BGbiWTMvY_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_9",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    23.4,
+    23.7
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_9.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_9.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_14",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    37.0,
+    38.1
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_14.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_14.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_23",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    64.3,
+    64.6
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_23.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_23.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_U7S102lzWZk_1",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    0.0,
+    3.6
+   ],
+   "dur": 3.6,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_U7S102lzWZk_1.skeleton.json",
+   "clip_mp4": "cross_step/pro_U7S102lzWZk_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_U7S102lzWZk_3",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    5.4,
+    9.2
+   ],
+   "dur": 3.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "cross_step/pro_U7S102lzWZk_3.skeleton.json",
+   "clip_mp4": "cross_step/pro_U7S102lzWZk_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_XyKLATi_aHo_3",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    5.8,
+    8.4
+   ],
+   "dur": 2.6,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_XyKLATi_aHo_3.skeleton.json",
+   "clip_mp4": "cross_step/pro_XyKLATi_aHo_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_XyKLATi_aHo_4",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    8.8,
+    10.1
+   ],
+   "dur": 1.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_XyKLATi_aHo_4.skeleton.json",
+   "clip_mp4": "cross_step/pro_XyKLATi_aHo_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_dvomTqNI12o_1",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_dvomTqNI12o",
+   "src_time": [
+    0.0,
+    4.0
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_dvomTqNI12o_1.skeleton.json",
+   "clip_mp4": "cross_step/pro_dvomTqNI12o_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_5",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    13.6,
+    15.7
+   ],
+   "dur": 2.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_5.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_5.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_7",
+   "user_score": 3,
+   "label": "cross-step 走板 (猜)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    17.9,
+    19.0
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_7.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_7.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_21",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    58.7,
+    61.1
+   ],
+   "dur": 2.4,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.89,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_21.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_21.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_24",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    65.0,
+    67.2
+   ],
+   "dur": 2.2,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_24.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_24.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_27",
+   "user_score": 3,
+   "label": "cross-step 走板 (猜)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    72.2,
+    74.2
+   ],
+   "dur": 2.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_27.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_27.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_33",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    89.3,
+    93.2
+   ],
+   "dur": 3.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_33.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_33.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_18",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    48.7,
+    52.5
+   ],
+   "dur": 3.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_18.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_18.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_EiPZ7dODY0E_20",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    65.4,
+    69.32
+   ],
+   "dur": 3.92,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.89,
+   "flags": [],
+   "skeleton": "cross_step/pro_EiPZ7dODY0E_20.skeleton.json",
+   "clip_mp4": "cross_step/pro_EiPZ7dODY0E_20.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_U7S102lzWZk_2",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    3.4,
+    6.2
+   ],
+   "dur": 2.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.84,
+   "flags": [],
+   "skeleton": "cross_step/pro_U7S102lzWZk_2.skeleton.json",
+   "clip_mp4": "cross_step/pro_U7S102lzWZk_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_y_kGbnpYFaA_7",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    52.55,
+    53.45
+   ],
+   "dur": 0.9,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "cross_step/pro_y_kGbnpYFaA_7.skeleton.json",
+   "clip_mp4": "cross_step/pro_y_kGbnpYFaA_7.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_y_kGbnpYFaA_12",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    75.47,
+    75.77
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_y_kGbnpYFaA_12.skeleton.json",
+   "clip_mp4": "cross_step/pro_y_kGbnpYFaA_12.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cross_step",
+   "id": "tricks_crossstep_1",
+   "user_score": 3,
+   "label": "交叉步",
+   "clip": "tricks_crossstep",
+   "src_time": [
+    11.31,
+    11.61
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/tricks_crossstep_1.skeleton.json",
+   "clip_mp4": "cross_step/tricks_crossstep_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cruise",
+   "id": "pro_tQNzYSUsJdk_10",
+   "user_score": 5,
+   "label": "站立滑行",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    58.76,
+    62.26
+   ],
+   "dur": 3.5,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "cruise/pro_tQNzYSUsJdk_10.skeleton.json",
+   "clip_mp4": "cruise/pro_tQNzYSUsJdk_10.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cruise",
+   "id": "pro_EiPZ7dODY0E_26",
+   "user_score": 3,
+   "label": "站立滑行",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    104.02,
+    104.61
+   ],
+   "dur": 0.59,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cruise/pro_EiPZ7dODY0E_26.skeleton.json",
+   "clip_mp4": "cruise/pro_EiPZ7dODY0E_26.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "cruise",
+   "id": "pro_y_kGbnpYFaA_13",
+   "user_score": 3,
+   "label": "站立滑行",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    76.78,
+    78.18
+   ],
+   "dur": 1.4,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.96,
+   "flags": [],
+   "skeleton": "cruise/pro_y_kGbnpYFaA_13.skeleton.json",
+   "clip_mp4": "cruise/pro_y_kGbnpYFaA_13.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "fall",
+   "id": "uVBj5DUkgkM_1",
+   "user_score": 5,
+   "label": "摔倒/失误",
+   "clip": "uVBj5DUkgkM",
+   "src_time": [
+    0.0,
+    3.4
+   ],
+   "dur": 3.4,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "fall/uVBj5DUkgkM_1.skeleton.json",
+   "clip_mp4": "fall/uVBj5DUkgkM_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "fall",
+   "id": "pro_y_kGbnpYFaA_2",
+   "user_score": 3,
+   "label": "摔倒/失误",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    11.21,
+    11.71
+   ],
+   "dur": 0.5,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "fall/pro_y_kGbnpYFaA_2.skeleton.json",
+   "clip_mp4": "fall/pro_y_kGbnpYFaA_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "footwork",
+   "id": "pro_EiPZ7dODY0E_10",
+   "user_score": 3,
+   "label": "走板/脚步特写",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    30.12,
+    30.62
+   ],
+   "dur": 0.5,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "footwork/pro_EiPZ7dODY0E_10.skeleton.json",
+   "clip_mp4": "footwork/pro_EiPZ7dODY0E_10.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "ghostride",
+   "id": "short_BE2SfHBGfkI_4",
+   "user_score": 5,
+   "label": "ghostride 下板走一步再上板",
+   "clip": "short_BE2SfHBGfkI",
+   "src_time": [
+    7.1,
+    10.0
+   ],
+   "dur": 2.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "ghostride/short_BE2SfHBGfkI_4.skeleton.json",
+   "clip_mp4": "ghostride/short_BE2SfHBGfkI_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "ghostride",
+   "id": "pro_dvomTqNI12o_3",
+   "user_score": 4,
+   "label": "ghostride 下板走一步再上板",
+   "clip": "pro_dvomTqNI12o",
+   "src_time": [
+    7.8,
+    11.1
+   ],
+   "dur": 3.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.83,
+   "flags": [],
+   "skeleton": "ghostride/pro_dvomTqNI12o_3.skeleton.json",
+   "clip_mp4": "ghostride/pro_dvomTqNI12o_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "ghostride_kickflip",
+   "id": "tricks_peterpan_1",
+   "user_score": 4,
+   "label": "ghostride kickflip 站板旁一踢板翻过来再踩上",
+   "clip": "tricks_peterpan",
+   "src_time": [
+    18.02,
+    20.42
+   ],
+   "dur": 2.4,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "ghostride_kickflip/tricks_peterpan_1.skeleton.json",
+   "clip_mp4": "ghostride_kickflip/tricks_peterpan_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "hop",
+   "id": "D80MTOxjYqA_2",
+   "user_score": 3,
+   "label": "小跳",
+   "clip": "D80MTOxjYqA",
+   "src_time": [
+    3.4,
+    4.3
+   ],
+   "dur": 0.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "hop/D80MTOxjYqA_2.skeleton.json",
+   "clip_mp4": "hop/D80MTOxjYqA_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "hop",
+   "id": "pro_C91vOecuTZM_20",
+   "user_score": 3,
+   "label": "小跳",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    116.08,
+    117.92
+   ],
+   "dur": 1.84,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "hop/pro_C91vOecuTZM_20.skeleton.json",
+   "clip_mp4": "hop/pro_C91vOecuTZM_20.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "low_crouch",
+   "id": "pro_ARCk35WWnbk_13",
+   "user_score": 4,
+   "label": "深蹲/低姿",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    33.6,
+    35.6
+   ],
+   "dur": 2.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "low_crouch/pro_ARCk35WWnbk_13.skeleton.json",
+   "clip_mp4": "low_crouch/pro_ARCk35WWnbk_13.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "manual",
+   "id": "pro_y_kGbnpYFaA_3",
+   "user_score": 5,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    32.63,
+    36.44
+   ],
+   "dur": 3.81,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.93,
+   "flags": [],
+   "skeleton": "manual/pro_y_kGbnpYFaA_3.skeleton.json",
+   "clip_mp4": "manual/pro_y_kGbnpYFaA_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "manual",
+   "id": "short_tbVYcMg6D38_1",
+   "user_score": 5,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "short_tbVYcMg6D38",
+   "src_time": [
+    0.5,
+    3.2
+   ],
+   "dur": 2.7,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/short_tbVYcMg6D38_1.skeleton.json",
+   "clip_mp4": "manual/short_tbVYcMg6D38_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "manual",
+   "id": "pro_1MQl0CZNdls_4",
+   "user_score": 4,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_1MQl0CZNdls",
+   "src_time": [
+    10.2,
+    13.8
+   ],
+   "dur": 3.6,
+   "camera": "正对镜头 (前/后机位)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/pro_1MQl0CZNdls_4.skeleton.json",
+   "clip_mp4": "manual/pro_1MQl0CZNdls_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "manual",
+   "id": "pro_tQNzYSUsJdk_12",
+   "user_score": 4,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    101.2,
+    104.7
+   ],
+   "dur": 3.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "manual/pro_tQNzYSUsJdk_12.skeleton.json",
+   "clip_mp4": "manual/pro_tQNzYSUsJdk_12.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "manual",
+   "id": "pro_y_kGbnpYFaA_4",
+   "user_score": 4,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    35.94,
+    37.74
+   ],
+   "dur": 1.8,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.58,
+   "flags": [],
+   "skeleton": "manual/pro_y_kGbnpYFaA_4.skeleton.json",
+   "clip_mp4": "manual/pro_y_kGbnpYFaA_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "manual",
+   "id": "pro_EiPZ7dODY0E_28",
+   "user_score": 3,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    106.53,
+    107.94
+   ],
+   "dur": 1.41,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/pro_EiPZ7dODY0E_28.skeleton.json",
+   "clip_mp4": "manual/pro_EiPZ7dODY0E_28.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "manual",
+   "id": "pro_EiPZ7dODY0E_27",
+   "user_score": 3,
+   "label": "翘板 manual（一组轮子离地）",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    105.11,
+    105.52
+   ],
+   "dur": 0.41,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "manual/pro_EiPZ7dODY0E_27.skeleton.json",
+   "clip_mp4": "manual/pro_EiPZ7dODY0E_27.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "no_comply",
+   "id": "D80MTOxjYqA_4",
+   "user_score": 4,
+   "label": "no-comply flip 踩板尾弹起翻滚（不用手），人下板再跳上",
+   "clip": "D80MTOxjYqA",
+   "src_time": [
+    8.5,
+    11.0
+   ],
+   "dur": 2.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "no_comply/D80MTOxjYqA_4.skeleton.json",
+   "clip_mp4": "no_comply/D80MTOxjYqA_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "peter_pan",
+   "id": "pro_ARCk35WWnbk_25",
+   "user_score": 3,
+   "label": "peter pan 跨板走",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    67.9,
+    69.0
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "peter_pan/pro_ARCk35WWnbk_25.skeleton.json",
+   "clip_mp4": "peter_pan/pro_ARCk35WWnbk_25.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_36",
+   "user_score": 5,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    101.2,
+    103.2
+   ],
+   "dur": 2.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_36.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_36.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "hyojoo_6",
+   "user_score": 4,
+   "label": "pirouette/转体",
+   "clip": "hyojoo",
+   "src_time": [
+    17.2,
+    19.3
+   ],
+   "dur": 2.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/hyojoo_6.skeleton.json",
+   "clip_mp4": "pirouette/hyojoo_6.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_1MQl0CZNdls_3",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_1MQl0CZNdls",
+   "src_time": [
+    5.8,
+    8.4
+   ],
+   "dur": 2.6,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_1MQl0CZNdls_3.skeleton.json",
+   "clip_mp4": "pirouette/pro_1MQl0CZNdls_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_3",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    5.9,
+    8.7
+   ],
+   "dur": 2.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_3.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_4",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    8.7,
+    11.1
+   ],
+   "dur": 2.4,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_4.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_11",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    26.9,
+    30.9
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_11.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_11.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_16",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    43.1,
+    45.3
+   ],
+   "dur": 2.2,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.92,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_16.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_16.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_31",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    83.0,
+    86.5
+   ],
+   "dur": 3.5,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_31.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_31.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_35",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    95.9,
+    98.2
+   ],
+   "dur": 2.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_35.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_35.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_29",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    79.4,
+    80.3
+   ],
+   "dur": 0.9,
+   "camera": "正对镜头 (前/后机位)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_29.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_29.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_40",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    114.2,
+    115.0
+   ],
+   "dur": 0.8,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_40.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_40.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_XyKLATi_aHo_5",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    11.0,
+    12.7
+   ],
+   "dur": 1.7,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_XyKLATi_aHo_5.skeleton.json",
+   "clip_mp4": "pirouette/pro_XyKLATi_aHo_5.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_dvomTqNI12o_2",
+   "user_score": 4,
+   "label": "转体 (pirouette)",
+   "clip": "pro_dvomTqNI12o",
+   "src_time": [
+    4.5,
+    8.5
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "pirouette/pro_dvomTqNI12o_2.skeleton.json",
+   "clip_mp4": "pirouette/pro_dvomTqNI12o_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_y_kGbnpYFaA_17",
+   "user_score": 4,
+   "label": "pirouette 原地转体（人转板不转）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    90.89,
+    93.29
+   ],
+   "dur": 2.4,
+   "camera": "板沿没识别出来",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "pirouette/pro_y_kGbnpYFaA_17.skeleton.json",
+   "clip_mp4": "pirouette/pro_y_kGbnpYFaA_17.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "D80MTOxjYqA_3",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "D80MTOxjYqA",
+   "src_time": [
+    5.8,
+    8.1
+   ],
+   "dur": 2.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/D80MTOxjYqA_3.skeleton.json",
+   "clip_mp4": "pirouette/D80MTOxjYqA_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_17",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    45.6,
+    47.8
+   ],
+   "dur": 2.2,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_17.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_17.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_19",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    52.6,
+    55.9
+   ],
+   "dur": 3.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_19.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_19.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_ARCk35WWnbk_28",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    74.8,
+    77.3
+   ],
+   "dur": 2.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pirouette/pro_ARCk35WWnbk_28.skeleton.json",
+   "clip_mp4": "pirouette/pro_ARCk35WWnbk_28.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pirouette",
+   "id": "pro_FJCB0OBj7FQ_1",
+   "user_score": 3,
+   "label": "转体 (pirouette)",
+   "clip": "pro_FJCB0OBj7FQ",
+   "src_time": [
+    36.96,
+    38.72
+   ],
+   "dur": 1.76,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.92,
+   "flags": [],
+   "skeleton": "pirouette/pro_FJCB0OBj7FQ_1.skeleton.json",
+   "clip_mp4": "pirouette/pro_FJCB0OBj7FQ_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pump",
+   "id": "pro_C91vOecuTZM_4",
+   "user_score": 3,
+   "label": "左右压弯泵速",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    61.2,
+    61.76
+   ],
+   "dur": 0.56,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pump/pro_C91vOecuTZM_4.skeleton.json",
+   "clip_mp4": "pump/pro_C91vOecuTZM_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "pump",
+   "id": "pro_XyKLATi_aHo_2",
+   "user_score": 3,
+   "label": "左右压弯泵速",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    2.3,
+    6.1
+   ],
+   "dur": 3.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pump/pro_XyKLATi_aHo_2.skeleton.json",
+   "clip_mp4": "pump/pro_XyKLATi_aHo_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_ARCk35WWnbk_20",
+   "user_score": 5,
+   "label": "蹬地",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    55.9,
+    57.7
+   ],
+   "dur": 1.8,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "push/pro_ARCk35WWnbk_20.skeleton.json",
+   "clip_mp4": "push/pro_ARCk35WWnbk_20.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_ARCk35WWnbk_26",
+   "user_score": 4,
+   "label": "蹬地",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    69.6,
+    71.7
+   ],
+   "dur": 2.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "push/pro_ARCk35WWnbk_26.skeleton.json",
+   "clip_mp4": "push/pro_ARCk35WWnbk_26.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_EiPZ7dODY0E_21",
+   "user_score": 4,
+   "label": "蹬地",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    83.0,
+    83.84
+   ],
+   "dur": 0.84,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "push/pro_EiPZ7dODY0E_21.skeleton.json",
+   "clip_mp4": "push/pro_EiPZ7dODY0E_21.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_EiPZ7dODY0E_22",
+   "user_score": 4,
+   "label": "蹬地",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    84.92,
+    85.22
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "push/pro_EiPZ7dODY0E_22.skeleton.json",
+   "clip_mp4": "push/pro_EiPZ7dODY0E_22.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_XyKLATi_aHo_1",
+   "user_score": 4,
+   "label": "蹬地",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    0.0,
+    2.6
+   ],
+   "dur": 2.6,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "push/pro_XyKLATi_aHo_1.skeleton.json",
+   "clip_mp4": "push/pro_XyKLATi_aHo_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pushform_1",
+   "user_score": 4,
+   "label": "蹬地",
+   "clip": "pushform",
+   "src_time": [
+    123.02,
+    125.23
+   ],
+   "dur": 2.21,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "push/pushform_1.skeleton.json",
+   "clip_mp4": "push/pushform_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_ARCk35WWnbk_34",
+   "user_score": 3,
+   "label": "蹬地",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    92.6,
+    94.7
+   ],
+   "dur": 2.1,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "push/pro_ARCk35WWnbk_34.skeleton.json",
+   "clip_mp4": "push/pro_ARCk35WWnbk_34.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_ARCk35WWnbk_41",
+   "user_score": 3,
+   "label": "蹬地",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    116.8,
+    119.9
+   ],
+   "dur": 3.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "push/pro_ARCk35WWnbk_41.skeleton.json",
+   "clip_mp4": "push/pro_ARCk35WWnbk_41.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_EiPZ7dODY0E_19",
+   "user_score": 3,
+   "label": "蹬地",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    63.48,
+    64.57
+   ],
+   "dur": 1.09,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "push/pro_EiPZ7dODY0E_19.skeleton.json",
+   "clip_mp4": "push/pro_EiPZ7dODY0E_19.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "push",
+   "id": "pro_y_kGbnpYFaA_1",
+   "user_score": 3,
+   "label": "蹬地",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    2.4,
+    4.94
+   ],
+   "dur": 2.54,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.74,
+   "flags": [],
+   "skeleton": "push/pro_y_kGbnpYFaA_1.skeleton.json",
+   "clip_mp4": "push/pro_y_kGbnpYFaA_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "shove_it",
+   "id": "uVBj5DUkgkM_2",
+   "user_score": 4,
+   "label": "shove-it 板转180°人不转",
+   "clip": "uVBj5DUkgkM",
+   "src_time": [
+    7.3,
+    10.2
+   ],
+   "dur": 2.9,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "shove_it/uVBj5DUkgkM_2.skeleton.json",
+   "clip_mp4": "shove_it/uVBj5DUkgkM_2.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "shove_it",
+   "id": "pro_C91vOecuTZM_18",
+   "user_score": 3,
+   "label": "shove-it 板转180°人不转",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    110.32,
+    113.2
+   ],
+   "dur": 2.88,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "shove_it/pro_C91vOecuTZM_18.skeleton.json",
+   "clip_mp4": "shove_it/pro_C91vOecuTZM_18.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "throwdown",
+   "id": "pro_tQNzYSUsJdk_11",
+   "user_score": 5,
+   "label": "throwdown 跑动中扔板、跳上板",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    73.57,
+    77.28
+   ],
+   "dur": 3.71,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.68,
+   "flags": [],
+   "skeleton": "throwdown/pro_tQNzYSUsJdk_11.skeleton.json",
+   "clip_mp4": "throwdown/pro_tQNzYSUsJdk_11.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "throwdown",
+   "id": "pro_1MQl0CZNdls_1",
+   "user_score": 4,
+   "label": "throwdown 跑动中扔板、跳上板",
+   "clip": "pro_1MQl0CZNdls",
+   "src_time": [
+    0.0,
+    0.7
+   ],
+   "dur": 0.7,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "throwdown/pro_1MQl0CZNdls_1.skeleton.json",
+   "clip_mp4": "throwdown/pro_1MQl0CZNdls_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_tQNzYSUsJdk_1",
+   "user_score": 5,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    6.1,
+    7.61
+   ],
+   "dur": 1.51,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_tQNzYSUsJdk_1.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_tQNzYSUsJdk_1.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_tQNzYSUsJdk_3",
+   "user_score": 5,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    44.04,
+    44.34
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_tQNzYSUsJdk_3.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_tQNzYSUsJdk_3.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_y_kGbnpYFaA_11",
+   "user_score": 5,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    71.77,
+    74.07
+   ],
+   "dur": 2.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_y_kGbnpYFaA_11.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_y_kGbnpYFaA_11.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_U7S102lzWZk_4",
+   "user_score": 4,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    8.8,
+    10.2
+   ],
+   "dur": 1.4,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_U7S102lzWZk_4.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_U7S102lzWZk_4.mp4",
+   "first_package": "moves-2026-11-08"
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_y_kGbnpYFaA_8",
+   "user_score": 3,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    65.27,
+    68.97
+   ],
+   "dur": 3.7,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.94,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_y_kGbnpYFaA_8.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_y_kGbnpYFaA_8.mp4",
+   "first_package": "moves-2026-11-08"
+  }
+ ]
+}

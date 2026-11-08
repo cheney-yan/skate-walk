@@ -1,0 +1,205 @@
+{
+ "schema_version": "1.0",
+ "move": "tiger_claw",
+ "description": "tiger claw 虎爪：踩板尾弹起，手接住转一圈，放下再上板",
+ "n": 5,
+ "n_fullbody": 5,
+ "scores": {
+  "5": 3,
+  "4": 1,
+  "3": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 113.4,
+  "knee_typical": 45.3,
+  "torso_lean_peak": 56.0,
+  "torso_lean_typical": 32.7,
+  "arm_abd_peak": 128.7,
+  "wrist_span_peak": 1.1,
+  "ankle_dist_peak": 0.7,
+  "dur": 1.51
+ },
+ "best": "pro_tQNzYSUsJdk_1",
+ "samples": [
+  {
+   "move": "tiger_claw",
+   "id": "pro_tQNzYSUsJdk_1",
+   "user_score": 5,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    6.1,
+    7.61
+   ],
+   "dur": 1.51,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_tQNzYSUsJdk_1.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_tQNzYSUsJdk_1.mp4",
+   "stats_brief": {
+    "knee": [
+     41.4,
+     100.2,
+     121.5
+    ],
+    "torso": [
+     23.7,
+     32.7,
+     56.0
+    ],
+    "arm": [
+     49.0,
+     74.8,
+     122.1
+    ]
+   }
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_tQNzYSUsJdk_3",
+   "user_score": 5,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    44.04,
+    44.34
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_tQNzYSUsJdk_3.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_tQNzYSUsJdk_3.mp4",
+   "stats_brief": {
+    "knee": [
+     10.9,
+     18.3,
+     26.1
+    ],
+    "torso": [
+     25.4,
+     44.3,
+     57.4
+    ],
+    "arm": [
+     24.6,
+     52.1,
+     67.2
+    ]
+   }
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_y_kGbnpYFaA_11",
+   "user_score": 5,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    71.77,
+    74.07
+   ],
+   "dur": 2.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_y_kGbnpYFaA_11.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_y_kGbnpYFaA_11.mp4",
+   "stats_brief": {
+    "knee": [
+     6.6,
+     45.3,
+     113.4
+    ],
+    "torso": [
+     1.6,
+     13.9,
+     49.0
+    ],
+    "arm": [
+     25.3,
+     50.1,
+     128.7
+    ]
+   }
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_U7S102lzWZk_4",
+   "user_score": 4,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    8.8,
+    10.2
+   ],
+   "dur": 1.4,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_U7S102lzWZk_4.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_U7S102lzWZk_4.mp4",
+   "stats_brief": {
+    "knee": [
+     13.3,
+     35.7,
+     103.1
+    ],
+    "torso": [
+     9.8,
+     37.2,
+     47.6
+    ],
+    "arm": [
+     7.0,
+     28.4,
+     168.9
+    ]
+   }
+  },
+  {
+   "move": "tiger_claw",
+   "id": "pro_y_kGbnpYFaA_8",
+   "user_score": 3,
+   "label": "tiger claw 虎爪（踩板尾弹起，手接住转一圈，放下再上板）",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    65.27,
+    68.97
+   ],
+   "dur": 3.7,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.94,
+   "flags": [],
+   "skeleton": "tiger_claw/pro_y_kGbnpYFaA_8.skeleton.json",
+   "clip_mp4": "tiger_claw/pro_y_kGbnpYFaA_8.mp4",
+   "stats_brief": {
+    "knee": [
+     3.7,
+     50.9,
+     133.5
+    ],
+    "torso": [
+     1.9,
+     17.5,
+     156.1
+    ],
+    "arm": [
+     14.8,
+     73.8,
+     173.6
+    ]
+   }
+  }
+ ]
+}

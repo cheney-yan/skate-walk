@@ -1,0 +1,142 @@
+{
+ "move": "pirouette",
+ "schema": "data/moves v1 (style of throwdown.json): every number = {v, basis}; basis = sample id + skeleton field + frame/time",
+ "derived_by": "tools/derive_moves.py from refs/moves (package moves-2026-11-08)",
+ "conventions": "ref angles: knee 0 = straight, torso_lean 0 = upright, arm_abd 0 = arm hanging, elbow 0 = straight (MediaPipe skeleton). game.* knee = interior angle (180 = straight) as in rider.js. t = clip time (0 = user segment start).",
+ "best_sample": {
+  "id": "pro_ARCk35WWnbk_36",
+  "user_score": 5,
+  "clip_title": "Susu Tran @ Pier 76",
+  "source": "https://www.youtube.com/watch?v=ARCk35WWnbk",
+  "src_time": [
+   101.2,
+   103.2
+  ],
+  "view": {
+   "camera": "斜侧机位 (约45°)",
+   "travel": "向画面左",
+   "stance": "左脚在前 (regular)",
+   "camera_moving": "镜头在动（跟拍/换角度）",
+   "board_deg": 43
+  },
+  "replay": "lab.html?ref=pirouette/pro_ARCk35WWnbk_36"
+ },
+ "other_sources": [
+  "pro_ARCk35WWnbk_3 (4分, same rider, 2.8 s) for a second look"
+ ],
+ "segment_notes": "2.0 s user segment, one 360 deg turn on the board (vision on the mp4: back to camera 0-0.9 s, facing the camera ~1.0-1.5 s, back again by ~1.6-1.9 s). The knee main peak (knee_L ~88-126 deg at t 1.6-1.9) is NOT part of the spin: one heel kicks up behind her as she exits (vision sees the RIGHT heel; MediaPipe left/right is unreliable seen from behind, stats.shoulder_facing_flips = 9). Use the spin window t 0.4-1.45 for knees. Shoulder yaw from world coords flips sign with the detector, so turn timing comes from image facing (lm shoulder order).",
+ "stance": {
+  "v": "L (regular)",
+  "basis": "pro_ARCk35WWnbk_36 refskel stance(): travel method (向画面左), ankle order in t 0..0.5, 11/11 frames agree with view.stance"
+ },
+ "ref": {
+  "windup_t": {
+   "v": 0.23,
+   "basis": "pro_ARCk35WWnbk_36 ang.torso_lean peak in t<=0.45 (wind-up lean) f10 t0.23 (smoothed 22.4, raw 22.5, half-height -0.0..0.3)"
+  },
+  "windup_torso_lean_deg": {
+   "v": 22.4,
+   "basis": "pro_ARCk35WWnbk_36 ang.torso_lean peak in t<=0.45 f10 t0.23 (smoothed 22.4, raw 22.5, half-height -0.0..0.3)"
+  },
+  "windup_arm_abd_deg": {
+   "v": 38.0,
+   "basis": "pro_ARCk35WWnbk_36 ang.arm_abd_max median (arms open before the turn) over t -0.1..0.1"
+  },
+  "pull_in_t": {
+   "v": 0.47,
+   "basis": "pro_ARCk35WWnbk_36 ang.wrist_span min in t 0.45..0.9 (arms gathered to the chest during the turn; they already close to 0.2-0.3 m at t 0.37-0.6) f17 t0.47 (smoothed 0.3, raw 0.3, half-height 0.3..0.7)"
+  },
+  "pull_in_wrist_span_m": {
+   "v": 0.3,
+   "basis": "pro_ARCk35WWnbk_36 ang.wrist_span min in t 0.45..0.9 f17 t0.47 (smoothed 0.3, raw 0.3, half-height 0.3..0.7)"
+  },
+  "open_wrist_span_m": {
+   "v": 0.9,
+   "basis": "pro_ARCk35WWnbk_36 ang.wrist_span median (arms re-open, facing camera) over t 1.0..1.45"
+  },
+  "half_turn_t": {
+   "v": 0.932,
+   "basis": "pro_ARCk35WWnbk_36 lm shoulder order (img facing = (lm11.x-lm12.x)/torso length, smoothed) first > 0.3 after t 0.3 = she faces the camera = 180 deg"
+  },
+  "turn_start_t": {
+   "v": 0.45,
+   "basis": "pro_ARCk35WWnbk_36 lm shoulder order |facing| falls from ~1.0 (t 0.1) to ~0.1 at t 0.5 — rotation starts ~0.45 (vision: tiles 3-4 of the 6 fps sheet)"
+  },
+  "turn_end_t": {
+   "v": 1.6,
+   "basis": "pro_ARCk35WWnbk_36 vision on the mp4 (back to camera again by ~1.6 s); lm facing flips back at f47-f50 (t 1.47-1.57)"
+  },
+  "knee_spin_deg": {
+   "v": 33.4,
+   "basis": "pro_ARCk35WWnbk_36 ang.knee_max median during the spin over t 0.4..1.45"
+  },
+  "knee_spin_min_deg": {
+   "v": 17.2,
+   "basis": "pro_ARCk35WWnbk_36 ang.knee_max min during the spin (rise) f22 t0.63 (smoothed 17.2, raw 17.5, half-height -0.1..0.73)"
+  },
+  "torso_spin_deg": {
+   "v": 8.1,
+   "basis": "pro_ARCk35WWnbk_36 ang.torso_lean median during the spin (upright) over t 0.4..1.45"
+  },
+  "ankle_dist_m": {
+   "v": 0.2,
+   "basis": "pro_ARCk35WWnbk_36 ang.ankle_dist median (feet close at centre) over t 0.4..1.45"
+  },
+  "exit_kick_knee_deg": {
+   "v": 88.3,
+   "basis": "pro_ARCk35WWnbk_36 ang.knee_L peak after the spin (heel kick on exit; side uncertain) f52 t1.63 (smoothed 88.3, raw 99.6, half-height 1.6..1.93)"
+  }
+ },
+ "game": {
+  "_": "proposed rider.js params for a body pirouette on a rolling board (board keeps its heading). Not wired yet.",
+  "spinT": {
+   "v": 1.15,
+   "basis": "ref.turn_end_t - ref.turn_start_t (one 360 deg)"
+  },
+  "windupT": {
+   "v": 0.55,
+   "basis": "ref.turn_start_t - segment start (-0.1 pad)"
+  },
+  "windupLean": {
+   "v": 15,
+   "basis": "ref.windup_torso_lean_deg capped at 15 (Cheney: upright, elegant)",
+   "style_override": "cap 15"
+  },
+  "armsOpenAbd": {
+   "v": 38.0,
+   "basis": "ref.windup_arm_abd_deg"
+  },
+  "pullInSpan": {
+   "v": 0.3,
+   "basis": "ref.pull_in_wrist_span_m (hands to chest = spin accelerates)"
+  },
+  "pullInAt": {
+   "v": 0.02,
+   "basis": "(ref.pull_in_t - ref.turn_start_t) / spinT: phase of max gather"
+  },
+  "reopenSpan": {
+   "v": 0.9,
+   "basis": "ref.open_wrist_span_m"
+  },
+  "knee": {
+   "v": 147,
+   "basis": "180 - ref.knee_spin_deg (interior)"
+  },
+  "kneeRise": {
+   "v": 163,
+   "basis": "180 - ref.knee_spin_min_deg (tallest moment)"
+  },
+  "torso": {
+   "v": 8.1,
+   "basis": "ref.torso_spin_deg"
+  },
+  "feetGap": {
+   "v": 0.2,
+   "basis": "ref.ankle_dist_m"
+  },
+  "speedLoss": {
+   "v": 0.1,
+   "basis": "not measurable from the skeleton (no board); docs/moves.md \"slows a little\" — placeholder, ask exporter for board speed"
+  }
+ }
+}

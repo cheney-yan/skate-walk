@@ -1,0 +1,96 @@
+{
+ "schema_version": "1.0",
+ "move": "shove_it",
+ "description": "shove-it：板转 180°，人不转",
+ "n": 2,
+ "n_fullbody": 2,
+ "scores": {
+  "4": 1,
+  "3": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 107.9,
+  "knee_typical": 34.9,
+  "torso_lean_peak": 38.8,
+  "torso_lean_typical": 24.2,
+  "arm_abd_peak": 123.1,
+  "wrist_span_peak": 1.2,
+  "ankle_dist_peak": 0.6,
+  "dur": 2.89
+ },
+ "best": "uVBj5DUkgkM_2",
+ "samples": [
+  {
+   "move": "shove_it",
+   "id": "uVBj5DUkgkM_2",
+   "user_score": 4,
+   "label": "shove-it 板转180°人不转",
+   "clip": "uVBj5DUkgkM",
+   "src_time": [
+    7.3,
+    10.2
+   ],
+   "dur": 2.9,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "shove_it/uVBj5DUkgkM_2.skeleton.json",
+   "clip_mp4": "shove_it/uVBj5DUkgkM_2.mp4",
+   "stats_brief": {
+    "knee": [
+     11.5,
+     26.3,
+     125.1
+    ],
+    "torso": [
+     3.6,
+     23.0,
+     42.1
+    ],
+    "arm": [
+     11.6,
+     54.1,
+     147.4
+    ]
+   }
+  },
+  {
+   "move": "shove_it",
+   "id": "pro_C91vOecuTZM_18",
+   "user_score": 3,
+   "label": "shove-it 板转180°人不转",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    110.32,
+    113.2
+   ],
+   "dur": 2.88,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "shove_it/pro_C91vOecuTZM_18.skeleton.json",
+   "clip_mp4": "shove_it/pro_C91vOecuTZM_18.mp4",
+   "stats_brief": {
+    "knee": [
+     16.5,
+     43.5,
+     90.7
+    ],
+    "torso": [
+     4.3,
+     25.4,
+     35.5
+    ],
+    "arm": [
+     19.5,
+     48.5,
+     98.8
+    ]
+   }
+  }
+ ]
+}

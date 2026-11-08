@@ -7,7 +7,7 @@ const [out = 'frames', cam = 'chase', from = '0', to = '30', every = '1', W = '5
 fs.mkdirSync(out, { recursive: true });
 const browser = await puppeteer.launch({
   executablePath: '/usr/sbin/google-chrome-stable', headless: 'new', protocolTimeout: 900000,
-  args: ['--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', `--window-size=${W},${H}`, '--no-sandbox'],
+  args: ['--use-angle=vulkan', '--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', `--window-size=${W},${H}`, '--no-sandbox', '--disable-accelerated-video-decode'],
 });
 const page = await browser.newPage();
 page.setDefaultTimeout(600000);

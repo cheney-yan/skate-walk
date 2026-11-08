@@ -1,0 +1,853 @@
+{
+ "schema_version": "1.0",
+ "move": "cross_step",
+ "description": "交叉步走板：人在板上前后交叉迈步，不下板",
+ "n": 23,
+ "n_fullbody": 23,
+ "scores": {
+  "5": 1,
+  "4": 10,
+  "3": 12
+ },
+ "pooled_median_of": {
+  "knee_peak": 81.8,
+  "knee_typical": 30.3,
+  "torso_lean_peak": 36.0,
+  "torso_lean_typical": 13.2,
+  "arm_abd_peak": 115.6,
+  "wrist_span_peak": 1.0,
+  "ankle_dist_peak": 0.7,
+  "dur": 2.2
+ },
+ "best": "pro_ARCk35WWnbk_38",
+ "samples": [
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_38",
+   "user_score": 5,
+   "label": "cross-step",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    108.1,
+    111.0
+   ],
+   "dur": 2.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_38.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_38.mp4",
+   "stats_brief": {
+    "knee": [
+     8.6,
+     26.4,
+     129.5
+    ],
+    "torso": [
+     1.7,
+     16.3,
+     42.9
+    ],
+    "arm": [
+     14.8,
+     40.5,
+     93.9
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "i_BGbiWTMvY_2",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "i-BGbiWTMvY",
+   "src_time": [
+    2.2,
+    3.1
+   ],
+   "dur": 0.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/i_BGbiWTMvY_2.skeleton.json",
+   "clip_mp4": "cross_step/i_BGbiWTMvY_2.mp4",
+   "stats_brief": {
+    "knee": [
+     10.3,
+     16.5,
+     30.7
+    ],
+    "torso": [
+     2.0,
+     11.0,
+     18.5
+    ],
+    "arm": [
+     21.1,
+     45.9,
+     97.9
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "i_BGbiWTMvY_4",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "i-BGbiWTMvY",
+   "src_time": [
+    4.8,
+    7.51
+   ],
+   "dur": 2.71,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/i_BGbiWTMvY_4.skeleton.json",
+   "clip_mp4": "cross_step/i_BGbiWTMvY_4.mp4",
+   "stats_brief": {
+    "knee": [
+     13.4,
+     25.6,
+     37.2
+    ],
+    "torso": [
+     1.3,
+     13.4,
+     33.0
+    ],
+    "arm": [
+     20.9,
+     57.3,
+     147.0
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_23",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    64.3,
+    64.6
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_23.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_23.mp4",
+   "stats_brief": {
+    "knee": [
+     17.1,
+     59.7,
+     96.0
+    ],
+    "torso": [
+     14.9,
+     20.2,
+     34.4
+    ],
+    "arm": [
+     37.4,
+     57.8,
+     82.3
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_XyKLATi_aHo_3",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    5.8,
+    8.4
+   ],
+   "dur": 2.6,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_XyKLATi_aHo_3.skeleton.json",
+   "clip_mp4": "cross_step/pro_XyKLATi_aHo_3.mp4",
+   "stats_brief": {
+    "knee": [
+     12.5,
+     27.6,
+     105.0
+    ],
+    "torso": [
+     2.1,
+     13.2,
+     27.0
+    ],
+    "arm": [
+     17.7,
+     66.9,
+     139.1
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_XyKLATi_aHo_4",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    8.8,
+    10.1
+   ],
+   "dur": 1.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_XyKLATi_aHo_4.skeleton.json",
+   "clip_mp4": "cross_step/pro_XyKLATi_aHo_4.mp4",
+   "stats_brief": {
+    "knee": [
+     7.4,
+     21.7,
+     48.7
+    ],
+    "torso": [
+     2.4,
+     7.8,
+     17.0
+    ],
+    "arm": [
+     20.1,
+     78.5,
+     120.3
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_14",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    37.0,
+    38.1
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_14.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_14.mp4",
+   "stats_brief": {
+    "knee": [
+     7.0,
+     21.1,
+     66.2
+    ],
+    "torso": [
+     1.3,
+     9.2,
+     29.2
+    ],
+    "arm": [
+     17.4,
+     53.3,
+     73.8
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_U7S102lzWZk_3",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    5.4,
+    9.2
+   ],
+   "dur": 3.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "cross_step/pro_U7S102lzWZk_3.skeleton.json",
+   "clip_mp4": "cross_step/pro_U7S102lzWZk_3.mp4",
+   "stats_brief": {
+    "knee": [
+     8.8,
+     32.3,
+     116.2
+    ],
+    "torso": [
+     3.1,
+     26.4,
+     61.7
+    ],
+    "arm": [
+     15.4,
+     49.2,
+     128.4
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_U7S102lzWZk_1",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    0.0,
+    3.6
+   ],
+   "dur": 3.6,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_U7S102lzWZk_1.skeleton.json",
+   "clip_mp4": "cross_step/pro_U7S102lzWZk_1.mp4",
+   "stats_brief": {
+    "knee": [
+     6.1,
+     26.9,
+     144.8
+    ],
+    "torso": [
+     1.4,
+     11.2,
+     44.0
+    ],
+    "arm": [
+     14.3,
+     45.4,
+     92.9
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_dvomTqNI12o_1",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_dvomTqNI12o",
+   "src_time": [
+    0.0,
+    4.0
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_dvomTqNI12o_1.skeleton.json",
+   "clip_mp4": "cross_step/pro_dvomTqNI12o_1.mp4",
+   "stats_brief": {
+    "knee": [
+     8.1,
+     17.5,
+     70.8
+    ],
+    "torso": [
+     3.8,
+     15.8,
+     38.7
+    ],
+    "arm": [
+     17.0,
+     62.8,
+     120.3
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_9",
+   "user_score": 4,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    23.4,
+    23.7
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_9.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_9.mp4",
+   "stats_brief": {
+    "knee": [
+     13.7,
+     24.8,
+     86.7
+    ],
+    "torso": [
+     7.7,
+     11.7,
+     23.1
+    ],
+    "arm": [
+     67.8,
+     78.2,
+     110.4
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_5",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    13.6,
+    15.7
+   ],
+   "dur": 2.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_5.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_5.mp4",
+   "stats_brief": {
+    "knee": [
+     22.2,
+     36.7,
+     91.6
+    ],
+    "torso": [
+     2.8,
+     13.8,
+     31.2
+    ],
+    "arm": [
+     37.3,
+     53.1,
+     81.3
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_24",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    65.0,
+    67.2
+   ],
+   "dur": 2.2,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_24.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_24.mp4",
+   "stats_brief": {
+    "knee": [
+     15.4,
+     36.8,
+     77.7
+    ],
+    "torso": [
+     0.9,
+     15.6,
+     60.2
+    ],
+    "arm": [
+     16.6,
+     54.3,
+     162.6
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_27",
+   "user_score": 3,
+   "label": "cross-step 走板 (猜)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    72.2,
+    74.2
+   ],
+   "dur": 2.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_27.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_27.mp4",
+   "stats_brief": {
+    "knee": [
+     5.2,
+     30.3,
+     81.8
+    ],
+    "torso": [
+     0.6,
+     7.5,
+     33.9
+    ],
+    "arm": [
+     24.9,
+     56.0,
+     79.8
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_y_kGbnpYFaA_12",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    75.47,
+    75.77
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/pro_y_kGbnpYFaA_12.skeleton.json",
+   "clip_mp4": "cross_step/pro_y_kGbnpYFaA_12.mp4",
+   "stats_brief": {
+    "knee": [
+     16.1,
+     42.9,
+     56.0
+    ],
+    "torso": [
+     9.6,
+     30.1,
+     36.0
+    ],
+    "arm": [
+     38.5,
+     83.0,
+     115.6
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "tricks_crossstep_1",
+   "user_score": 3,
+   "label": "交叉步",
+   "clip": "tricks_crossstep",
+   "src_time": [
+    11.31,
+    11.61
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cross_step/tricks_crossstep_1.skeleton.json",
+   "clip_mp4": "cross_step/tricks_crossstep_1.mp4",
+   "stats_brief": {
+    "knee": [
+     43.5,
+     50.9,
+     57.9
+    ],
+    "torso": [
+     6.8,
+     10.1,
+     15.9
+    ],
+    "arm": [
+     23.6,
+     96.6,
+     103.1
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_18",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    48.7,
+    52.5
+   ],
+   "dur": 3.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_18.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_18.mp4",
+   "stats_brief": {
+    "knee": [
+     15.4,
+     42.1,
+     140.2
+    ],
+    "torso": [
+     0.7,
+     12.1,
+     61.6
+    ],
+    "arm": [
+     16.3,
+     50.9,
+     152.8
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_y_kGbnpYFaA_7",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    52.55,
+    53.45
+   ],
+   "dur": 0.9,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.97,
+   "flags": [],
+   "skeleton": "cross_step/pro_y_kGbnpYFaA_7.skeleton.json",
+   "clip_mp4": "cross_step/pro_y_kGbnpYFaA_7.mp4",
+   "stats_brief": {
+    "knee": [
+     20.5,
+     31.4,
+     81.4
+    ],
+    "torso": [
+     2.5,
+     10.2,
+     34.0
+    ],
+    "arm": [
+     63.6,
+     91.1,
+     122.5
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_7",
+   "user_score": 3,
+   "label": "cross-step 走板 (猜)",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    17.9,
+    19.0
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_7.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_7.mp4",
+   "stats_brief": {
+    "knee": [
+     4.8,
+     30.4,
+     75.2
+    ],
+    "torso": [
+     3.3,
+     13.2,
+     43.9
+    ],
+    "arm": [
+     42.5,
+     63.3,
+     105.9
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_33",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    89.3,
+    93.2
+   ],
+   "dur": 3.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.95,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_33.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_33.mp4",
+   "stats_brief": {
+    "knee": [
+     8.3,
+     31.0,
+     145.3
+    ],
+    "torso": [
+     3.4,
+     20.3,
+     173.9
+    ],
+    "arm": [
+     10.0,
+     55.9,
+     162.0
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_ARCk35WWnbk_21",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    58.7,
+    61.1
+   ],
+   "dur": 2.4,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.89,
+   "flags": [],
+   "skeleton": "cross_step/pro_ARCk35WWnbk_21.skeleton.json",
+   "clip_mp4": "cross_step/pro_ARCk35WWnbk_21.mp4",
+   "stats_brief": {
+    "knee": [
+     9.2,
+     33.5,
+     168.1
+    ],
+    "torso": [
+     1.0,
+     14.9,
+     58.4
+    ],
+    "arm": [
+     23.0,
+     52.6,
+     154.3
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_EiPZ7dODY0E_20",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    65.4,
+    69.32
+   ],
+   "dur": 3.92,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.89,
+   "flags": [],
+   "skeleton": "cross_step/pro_EiPZ7dODY0E_20.skeleton.json",
+   "clip_mp4": "cross_step/pro_EiPZ7dODY0E_20.mp4",
+   "stats_brief": {
+    "knee": [
+     5.3,
+     15.4,
+     41.3
+    ],
+    "torso": [
+     1.3,
+     9.4,
+     119.9
+    ],
+    "arm": [
+     16.8,
+     90.4,
+     145.7
+    ]
+   }
+  },
+  {
+   "move": "cross_step",
+   "id": "pro_U7S102lzWZk_2",
+   "user_score": 3,
+   "label": "cross-step 交叉步走板",
+   "clip": "pro_U7S102lzWZk",
+   "src_time": [
+    3.4,
+    6.2
+   ],
+   "dur": 2.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.84,
+   "flags": [],
+   "skeleton": "cross_step/pro_U7S102lzWZk_2.skeleton.json",
+   "clip_mp4": "cross_step/pro_U7S102lzWZk_2.mp4",
+   "stats_brief": {
+    "knee": [
+     7.5,
+     27.5,
+     96.3
+    ],
+    "torso": [
+     2.8,
+     9.7,
+     45.7
+    ],
+    "arm": [
+     25.1,
+     52.8,
+     112.1
+    ]
+   }
+  }
+ ]
+}

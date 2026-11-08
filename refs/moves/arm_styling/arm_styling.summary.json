@@ -1,0 +1,816 @@
+{
+ "schema_version": "1.0",
+ "move": "arm_styling",
+ "description": "手臂造型：滑行中手臂张开/举高/画圈，身体其余不变",
+ "n": 22,
+ "n_fullbody": 22,
+ "scores": {
+  "4": 11,
+  "3": 11
+ },
+ "pooled_median_of": {
+  "knee_peak": 69.7,
+  "knee_typical": 38.8,
+  "torso_lean_peak": 16.4,
+  "torso_lean_typical": 9.0,
+  "arm_abd_peak": 132.0,
+  "wrist_span_peak": 1.0,
+  "ankle_dist_peak": 0.4,
+  "dur": 0.72
+ },
+ "best": "pro_ARCk35WWnbk_10",
+ "samples": [
+  {
+   "move": "arm_styling",
+   "id": "pro_ARCk35WWnbk_10",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    25.2,
+    25.5
+   ],
+   "dur": 0.3,
+   "camera": "正对镜头 (前/后机位)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_ARCk35WWnbk_10.skeleton.json",
+   "clip_mp4": "arm_styling/pro_ARCk35WWnbk_10.mp4",
+   "stats_brief": {
+    "knee": [
+     10.7,
+     23.9,
+     34.6
+    ],
+    "torso": [
+     2.5,
+     5.9,
+     16.0
+    ],
+    "arm": [
+     45.4,
+     60.5,
+     137.6
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_C91vOecuTZM_5",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    70.48,
+    70.78
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_C91vOecuTZM_5.skeleton.json",
+   "clip_mp4": "arm_styling/pro_C91vOecuTZM_5.mp4",
+   "stats_brief": {
+    "knee": [
+     25.7,
+     56.2,
+     72.0
+    ],
+    "torso": [
+     10.6,
+     14.1,
+     15.9
+    ],
+    "arm": [
+     59.2,
+     96.0,
+     108.6
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_C91vOecuTZM_12",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    98.64,
+    99.12
+   ],
+   "dur": 0.48,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_C91vOecuTZM_12.skeleton.json",
+   "clip_mp4": "arm_styling/pro_C91vOecuTZM_12.mp4",
+   "stats_brief": {
+    "knee": [
+     22.3,
+     55.3,
+     97.7
+    ],
+    "torso": [
+     10.6,
+     19.5,
+     22.1
+    ],
+    "arm": [
+     50.6,
+     96.1,
+     110.1
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_C91vOecuTZM_19",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    114.0,
+    114.32
+   ],
+   "dur": 0.32,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_C91vOecuTZM_19.skeleton.json",
+   "clip_mp4": "arm_styling/pro_C91vOecuTZM_19.mp4",
+   "stats_brief": {
+    "knee": [
+     10.5,
+     42.6,
+     59.7
+    ],
+    "torso": [
+     6.2,
+     10.3,
+     22.0
+    ],
+    "arm": [
+     49.8,
+     116.4,
+     147.3
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_1",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    11.1,
+    12.01
+   ],
+   "dur": 0.91,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_1.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_1.mp4",
+   "stats_brief": {
+    "knee": [
+     19.3,
+     42.6,
+     76.3
+    ],
+    "torso": [
+     2.1,
+     7.6,
+     13.9
+    ],
+    "arm": [
+     56.8,
+     128.2,
+     142.8
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_2",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    12.43,
+    13.35
+   ],
+   "dur": 0.92,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_2.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_2.mp4",
+   "stats_brief": {
+    "knee": [
+     22.7,
+     36.4,
+     60.8
+    ],
+    "torso": [
+     0.8,
+     6.4,
+     11.4
+    ],
+    "arm": [
+     69.8,
+     104.2,
+     130.5
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_3",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    14.02,
+    14.6
+   ],
+   "dur": 0.58,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_3.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_3.mp4",
+   "stats_brief": {
+    "knee": [
+     29.8,
+     44.1,
+     72.6
+    ],
+    "torso": [
+     3.6,
+     6.4,
+     9.9
+    ],
+    "arm": [
+     68.4,
+     109.7,
+     133.5
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_4",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    15.35,
+    16.19
+   ],
+   "dur": 0.84,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_4.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_4.mp4",
+   "stats_brief": {
+    "knee": [
+     24.8,
+     42.2,
+     72.8
+    ],
+    "torso": [
+     4.3,
+     8.3,
+     12.1
+    ],
+    "arm": [
+     82.7,
+     127.0,
+     156.6
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_25",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    103.35,
+    103.65
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_25.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_25.mp4",
+   "stats_brief": {
+    "knee": [
+     23.5,
+     40.8,
+     66.3
+    ],
+    "torso": [
+     5.0,
+     7.5,
+     10.9
+    ],
+    "arm": [
+     79.9,
+     106.5,
+     123.8
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_ARCk35WWnbk_22",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    62.4,
+    62.7
+   ],
+   "dur": 0.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "arm_styling/pro_ARCk35WWnbk_22.skeleton.json",
+   "clip_mp4": "arm_styling/pro_ARCk35WWnbk_22.mp4",
+   "stats_brief": {
+    "knee": [
+     32.0,
+     70.4,
+     80.2
+    ],
+    "torso": [
+     5.9,
+     9.0,
+     25.7
+    ],
+    "arm": [
+     20.2,
+     32.2,
+     69.3
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_17",
+   "user_score": 4,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    53.47,
+    55.64
+   ],
+   "dur": 2.17,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_17.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_17.mp4",
+   "stats_brief": {
+    "knee": [
+     7.0,
+     15.9,
+     37.1
+    ],
+    "torso": [
+     2.0,
+     9.9,
+     32.8
+    ],
+    "arm": [
+     10.8,
+     131.7,
+     154.8
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_ARCk35WWnbk_1",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    0.0,
+    4.0
+   ],
+   "dur": 4.0,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_ARCk35WWnbk_1.skeleton.json",
+   "clip_mp4": "arm_styling/pro_ARCk35WWnbk_1.mp4",
+   "stats_brief": {
+    "knee": [
+     7.2,
+     13.8,
+     23.9
+    ],
+    "torso": [
+     0.4,
+     9.2,
+     24.6
+    ],
+    "arm": [
+     13.7,
+     32.0,
+     66.5
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_5",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    16.94,
+    17.69
+   ],
+   "dur": 0.75,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_5.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_5.mp4",
+   "stats_brief": {
+    "knee": [
+     26.2,
+     43.6,
+     69.9
+    ],
+    "torso": [
+     3.8,
+     8.5,
+     12.1
+    ],
+    "arm": [
+     74.8,
+     109.6,
+     135.2
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_11",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    31.12,
+    33.37
+   ],
+   "dur": 2.25,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_11.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_11.mp4",
+   "stats_brief": {
+    "knee": [
+     22.2,
+     41.7,
+     90.3
+    ],
+    "torso": [
+     1.6,
+     15.6,
+     34.5
+    ],
+    "arm": [
+     16.3,
+     113.4,
+     164.6
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_14",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    37.46,
+    37.76
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_14.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_14.mp4",
+   "stats_brief": {
+    "knee": [
+     25.7,
+     36.7,
+     62.9
+    ],
+    "torso": [
+     1.9,
+     5.8,
+     11.8
+    ],
+    "arm": [
+     75.0,
+     86.1,
+     133.9
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_EiPZ7dODY0E_16",
+   "user_score": 3,
+   "label": "手臂造型/普通滑行",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    43.96,
+    47.47
+   ],
+   "dur": 3.51,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_EiPZ7dODY0E_16.skeleton.json",
+   "clip_mp4": "arm_styling/pro_EiPZ7dODY0E_16.mp4",
+   "stats_brief": {
+    "knee": [
+     25.1,
+     48.1,
+     104.1
+    ],
+    "torso": [
+     2.0,
+     6.5,
+     20.0
+    ],
+    "arm": [
+     52.7,
+     115.6,
+     150.1
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_14",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    80.88,
+    81.18
+   ],
+   "dur": 0.3,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_14.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_14.mp4",
+   "stats_brief": {
+    "knee": [
+     9.0,
+     13.0,
+     69.4
+    ],
+    "torso": [
+     9.7,
+     10.5,
+     12.8
+    ],
+    "arm": [
+     69.9,
+     81.6,
+     130.3
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "tricks_crossstep_2",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "tricks_crossstep",
+   "src_time": [
+    17.52,
+    18.22
+   ],
+   "dur": 0.7,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/tricks_crossstep_2.skeleton.json",
+   "clip_mp4": "arm_styling/tricks_crossstep_2.mp4",
+   "stats_brief": {
+    "knee": [
+     12.4,
+     17.2,
+     27.1
+    ],
+    "torso": [
+     4.7,
+     6.9,
+     11.4
+    ],
+    "arm": [
+     82.6,
+     103.9,
+     109.3
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "tricks_crossstep_3",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "tricks_crossstep",
+   "src_time": [
+    18.82,
+    19.32
+   ],
+   "dur": 0.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "arm_styling/tricks_crossstep_3.skeleton.json",
+   "clip_mp4": "arm_styling/tricks_crossstep_3.mp4",
+   "stats_brief": {
+    "knee": [
+     26.8,
+     32.8,
+     38.4
+    ],
+    "torso": [
+     12.6,
+     14.8,
+     16.7
+    ],
+    "arm": [
+     92.6,
+     101.2,
+     106.9
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_15",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    83.98,
+    85.19
+   ],
+   "dur": 1.21,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_15.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_15.mp4",
+   "stats_brief": {
+    "knee": [
+     4.9,
+     20.7,
+     104.2
+    ],
+    "torso": [
+     4.4,
+     14.2,
+     22.9
+    ],
+    "arm": [
+     37.4,
+     99.0,
+     115.5
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_18",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    93.99,
+    95.9
+   ],
+   "dur": 1.91,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_18.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_18.mp4",
+   "stats_brief": {
+    "knee": [
+     3.8,
+     17.9,
+     102.4
+    ],
+    "torso": [
+     2.6,
+     9.0,
+     27.2
+    ],
+    "arm": [
+     21.5,
+     82.3,
+     150.5
+    ]
+   }
+  },
+  {
+   "move": "arm_styling",
+   "id": "pro_y_kGbnpYFaA_5",
+   "user_score": 3,
+   "label": "手臂造型",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    41.24,
+    42.34
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.98,
+   "flags": [],
+   "skeleton": "arm_styling/pro_y_kGbnpYFaA_5.skeleton.json",
+   "clip_mp4": "arm_styling/pro_y_kGbnpYFaA_5.mp4",
+   "stats_brief": {
+    "knee": [
+     9.7,
+     26.3,
+     46.7
+    ],
+    "torso": [
+     1.2,
+     16.0,
+     42.1
+    ],
+    "arm": [
+     23.1,
+     63.4,
+     92.4
+    ]
+   }
+  }
+ ]
+}

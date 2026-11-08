@@ -1,0 +1,95 @@
+{
+ "schema_version": "1.0",
+ "move": "hop",
+ "description": "小跳：人跳起，板不动",
+ "n": 2,
+ "n_fullbody": 2,
+ "scores": {
+  "3": 2
+ },
+ "pooled_median_of": {
+  "knee_peak": 98.8,
+  "knee_typical": 32.5,
+  "torso_lean_peak": 19.8,
+  "torso_lean_typical": 10.4,
+  "arm_abd_peak": 113.3,
+  "wrist_span_peak": 0.9,
+  "ankle_dist_peak": 0.7,
+  "dur": 1.37
+ },
+ "best": "D80MTOxjYqA_2",
+ "samples": [
+  {
+   "move": "hop",
+   "id": "D80MTOxjYqA_2",
+   "user_score": 3,
+   "label": "小跳",
+   "clip": "D80MTOxjYqA",
+   "src_time": [
+    3.4,
+    4.3
+   ],
+   "dur": 0.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": null,
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "hop/D80MTOxjYqA_2.skeleton.json",
+   "clip_mp4": "hop/D80MTOxjYqA_2.mp4",
+   "stats_brief": {
+    "knee": [
+     15.7,
+     30.6,
+     121.7
+    ],
+    "torso": [
+     5.1,
+     11.3,
+     15.8
+    ],
+    "arm": [
+     33.9,
+     54.5,
+     67.1
+    ]
+   }
+  },
+  {
+   "move": "hop",
+   "id": "pro_C91vOecuTZM_20",
+   "user_score": 3,
+   "label": "小跳",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    116.08,
+    117.92
+   ],
+   "dur": 1.84,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "hop/pro_C91vOecuTZM_20.skeleton.json",
+   "clip_mp4": "hop/pro_C91vOecuTZM_20.mp4",
+   "stats_brief": {
+    "knee": [
+     6.9,
+     34.3,
+     75.8
+    ],
+    "torso": [
+     4.4,
+     9.6,
+     23.8
+    ],
+    "arm": [
+     23.8,
+     47.6,
+     159.5
+    ]
+   }
+  }
+ ]
+}

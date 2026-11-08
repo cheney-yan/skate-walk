@@ -1,0 +1,132 @@
+{
+ "schema_version": "1.0",
+ "move": "cruise",
+ "description": "站立滑行：双脚在板上，无其他动作",
+ "n": 3,
+ "n_fullbody": 3,
+ "scores": {
+  "5": 1,
+  "3": 2
+ },
+ "pooled_median_of": {
+  "knee_peak": 54.4,
+  "knee_typical": 31.0,
+  "torso_lean_peak": 52.5,
+  "torso_lean_typical": 8.1,
+  "arm_abd_peak": 148.4,
+  "wrist_span_peak": 0.9,
+  "ankle_dist_peak": 0.5,
+  "dur": 1.4
+ },
+ "best": "pro_tQNzYSUsJdk_10",
+ "samples": [
+  {
+   "move": "cruise",
+   "id": "pro_tQNzYSUsJdk_10",
+   "user_score": 5,
+   "label": "站立滑行",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    58.76,
+    62.26
+   ],
+   "dur": 3.5,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.88,
+   "flags": [],
+   "skeleton": "cruise/pro_tQNzYSUsJdk_10.skeleton.json",
+   "clip_mp4": "cruise/pro_tQNzYSUsJdk_10.mp4",
+   "stats_brief": {
+    "knee": [
+     5.3,
+     37.5,
+     156.7
+    ],
+    "torso": [
+     1.7,
+     11.1,
+     110.3
+    ],
+    "arm": [
+     8.0,
+     30.6,
+     110.5
+    ]
+   }
+  },
+  {
+   "move": "cruise",
+   "id": "pro_EiPZ7dODY0E_26",
+   "user_score": 3,
+   "label": "站立滑行",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    104.02,
+    104.61
+   ],
+   "dur": 0.59,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "cruise/pro_EiPZ7dODY0E_26.skeleton.json",
+   "clip_mp4": "cruise/pro_EiPZ7dODY0E_26.mp4",
+   "stats_brief": {
+    "knee": [
+     23.6,
+     31.0,
+     54.4
+    ],
+    "torso": [
+     1.2,
+     7.0,
+     9.8
+    ],
+    "arm": [
+     90.3,
+     110.7,
+     154.7
+    ]
+   }
+  },
+  {
+   "move": "cruise",
+   "id": "pro_y_kGbnpYFaA_13",
+   "user_score": 3,
+   "label": "站立滑行",
+   "clip": "pro_y-kGbnpYFaA",
+   "src_time": [
+    76.78,
+    78.18
+   ],
+   "dur": 1.4,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.96,
+   "flags": [],
+   "skeleton": "cruise/pro_y_kGbnpYFaA_13.skeleton.json",
+   "clip_mp4": "cruise/pro_y_kGbnpYFaA_13.mp4",
+   "stats_brief": {
+    "knee": [
+     7.4,
+     24.6,
+     54.0
+    ],
+    "torso": [
+     1.4,
+     8.1,
+     52.5
+    ],
+    "arm": [
+     17.3,
+     83.5,
+     148.4
+    ]
+   }
+  }
+ ]
+}

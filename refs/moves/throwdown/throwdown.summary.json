@@ -1,0 +1,96 @@
+{
+ "schema_version": "1.0",
+ "move": "throwdown",
+ "description": "throwdown 跑动上板：拿板跑、放板、一脚一脚踏上（已单独交接，见 ../throwdown/）",
+ "n": 2,
+ "n_fullbody": 2,
+ "scores": {
+  "5": 1,
+  "4": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 102.3,
+  "knee_typical": 40.0,
+  "torso_lean_peak": 44.1,
+  "torso_lean_typical": 25.1,
+  "arm_abd_peak": 86.7,
+  "wrist_span_peak": 0.8,
+  "ankle_dist_peak": 0.8,
+  "dur": 2.21
+ },
+ "best": "pro_tQNzYSUsJdk_11",
+ "samples": [
+  {
+   "move": "throwdown",
+   "id": "pro_tQNzYSUsJdk_11",
+   "user_score": 5,
+   "label": "throwdown 跑动中扔板、跳上板",
+   "clip": "pro_tQNzYSUsJdk",
+   "src_time": [
+    73.57,
+    77.28
+   ],
+   "dur": 3.71,
+   "camera": "侧面机位",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.68,
+   "flags": [],
+   "skeleton": "throwdown/pro_tQNzYSUsJdk_11.skeleton.json",
+   "clip_mp4": "throwdown/pro_tQNzYSUsJdk_11.mp4",
+   "stats_brief": {
+    "knee": [
+     17.3,
+     50.1,
+     118.2
+    ],
+    "torso": [
+     11.8,
+     30.1,
+     58.4
+    ],
+    "arm": [
+     30.2,
+     47.1,
+     98.1
+    ]
+   }
+  },
+  {
+   "move": "throwdown",
+   "id": "pro_1MQl0CZNdls_1",
+   "user_score": 4,
+   "label": "throwdown 跑动中扔板、跳上板",
+   "clip": "pro_1MQl0CZNdls",
+   "src_time": [
+    0.0,
+    0.7
+   ],
+   "dur": 0.7,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "throwdown/pro_1MQl0CZNdls_1.skeleton.json",
+   "clip_mp4": "throwdown/pro_1MQl0CZNdls_1.mp4",
+   "stats_brief": {
+    "knee": [
+     17.9,
+     29.8,
+     86.5
+    ],
+    "torso": [
+     7.9,
+     20.2,
+     29.9
+    ],
+    "arm": [
+     26.6,
+     49.1,
+     75.3
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,95 @@
+{
+ "schema_version": "1.0",
+ "move": "pump",
+ "description": "左右压弯泵速：身体左右压，板走 S 线",
+ "n": 2,
+ "n_fullbody": 2,
+ "scores": {
+  "3": 2
+ },
+ "pooled_median_of": {
+  "knee_peak": 52.1,
+  "knee_typical": 21.3,
+  "torso_lean_peak": 24.0,
+  "torso_lean_typical": 13.9,
+  "arm_abd_peak": 97.1,
+  "wrist_span_peak": 1.1,
+  "ankle_dist_peak": 0.5,
+  "dur": 2.18
+ },
+ "best": "pro_C91vOecuTZM_4",
+ "samples": [
+  {
+   "move": "pump",
+   "id": "pro_C91vOecuTZM_4",
+   "user_score": 3,
+   "label": "左右压弯泵速",
+   "clip": "pro_C91vOecuTZM",
+   "src_time": [
+    61.2,
+    61.76
+   ],
+   "dur": 0.56,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pump/pro_C91vOecuTZM_4.skeleton.json",
+   "clip_mp4": "pump/pro_C91vOecuTZM_4.mp4",
+   "stats_brief": {
+    "knee": [
+     2.4,
+     8.9,
+     16.2
+    ],
+    "torso": [
+     7.7,
+     19.5,
+     22.9
+    ],
+    "arm": [
+     53.1,
+     65.9,
+     71.8
+    ]
+   }
+  },
+  {
+   "move": "pump",
+   "id": "pro_XyKLATi_aHo_2",
+   "user_score": 3,
+   "label": "左右压弯泵速",
+   "clip": "pro_XyKLATi_aHo",
+   "src_time": [
+    2.3,
+    6.1
+   ],
+   "dur": 3.8,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "pump/pro_XyKLATi_aHo_2.skeleton.json",
+   "clip_mp4": "pump/pro_XyKLATi_aHo_2.mp4",
+   "stats_brief": {
+    "knee": [
+     13.0,
+     33.7,
+     87.9
+    ],
+    "torso": [
+     0.3,
+     8.4,
+     25.2
+    ],
+    "arm": [
+     16.9,
+     66.8,
+     122.4
+    ]
+   }
+  }
+ ]
+}

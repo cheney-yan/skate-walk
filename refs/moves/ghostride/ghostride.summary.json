@@ -1,0 +1,96 @@
+{
+ "schema_version": "1.0",
+ "move": "ghostride",
+ "description": "ghostride：下板走一步再上板",
+ "n": 2,
+ "n_fullbody": 2,
+ "scores": {
+  "5": 1,
+  "4": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 137.2,
+  "knee_typical": 40.8,
+  "torso_lean_peak": 54.2,
+  "torso_lean_typical": 20.1,
+  "arm_abd_peak": 153.9,
+  "wrist_span_peak": 1.1,
+  "ankle_dist_peak": 0.9,
+  "dur": 3.1
+ },
+ "best": "short_BE2SfHBGfkI_4",
+ "samples": [
+  {
+   "move": "ghostride",
+   "id": "short_BE2SfHBGfkI_4",
+   "user_score": 5,
+   "label": "ghostride 下板走一步再上板",
+   "clip": "short_BE2SfHBGfkI",
+   "src_time": [
+    7.1,
+    10.0
+   ],
+   "dur": 2.9,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "ghostride/short_BE2SfHBGfkI_4.skeleton.json",
+   "clip_mp4": "ghostride/short_BE2SfHBGfkI_4.mp4",
+   "stats_brief": {
+    "knee": [
+     24.6,
+     53.2,
+     107.7
+    ],
+    "torso": [
+     7.6,
+     19.6,
+     31.1
+    ],
+    "arm": [
+     22.5,
+     45.5,
+     171.1
+    ]
+   }
+  },
+  {
+   "move": "ghostride",
+   "id": "pro_dvomTqNI12o_3",
+   "user_score": 4,
+   "label": "ghostride 下板走一步再上板",
+   "clip": "pro_dvomTqNI12o",
+   "src_time": [
+    7.8,
+    11.1
+   ],
+   "dur": 3.3,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "右脚在前 (goofy)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.83,
+   "flags": [],
+   "skeleton": "ghostride/pro_dvomTqNI12o_3.skeleton.json",
+   "clip_mp4": "ghostride/pro_dvomTqNI12o_3.mp4",
+   "stats_brief": {
+    "knee": [
+     4.9,
+     28.4,
+     166.7
+    ],
+    "torso": [
+     4.4,
+     20.7,
+     77.4
+    ],
+    "arm": [
+     15.9,
+     79.9,
+     136.7
+    ]
+   }
+  }
+ ]
+}

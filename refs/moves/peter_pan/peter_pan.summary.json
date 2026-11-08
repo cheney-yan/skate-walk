@@ -1,0 +1,59 @@
+{
+ "schema_version": "1.0",
+ "move": "peter_pan",
+ "description": "peter pan 跨板走：双脚交替跨到板两侧再回来",
+ "n": 1,
+ "n_fullbody": 1,
+ "scores": {
+  "3": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 106.1,
+  "knee_typical": 42.2,
+  "torso_lean_peak": 28.3,
+  "torso_lean_typical": 16.8,
+  "arm_abd_peak": 156.4,
+  "wrist_span_peak": 0.8,
+  "ankle_dist_peak": 0.7,
+  "dur": 1.1
+ },
+ "best": "pro_ARCk35WWnbk_25",
+ "samples": [
+  {
+   "move": "peter_pan",
+   "id": "pro_ARCk35WWnbk_25",
+   "user_score": 3,
+   "label": "peter pan 跨板走",
+   "clip": "pro_ARCk35WWnbk",
+   "src_time": [
+    67.9,
+    69.0
+   ],
+   "dur": 1.1,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "peter_pan/pro_ARCk35WWnbk_25.skeleton.json",
+   "clip_mp4": "peter_pan/pro_ARCk35WWnbk_25.mp4",
+   "stats_brief": {
+    "knee": [
+     22.1,
+     42.2,
+     106.1
+    ],
+    "torso": [
+     8.7,
+     16.8,
+     28.3
+    ],
+    "arm": [
+     27.0,
+     63.9,
+     156.4
+    ]
+   }
+  }
+ ]
+}

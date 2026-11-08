@@ -1,0 +1,59 @@
+{
+ "schema_version": "1.0",
+ "move": "footwork",
+ "description": "走板/脚步特写（可能半身）",
+ "n": 1,
+ "n_fullbody": 1,
+ "scores": {
+  "3": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 38.3,
+  "knee_typical": 35.1,
+  "torso_lean_peak": 9.3,
+  "torso_lean_typical": 8.2,
+  "arm_abd_peak": 131.0,
+  "wrist_span_peak": 0.9,
+  "ankle_dist_peak": 0.3,
+  "dur": 0.5
+ },
+ "best": "pro_EiPZ7dODY0E_10",
+ "samples": [
+  {
+   "move": "footwork",
+   "id": "pro_EiPZ7dODY0E_10",
+   "user_score": 3,
+   "label": "走板/脚步特写",
+   "clip": "pro_EiPZ7dODY0E",
+   "src_time": [
+    30.12,
+    30.62
+   ],
+   "dur": 0.5,
+   "camera": "侧面机位",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 1.0,
+   "flags": [],
+   "skeleton": "footwork/pro_EiPZ7dODY0E_10.skeleton.json",
+   "clip_mp4": "footwork/pro_EiPZ7dODY0E_10.mp4",
+   "stats_brief": {
+    "knee": [
+     32.3,
+     35.1,
+     38.3
+    ],
+    "torso": [
+     5.0,
+     8.2,
+     9.3
+    ],
+    "arm": [
+     83.8,
+     100.8,
+     131.0
+    ]
+   }
+  }
+ ]
+}

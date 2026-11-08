@@ -1,0 +1,59 @@
+{
+ "schema_version": "1.0",
+ "move": "no_comply",
+ "description": "no-comply flip：踩板尾弹起翻滚（不用手），人下板再跳上",
+ "n": 1,
+ "n_fullbody": 1,
+ "scores": {
+  "4": 1
+ },
+ "pooled_median_of": {
+  "knee_peak": 87.7,
+  "knee_typical": 19.0,
+  "torso_lean_peak": 34.5,
+  "torso_lean_typical": 7.6,
+  "arm_abd_peak": 127.0,
+  "wrist_span_peak": 0.9,
+  "ankle_dist_peak": 1.0,
+  "dur": 2.5
+ },
+ "best": "D80MTOxjYqA_4",
+ "samples": [
+  {
+   "move": "no_comply",
+   "id": "D80MTOxjYqA_4",
+   "user_score": 4,
+   "label": "no-comply flip 踩板尾弹起翻滚（不用手），人下板再跳上",
+   "clip": "D80MTOxjYqA",
+   "src_time": [
+    8.5,
+    11.0
+   ],
+   "dur": 2.5,
+   "camera": "斜侧机位 (约45°)",
+   "stance": "左脚在前 (regular)",
+   "fullbody_ok": true,
+   "ok_ratio": 0.99,
+   "flags": [],
+   "skeleton": "no_comply/D80MTOxjYqA_4.skeleton.json",
+   "clip_mp4": "no_comply/D80MTOxjYqA_4.mp4",
+   "stats_brief": {
+    "knee": [
+     6.4,
+     19.0,
+     87.7
+    ],
+    "torso": [
+     0.6,
+     7.6,
+     34.5
+    ],
+    "arm": [
+     19.5,
+     70.8,
+     127.0
+    ]
+   }
+  }
+ ]
+}

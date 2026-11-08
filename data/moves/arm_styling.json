@@ -1,0 +1,107 @@
+{
+ "move": "arm_styling",
+ "schema": "data/moves v1 (style of throwdown.json): every number = {v, basis}; basis = sample id + skeleton field + frame/time",
+ "derived_by": "tools/derive_moves.py from refs/moves (package moves-2026-11-08)",
+ "conventions": "ref angles: knee 0 = straight, torso_lean 0 = upright, arm_abd 0 = arm hanging, elbow 0 = straight (MediaPipe skeleton). game.* knee = interior angle (180 = straight) as in rider.js. t = clip time (0 = user segment start).",
+ "best_sample": {
+  "id": "pro_ARCk35WWnbk_10",
+  "user_score": 4,
+  "clip_title": "Susu Tran @ Pier 76",
+  "source": "https://www.youtube.com/watch?v=ARCk35WWnbk",
+  "src_time": [
+   25.2,
+   25.5
+  ],
+  "view": {
+   "camera": "正对镜头 (前/后机位)",
+   "travel": "向画面左",
+   "stance": "左脚在前 (regular)",
+   "camera_moving": "镜头在动（跟拍/换角度）",
+   "board_deg": 67
+  },
+  "replay": "lab.html?ref=arm_styling/pro_ARCk35WWnbk_10"
+ },
+ "other_sources": [
+  "pro_EiPZ7dODY0E_1 (4分, 0.9 s, oblique, regular) — the best sample is only 0.3 s (the raise itself is ~2 frames), so TIMING comes from this one"
+ ],
+ "segment_notes": "best pro_ARCk35WWnbk_10: 0.3 s, front/back camera, left arm jumps from 52 to 127 deg abduction between f1 and f2 (one frame) and drops at f8 — the segment holds the pose, not the motion. pro_EiPZ7dODY0E_1: rise -0.004->0.33 s, hold to 0.705 s, half-way down at 0.872 s.",
+ "stance": {
+  "v": "L (regular)",
+  "basis": "pro_ARCk35WWnbk_10 refskel stance(): travel method; agrees with view.stance"
+ },
+ "ref": {
+  "arm_up_abd_deg": {
+   "v": 130.9,
+   "basis": "pro_ARCk35WWnbk_10 ang.arm_abd_L main peak f4 t0.03 (smoothed 130.9, raw 127.1, half-height -0.03..0.1)"
+  },
+  "arm_up_elbow_deg": {
+   "v": 33.3,
+   "basis": "pro_ARCk35WWnbk_10 ang.elbow_L median over the arm_abd_L half-height window over t -0.03..0.1"
+  },
+  "arm_other_abd_deg": {
+   "v": 55.5,
+   "basis": "pro_ARCk35WWnbk_10 ang.arm_abd_R median over the same window over t -0.03..0.1"
+  },
+  "knee_deg": {
+   "v": 27.4,
+   "basis": "pro_ARCk35WWnbk_10 ang.knee_max median over the same window over t -0.03..0.1"
+  },
+  "torso_lean_deg": {
+   "v": 10.2,
+   "basis": "pro_ARCk35WWnbk_10 ang.torso_lean median over the same window over t -0.03..0.1"
+  },
+  "rise_s": {
+   "v": 0.33,
+   "basis": "pro_EiPZ7dODY0E_1 ang.arm_abd_L smoothed: 10% -> 90% of (peak 141.8 - start 88.0) at t -0.004 -> 0.33"
+  },
+  "hold_s": {
+   "v": 0.37,
+   "basis": "pro_EiPZ7dODY0E_1 ang.arm_abd_L smoothed above 90%: t 0.33 -> 0.705"
+  },
+  "lower_s": {
+   "v": 0.33,
+   "basis": "pro_EiPZ7dODY0E_1 ang.arm_abd_L smoothed: 90% at 0.705 -> 50% at 0.872, doubled"
+  },
+  "timing_peak_abd_deg": {
+   "v": 141.8,
+   "basis": "pro_EiPZ7dODY0E_1 ang.arm_abd_L main peak f15 t0.5 (smoothed 141.8, raw 136.3, half-height 0.33..0.75)"
+  },
+  "timing_elbow_deg": {
+   "v": 76.7,
+   "basis": "pro_EiPZ7dODY0E_1 ang.elbow_L median over its arm_abd_L half-height window over t 0.33..0.75"
+  }
+ },
+ "game": {
+  "_": "proposed targets for the rider.js dance-arm raise (act.lz/le/ly targets, eL easing). Not wired yet.",
+  "upAbd": {
+   "v": 90,
+   "basis": "ref.arm_up_abd_deg capped at 90 = shoulder height (Cheney: outside arm floats to about shoulder height, NEVER overhead; the reference 131 deg is overhead)",
+   "style_override": "cap 90"
+  },
+  "upElbow": {
+   "v": 33.3,
+   "basis": "ref.arm_up_elbow_deg, floor 30 (bent elbow)"
+  },
+  "otherAbd": {
+   "v": 35,
+   "basis": "ref.arm_other_abd_deg capped at 35 (inside arm low; never both up)",
+   "style_override": "cap 35"
+  },
+  "riseS": {
+   "v": 0.33,
+   "basis": "ref.rise_s"
+  },
+  "holdS": {
+   "v": 0.37,
+   "basis": "ref.hold_s"
+  },
+  "lowerS": {
+   "v": 0.33,
+   "basis": "ref.lower_s"
+  },
+  "knee": {
+   "v": 153,
+   "basis": "180 - ref.knee_deg (body otherwise unchanged)"
+  }
+ }
+}
